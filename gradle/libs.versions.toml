@@ -13,6 +13,8 @@ junit = "4.13.2"
 kotlin = "2.3.20"
 nav3Core = "1.0.1"
 lifecycleViewmodelNav3 = "2.10.0"
+# Pleos SDK 가 이미 1.7.3 을 끌어온다 — 같은 판으로 명시
+kotlinxSerialization = "1.7.3"
 # Pleos Connect SDK — https://document.pleos.ai/docs/pleos-only/connect-sdk-pleos/
 pleosVehicle = "2.3.2"
 pleosNaviHelper = "3.0.5"
@@ -42,7 +44,8 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "nav3Core" }
 androidx-navigation3-ui = { module = "androidx.navigation3:navigation3-ui", version.ref = "nav3Core" }
 androidx-lifecycle-viewmodel-navigation3 = { module = "androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "lifecycleViewmodelNav3" }
-pleos-vehicle = { module = "ai.pleos.playground:Vehicle", version.ref = "pleosVehicle" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+pleos-vehicle ={ module = "ai.pleos.playground:Vehicle", version.ref = "pleosVehicle" }
 pleos-navihelper = { module = "ai.pleos.playground:NaviHelper", version.ref = "pleosNaviHelper" }
 pleos-texttospeech = { module = "ai.pleos.playground:TextToSpeech", version.ref = "pleosTextToSpeech" }
 pleos-speechtotext = { module = "ai.pleos.playground:SpeechToText", version.ref = "pleosSpeechToText" }

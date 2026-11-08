@@ -1,0 +1,47 @@
+{
+  "packageName": "com.kscho.way",
+  "appDescription": "A pickup app for drivers that shares the exact pickup point, live locations and arrival time with the passenger being picked up.",
+  "invokeWord": "웨이",
+  "version": "1.0",
+  "actionCalls": [
+    {
+      "type": "function",
+      "function": {
+        "name": "GET_PICKUP_STATUS",
+        "description": "Tell the driver the status of the current pickup: the passenger's name, the pickup place, the time left until arrival, and whether the passenger has checked the pickup location, is sharing location or has boarded.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        },
+        "component": "service"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "CALL_PASSENGER",
+        "description": "Open the phone dialer to call the passenger of the current pickup.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        },
+        "component": "activity"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "COMPLETE_BOARDING",
+        "description": "Confirm that the passenger of the current pickup has boarded, and end the pickup guidance and the location sharing.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        },
+        "component": "service"
+      }
+    }
+  ]
+}

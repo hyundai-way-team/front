@@ -13,6 +13,14 @@
             경로 pleos.car.permission.NAVI_ROUTE
     -->
 
+    <!-- Gleo '동승자에게 전화' 때 차량 전화 화면이 있는지 확인 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -27,6 +35,33 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            Gleo AI 음성 명령 (기능 목록은 assets/schema.json, action 이름 = function name).
+            Gleo 는 다른 서명의 시스템 앱이라 서명 권한으로 보낸 쪽을 막을 수 없어 exported.
+            받은 값(ACTION_PARAM)은 쓰지 않고, 응답은 Gleo 패키지로만 보낸다.
+        -->
+        <receiver
+            android:name=".gleo.GleoActionReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="GET_PICKUP_STATUS" />
+                <action android:name="COMPLETE_BOARDING" />
+            </intent-filter>
+        </receiver>
+
+        <activity
+            android:name=".gleo.GleoCallActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="CALL_PASSENGER" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
     </application>

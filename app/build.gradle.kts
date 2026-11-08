@@ -84,6 +84,9 @@ dependencies {
   implementation(libs.androidx.navigation3.runtime)
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
 
+  // Gleo 응답 JSON
+  implementation(libs.kotlinx.serialization.json)
+
   // Pleos Connect SDK — 쓰지 않을 SDK 는 지우고, 쓰는 API 의 권한만 Manifest 에 선언
   implementation(libs.pleos.vehicle)
   implementation(libs.pleos.navihelper)
