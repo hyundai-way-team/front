@@ -8,10 +8,18 @@
 
     <!--
         Pleos 권한은 실제로 호출하는 API 것만 선언 (승인 안 된 권한은 앱 심사 탈락).
-        예) 도어 조회 pleos.car.permission.CAR_DOORS · TTS pleos.car.permission.TTS_SERVICE
-            STT pleos.car.permission.STT_SERVICE · 위치 pleos.car.permission.FUSED_LOCATION
-            경로 pleos.car.permission.NAVI_ROUTE
+        아직 안 쓰는 것) 도어 조회 pleos.car.permission.CAR_DOORS · 위치 pleos.car.permission.FUSED_LOCATION
+                        경로 pleos.car.permission.NAVI_ROUTE
+        ⚠ STT·TTS 는 Playground 콘솔에 '준비 중' — 심사 때 승인되는지 공모전 측에 확인 필요.
     -->
+    <!-- 앱이 먼저 묻는 음성 질문: 대답 듣기(STT 온디바이스) · 녹음 파일이 없을 때 질문 읽기(TTS 온디바이스) -->
+    <uses-permission android:name="pleos.car.permission.STT_SERVICE" />
+    <uses-permission android:name="pleos.car.permission.TTS_SERVICE" />
+
+    <!-- 픽업 중 Way 를 살려 두는 포그라운드 서비스와 그 알림 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Gleo '동승자에게 전화' 때 차량 전화 화면이 있는지 확인 -->
     <queries>
@@ -37,6 +45,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 픽업 진행 중: 대기 타이머·음성 질문(전화 연결 제안). 위치 API 를 직접 쓰지 않아 specialUse -->
+        <service
+            android:name=".pickup.PickupService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Pickup in progress: keeps the wait timer running while the navigation app is in front and asks the driver by voice whether to call the passenger." />
+        </service>
 
         <!--
             Gleo AI 음성 명령 (기능 목록은 assets/schema.json, action 이름 = function name).

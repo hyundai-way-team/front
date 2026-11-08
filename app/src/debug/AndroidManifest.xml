@@ -2,12 +2,14 @@
 <!-- 디버그 빌드에만 합쳐지는 매니페스트 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
-        <!-- adb 로 mock 픽업 시작·종료 (DebugPickupReceiver 주석 참고) -->
+        <!-- adb 로 mock 픽업 시작·정차·탑승·종료 (DebugPickupReceiver 주석 참고) -->
         <receiver
             android:name=".debug.DebugPickupReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="com.kscho.way.debug.START_MOCK_PICKUP" />
+                <action android:name="com.kscho.way.debug.ARRIVE" />
+                <action android:name="com.kscho.way.debug.BOARD" />
                 <action android:name="com.kscho.way.debug.CLEAR_PICKUP" />
             </intent-filter>
         </receiver>

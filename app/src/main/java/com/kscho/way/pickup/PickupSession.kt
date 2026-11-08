@@ -20,6 +20,10 @@ data class PickupSession(
   val passengerSharingLocation: Boolean,
   /** 탑승 완료(도어 이벤트·Gleo '탑승 완료'). */
   val boarded: Boolean = false,
+  /** 픽업 위치에 정차한 시각(SystemClock.elapsedRealtime). 대기 타이머의 기준, 아직이면 null. */
+  val arrivedAtMillis: Long? = null,
+  /** 대기 중 전화 연결을 이미 제안했는지(픽업 1건당 1번). */
+  val callOffered: Boolean = false,
 )
 
 /**
@@ -41,6 +45,20 @@ object PickupSessionStore {
 
   /** 탑승 완료로 표시하고, 바꾸기 전 상태를 돌려준다(없으면 null). */
   fun markBoarded(): PickupSession? = _session.getAndUpdate { it?.copy(boarded = true) }
+
+  /** 픽업 위치 정차. 도착 신호가 또 와도 처음 정차 시각을 지킨다. */
+  fun markArrived(atMillis: Long) {
+    update { if (it.arrivedAtMillis == null) it.copy(arrivedAtMillis = atMillis) else it }
+  }
+
+  /** 전화 연결 제안을 맡는다. 이번 호출이 처음 맡았으면 true — 두 곳에서 동시에 물어도 한 번만 묻게. */
+  fun markCallOffered(): Boolean {
+    while (true) {
+      val current = _session.value ?: return false
+      if (current.boarded || current.callOffered) return false
+      if (_session.compareAndSet(current, current.copy(callOffered = true))) return true
+    }
+  }
 
   fun clear() {
     _session.value = null
