@@ -35,3 +35,6 @@ plugins {
 
 rootProject.name = "Way"
 include(":app")
+// 클린 아키텍처: domain(모델·규칙·저장소 인터페이스) ← data(서버 API·mock) ← app(화면·Pleos 차량 연동)
+include(":domain")
+include(":data")

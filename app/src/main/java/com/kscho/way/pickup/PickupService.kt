@@ -14,129 +14,173 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import com.kscho.way.WayApp
+import com.kscho.way.domain.model.Contact
+import com.kscho.way.domain.pickup.Announcement
+import com.kscho.way.domain.pickup.PickupEffect
+import com.kscho.way.domain.pickup.PickupState
 import com.kscho.way.voice.AskOutcome
 import com.kscho.way.voice.AudioPromptPlayer
 import com.kscho.way.voice.PleosAnswerListener
+import com.kscho.way.voice.SpokenPrompt
 import com.kscho.way.voice.VoiceQuestion
+import kotlin.coroutines.resume
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * 픽업이 진행되는 동안 Way 를 살려 두는 포그라운드 서비스.
+ * 픽업이 진행되는 동안 Way 를 살려 두고, 운전자에게 소리로 알린다.
  * - 내비가 앞에 나와 Way 가 뒤로 가도 얼지 않게 한다(Android 14 프리저 — 도어·내비 콜백이 멈추던 문제).
- * - MVP 3-9: 정차 후 1분 대기 중 15초 남았는데 미탑승이면 "OO님이 아직 도착하지 않았어요. 전화를 걸까요?"를
- *   앱이 먼저 묻고(Gleo 는 앱이 먼저 말을 걸 수 없음) 대답을 들어 전화 화면을 띄운다.
+ * - 음성 안내(기획 3-8): 링크 확인 · 곧 도착 문자 보냄 · 탑승 확인 — [PickupEffect.Announce]
+ * - 전화 연결 제안(기획 3-9): 15초 남았는데 미탑승이면 묻고 대답을 들어 전화 화면을 띄운다 — [PickupEffect.OfferCall]
+ *   (Gleo 는 앱이 먼저 말을 걸 수 없어 앱이 직접 묻는다.)
  *
- * 픽업을 시작하는 곳(출발 버튼)에서 [PickupSessionStore.start] 뒤에 [start]를 부른다.
- * 픽업이 끝나거나(clear) 탑승하면(boarded) 스스로 멈춘다.
+ * 출발(D-05) 직후 [start] 로 띄운다. 픽업이 끝나면(탑승 안내 뒤·닫기) 스스로 멈춘다.
  */
 class PickupService : Service() {
   private val main = Handler(Looper.getMainLooper())
   private val scope = MainScope()
+  private val coordinator by lazy { (application as WayApp).container.coordinator }
   private lateinit var audio: AudioManager
   private lateinit var player: AudioPromptPlayer
   private lateinit var listener: PleosAnswerListener
   private lateinit var question: VoiceQuestion
   private var focusRequest: AudioFocusRequest? = null
-  private var callOfferAt: Long? = null
+  private val speech = Channel<SpokenPrompt>(Channel.UNLIMITED)
   /** '픽업 중' 알림에 지금 보이는 내용 — 바뀔 때만 다시 올린다. */
   private var shownOngoing: Pair<String, String>? = null
-  private val callOffer = Runnable { offerCall() }
+  private var stopAfterSpeech = false
 
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onCreate() {
     super.onCreate()
     PickupNotifications.createChannels(this)
+    val now = coordinator.state.value
     ServiceCompat.startForeground(
       this,
       PickupNotifications.ONGOING_ID,
-      PickupNotifications.ongoing(this, PickupSessionStore.session.value),
+      PickupNotifications.ongoing(this, now?.plan?.passenger?.callName, now?.plan?.pickupPoint?.description?.title),
       ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
     )
     audio = getSystemService(AudioManager::class.java)
     player = AudioPromptPlayer(this, ASK_AUDIO)
     listener = PleosAnswerListener(this)
     question = VoiceQuestion(player, listener)
-    scope.launch { PickupSessionStore.session.collect(::onSession) }
+    scope.launch { coordinator.state.collect(::onState) }
+    scope.launch { coordinator.effects.collect(::onEffect) }
+    scope.launch { for (prompt in speech) speak(prompt) }
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY
 
   override fun onDestroy() {
-    main.removeCallbacks(callOffer)
     question.cancel()
     abandonFocus()
     player.release()
     listener.release()
+    speech.close()
     scope.cancel()
     notifications().cancel(PickupNotifications.CALL_OFFER_ID)
     super.onDestroy()
   }
 
-  private fun onSession(session: PickupSession?) {
-    if (session == null || session.boarded) {
-      Log.i(TAG, if (session == null) "픽업 끝 — 서비스 멈춤" else "탑승 확인 — 서비스 멈춤")
-      question.cancel()
-      notifications().cancel(PickupNotifications.CALL_OFFER_ID)
+  private fun onState(state: PickupState?) {
+    if (state == null) {
+      Log.i(TAG, "픽업 끝 — 서비스 멈춤")
       stopSelf()
       return
     }
-    val ongoing = session.passengerName to session.pickupPlaceName
+    if (state.isBoarded) {
+      question.cancel()
+      notifications().cancel(PickupNotifications.CALL_OFFER_ID)
+      // 탑승 안내를 마저 말하고 멈춘다(onEffect 의 Boarded)
+      stopAfterSpeech = true
+      main.postDelayed({ stopSelf() }, 15_000) // 안내가 끝 신호를 못 받아도
+      return
+    }
+    val ongoing = state.plan.passenger.callName to state.plan.pickupPoint.description.title
     if (ongoing != shownOngoing) {
       shownOngoing = ongoing
-      notifications().notify(PickupNotifications.ONGOING_ID, PickupNotifications.ongoing(this, session))
+      notifications().notify(PickupNotifications.ONGOING_ID, PickupNotifications.ongoing(this, ongoing.first, ongoing.second))
     }
-    scheduleCallOffer(PickupWaitTimer.callOfferAt(session))
   }
 
-  private fun scheduleCallOffer(at: Long?) {
-    if (at == callOfferAt) return
-    main.removeCallbacks(callOffer)
-    callOfferAt = at
-    if (at == null) return
-    val delay = (at - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
-    Log.i(TAG, "전화 연결 제안 ${delay}ms 뒤")
-    main.postDelayed(callOffer, delay)
+  private fun onEffect(effect: PickupEffect) {
+    when (effect) {
+      is PickupEffect.Announce -> {
+        Log.i(TAG, "음성 안내: ${effect.announcement.text}")
+        speech.trySend(PickupPrompts.announcement(effect.announcement))
+        if (effect.announcement == Announcement.Boarded) speech.trySend(STOP)
+      }
+      is PickupEffect.OfferCall -> offerCall(effect.announcement.passenger)
+      else -> Unit
+    }
   }
 
-  private fun offerCall() {
-    callOfferAt = null
-    if (!PickupSessionStore.markCallOffered()) return
-    val session = PickupSessionStore.session.value ?: return
+  /** 안내 한 줄을 말한다. 음악은 줄여 두고(덕킹), 전화 연결 질문 중이면 건너뛴다(화면 자막은 보인다). */
+  private suspend fun speak(prompt: SpokenPrompt) {
+    if (prompt === STOP) {
+      if (stopAfterSpeech) stopSelf()
+      return
+    }
+    if (question.isAsking) return
+    val request =
+      AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK).setAudioAttributes(ASK_AUDIO).build()
+    if (audio.requestAudioFocus(request) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+      Log.w(TAG, "오디오 포커스를 못 얻어 안내를 건너뜀: ${prompt.text}")
+      return
+    }
+    try {
+      // 전화 연결 질문이 끼어들면 플레이어가 이 안내를 끊어 끝 신호가 안 오므로 시간 제한을 둔다
+      withTimeoutOrNull(5_000L + prompt.text.length * 200L) {
+        suspendCancellableCoroutine { cont ->
+          player.play(prompt) { played ->
+            if (!played) Log.w(TAG, "안내 소리를 내지 못함(에뮬 TTS 등): ${prompt.text}")
+            if (cont.isActive) cont.resume(Unit)
+          }
+          cont.invokeOnCancellation { main.post { if (!question.isAsking) player.stop() } }
+        }
+      }
+    } finally {
+      audio.abandonAudioFocusRequest(request)
+    }
+  }
+
+  private fun offerCall(passenger: Contact) {
     // 화면에도 같은 질문 — 음성을 못 알아들어도 버튼으로 걸 수 있다
-    notifications().notify(PickupNotifications.CALL_OFFER_ID, PickupNotifications.callOffer(this, session))
+    notifications().notify(PickupNotifications.CALL_OFFER_ID, PickupNotifications.callOffer(this, passenger))
     if (!requestFocus()) {
       Log.w(TAG, "오디오 포커스를 못 얻어(다른 음성 안내·Gleo 대화 중) 화면 알림만 남김")
       return
     }
-    question.ask(PickupPrompts.callOffer(session.passengerName), PickupPrompts.callOfferRetry(session.passengerName)) {
-      outcome ->
+    question.ask(PickupPrompts.callOffer(passenger), PickupPrompts.callOfferRetry(passenger)) { outcome ->
       abandonFocus()
-      onCallOfferAnswered(outcome)
+      onCallOfferAnswered(passenger, outcome)
     }
   }
 
-  private fun onCallOfferAnswered(outcome: AskOutcome) {
+  private fun onCallOfferAnswered(passenger: Contact, outcome: AskOutcome) {
     Log.i(TAG, "전화 연결 제안 대답: $outcome")
     when (outcome) {
       AskOutcome.YES -> {
-        val session = PickupSessionStore.session.value ?: return
-        if (session.boarded) return
+        if (coordinator.state.value?.isBoarded != false) return
         // 안드로이드는 화면에 안 보이는 앱이 다른 화면을 띄우는 걸 말없이 막는다(포그라운드 서비스여도).
         // 내비가 앞에 있으면 전화 화면 대신 헤드업 알림의 '전화 걸기'를 남긴다.
         if (!isOnScreen()) {
           Log.w(TAG, "Way 가 화면에 없어 전화 화면을 못 띄움 — 알림 버튼으로 안내")
-          notifications().notify(PickupNotifications.CALL_OFFER_ID, PickupNotifications.callTapNeeded(this, session))
+          notifications().notify(PickupNotifications.CALL_OFFER_ID, PickupNotifications.callTapNeeded(this, passenger))
           return
         }
         try {
-          startActivity(PassengerCall.dialIntent(session.passengerPhone).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+          startActivity(PassengerCall.dialIntent(passenger.phone).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
           notifications().cancel(PickupNotifications.CALL_OFFER_ID)
         } catch (e: ActivityNotFoundException) {
           Log.w(TAG, "전화 화면이 없어 알림 버튼만 남김", e)
@@ -187,7 +231,10 @@ class PickupService : Service() {
   companion object {
     private const val TAG = "WayPickup"
 
-    /** 음성 질문(VOICE_COMMAND 컨텍스트 — 재생 중 음악은 멈추고, 내비 안내와는 겹칠 수 있다). */
+    /** 탑승 안내 뒤 서비스를 멈추라는 표시(말하지 않는다). */
+    private val STOP = SpokenPrompt("", "")
+
+    /** 음성 안내·질문(VOICE_COMMAND 컨텍스트 — 재생 중 음악은 멈추거나 줄이고, 내비 안내와는 겹칠 수 있다). */
     private val ASK_AUDIO: AudioAttributes =
       AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_ASSISTANT)

@@ -15,6 +15,10 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+        // 차량(Pleos)·M1 에뮬은 arm64, PC 에뮬용 x86_64 — 지도 엔진(.so)이 ABI 마다 13MB 라 나머지는 뺀다
+        ndk {
+          abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     buildTypes {
@@ -38,6 +42,11 @@ android {
       resources {
         excludes += "/META-INF/{AL2.0,LGPL2.1}"
       }
+    }
+
+    // 오프라인 지도 파일은 압축하지 않아야 MapLibre 가 필요한 부분만 바로 읽는다(pmtiles://asset://)
+    androidResources {
+      noCompress += "pmtiles"
     }
 }
 
@@ -86,6 +95,13 @@ dependencies {
 
   // Gleo 응답 JSON
   implementation(libs.kotlinx.serialization.json)
+
+  // 클린 아키텍처 모듈 — 화면은 domain 을 보고, 구현(mock 서버·저장소)은 data 에서 주입한다
+  implementation(project(":data"))
+  implementation(libs.kotlinx.coroutines.android)
+
+  // 지도: MapLibre + 앱에 넣은 OpenStreetMap 지도(assets/map, tools/map/build_offline_map.py 로 만든다)
+  implementation(libs.maplibre.android)
 
   // Pleos Connect SDK — 쓰지 않을 SDK 는 지우고, 쓰는 API 의 권한만 Manifest 에 선언
   implementation(libs.pleos.vehicle)

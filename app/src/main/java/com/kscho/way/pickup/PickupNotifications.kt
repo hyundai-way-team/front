@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import com.kscho.way.MainActivity
+import com.kscho.way.domain.model.Contact
 
 /**
  * 픽업 중 알림. 운전 관련 알림만 쓴다(Pleos 심사: 운전과 관련 없는 알림 금지).
@@ -40,11 +41,11 @@ object PickupNotifications {
   }
 
   /** 포그라운드 서비스가 붙들고 있는 '픽업 중' 알림. 헤드업으로 띄우지 않는다(알림 센터에만). */
-  fun ongoing(context: Context, session: PickupSession?): Notification =
+  fun ongoing(context: Context, passengerName: String?, pickupTitle: String?): Notification =
     NotificationCompat.Builder(context, CHANNEL_ONGOING)
       .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-      .setContentTitle(session?.let { "${it.passengerName}님 픽업 중" } ?: "픽업 중")
-      .setContentText(session?.pickupPlaceName)
+      .setContentTitle(passengerName?.let { "$it 님 픽업 중" } ?: "픽업 중")
+      .setContentText(pickupTitle)
       .setContentIntent(openApp(context))
       .setOngoing(true)
       .setOnlyAlertOnce(true)
@@ -56,32 +57,32 @@ object PickupNotifications {
    * 전화 연결 제안. 음성 질문과 같은 내용을 헤드업으로 띄우고, 음성 대답이 안 될 때 누를 버튼을 둔다.
    * 헤드업으로 뜨는 category 중 픽업 안내에 가장 가까운 navigation 을 쓴다.
    */
-  fun callOffer(context: Context, session: PickupSession): Notification =
-    callNotification(context, session, "${session.passengerName}님이 아직 도착하지 않았어요", "전화를 걸까요? '응' 또는 '아니'로 답해 주세요")
+  fun callOffer(context: Context, passenger: Contact): Notification =
+    callNotification(context, passenger, "${passenger.callName} 님이 아직 도착하지 않았어요", "전화를 걸까요? '응' 또는 '아니'로 답해 주세요")
       .setOnlyAlertOnce(true)
       .build()
 
   /** '응'이라고 했지만 Way 가 화면 뒤에 있어 전화 화면을 띄울 수 없을 때 — 다시 헤드업으로 띄워 누르게 한다. */
-  fun callTapNeeded(context: Context, session: PickupSession): Notification =
-    callNotification(context, session, "${session.passengerName}님에게 전화", "'전화 걸기'를 누르면 전화 화면이 열려요").build()
+  fun callTapNeeded(context: Context, passenger: Contact): Notification =
+    callNotification(context, passenger, "${passenger.callName} 님에게 전화", "'전화 걸기'를 누르면 전화 화면이 열려요").build()
 
-  private fun callNotification(context: Context, session: PickupSession, title: String, text: String) =
+  private fun callNotification(context: Context, passenger: Contact, title: String, text: String) =
     NotificationCompat.Builder(context, CHANNEL_ASK)
       .setSmallIcon(android.R.drawable.sym_action_call)
       .setContentTitle(title)
       .setContentText(text)
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
-      .setContentIntent(dial(context, session))
-      .addAction(0, "전화 걸기", dial(context, session))
+      .setContentIntent(dial(context, passenger))
+      .addAction(0, "전화 걸기", dial(context, passenger))
       .setAutoCancel(true)
 
   /** 알림을 누르는 건 사용자 동작이라, Way 가 뒤에 있어도 전화 화면이 열린다. */
-  private fun dial(context: Context, session: PickupSession): PendingIntent =
+  private fun dial(context: Context, passenger: Contact): PendingIntent =
     PendingIntent.getActivity(
       context,
       CALL_OFFER_ID,
-      PassengerCall.dialIntent(session.passengerPhone),
+      PassengerCall.dialIntent(passenger.phone),
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 

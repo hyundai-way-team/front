@@ -1,6 +1,6 @@
 package com.kscho.way.gleo
 
-import com.kscho.way.pickup.PickupSession
+
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -13,7 +13,7 @@ import org.junit.Test
 
 class PickupGleoRepliesTest {
   private val session =
-    PickupSession(
+    PickupSummary(
       passengerName = "이서연",
       passengerPhone = "01012345678",
       pickupPlaceName = "역삼역 3번 출구",

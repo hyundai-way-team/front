@@ -1,0 +1,179 @@
+package com.kscho.way.domain.pickup
+
+import com.kscho.way.domain.model.BoardingSource
+import com.kscho.way.domain.model.NavEvent
+import com.kscho.way.domain.model.PickupPlan
+import com.kscho.way.domain.repository.PickupRepository
+import com.kscho.way.domain.vehicle.BoardingSensor
+import com.kscho.way.domain.vehicle.Navigator
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+
+/**
+ * 진행 중인 픽업 1건을 끝까지 끌고 간다.
+ * 내비(진행·도착) · 서버(동승자 상태) · 도어(탑승) · 시계를 한 줄로 모아 [PickupRules] 에 넣고,
+ * 규칙이 정한 일(문자·서버 보고)은 여기서, 음성은 [effects] 를 받은 앱이 한다.
+ *
+ * 앱 전체에서 하나만 둔다(화면·포그라운드 서비스·Gleo 가 같은 [state] 를 본다).
+ */
+class PickupCoordinator(
+  private val pickups: PickupRepository,
+  private val navigator: Navigator,
+  private val boardingSensor: BoardingSensor,
+  private val scope: CoroutineScope,
+  private val clock: () -> Long = System::currentTimeMillis,
+  private val tickMillis: Long = 500L,
+  private val onError: (String, Throwable) -> Unit = { _, _ -> },
+) {
+  private val _state = MutableStateFlow<PickupState?>(null)
+  val state: StateFlow<PickupState?> = _state.asStateFlow()
+
+  private val _effects = MutableSharedFlow<PickupEffect>(extraBufferCapacity = 16)
+
+  /** 음성으로 할 일([PickupEffect.Announce] · [PickupEffect.OfferCall]). */
+  val effects: SharedFlow<PickupEffect> = _effects.asSharedFlow()
+
+  private var events = Channel<PickupEvent>(Channel.UNLIMITED)
+  private var job: Job? = null
+  private var lastDriverReportAt: Long? = null
+
+  /** 탑승 전인 픽업이 있는지. */
+  val hasActivePickup: Boolean
+    get() = _state.value?.let { !it.isBoarded } ?: false
+
+  /**
+   * 출발(D-05). 내비 안내를 먼저 켜고, 서버에 세션을 만들어 동승자에게 문자(차량 번호·픽업 위치·ETA·링크)를 보내게 한다.
+   * 내비를 못 켜면 문자를 보내지 않고, 서버가 실패하면 내비 안내를 거둔다 — 어느 쪽이든 픽업은 남지 않는다.
+   */
+  suspend fun start(plan: PickupPlan): PickupState {
+    check(!hasActivePickup) { "이미 진행 중인 픽업이 있어요" }
+    stopListening()
+    _state.value = null
+    // 구독을 먼저 걸어 둔다 — 내비 안내 시작 직후 오는 일을 놓치지 않게(세션이 생기기 전 일은 버린다)
+    val listening = listen()
+    val point = plan.pickupPoint
+    try {
+      navigator.startGuidance(point.location, point.description.title, point.description.detail)
+    } catch (e: Exception) {
+      stopListening()
+      throw e
+    }
+    val now = clock()
+    val arrival = now + plan.route.durationSeconds * 1000L
+    val created =
+      try {
+        pickups.create(plan, arrival)
+      } catch (e: Exception) {
+        navigator.stopGuidance()
+        stopListening()
+        throw e
+      }
+    val initial = PickupState(id = created.id, shareUrl = created.shareUrl, plan = plan, startedAtMillis = now, arrivalAtMillis = arrival)
+    lastDriverReportAt = null
+    _state.value = initial
+    listening.launch { pickups.passengerStatus(created.id).collect { events.send(PickupEvent.Passenger(it)) } }
+    return initial
+  }
+
+  /** 도어 이벤트를 못 쓸 때의 버튼 · Gleo "탑승 완료". */
+  fun confirmBoarded(source: BoardingSource) {
+    events.trySend(PickupEvent.Boarded(clock(), source))
+  }
+
+  /** 시연·디버그용: 지금 정차한 것으로. */
+  fun arriveNow() {
+    events.trySend(PickupEvent.Nav(NavEvent.Arrived(clock())))
+  }
+
+  /** 안내 종료 화면을 닫는다(또는 픽업을 접는다). */
+  fun finish() {
+    val wasActive = hasActivePickup
+    stopListening()
+    if (wasActive) navigator.stopGuidance()
+    _state.value = null
+  }
+
+  /** 내비·도어·시계를 한 줄로 모으는 구독을 건다. 돌려준 scope 에 더 붙이면 함께 멈춘다. */
+  private fun listen(): CoroutineScope {
+    val inbox = Channel<PickupEvent>(Channel.UNLIMITED)
+    events = inbox
+    val listening = Job(scope.coroutineContext[Job])
+    val listenScope = CoroutineScope(scope.coroutineContext + listening)
+    // UNDISPATCHED: hot flow 구독이 이 줄에서 바로 걸린다
+    listenScope.launch(start = CoroutineStart.UNDISPATCHED) { navigator.events.collect { inbox.send(PickupEvent.Nav(it)) } }
+    listenScope.launch(start = CoroutineStart.UNDISPATCHED) { boardingSensor.boardings.collect { inbox.send(PickupEvent.Boarded(it, BoardingSource.DOOR)) } }
+    listenScope.launch {
+      while (isActive) {
+        delay(tickMillis)
+        inbox.send(PickupEvent.Tick(clock()))
+      }
+    }
+    listenScope.launch { for (event in inbox) handle(event) }
+    job = listening
+    return listenScope
+  }
+
+  private fun stopListening() {
+    job?.cancel()
+    job = null
+  }
+
+  private fun handle(event: PickupEvent) {
+    val current = _state.value ?: return
+    val now = clock()
+    val (next, todo) = PickupRules.reduce(current, event, now)
+    _state.value = next
+    if (event is PickupEvent.Nav && event.event is NavEvent.Progress) reportDriver(next, now)
+    todo.forEach { run(next, it) }
+    if (next.isBoarded && !current.isBoarded) {
+      navigator.stopGuidance()
+      stopListening()
+    }
+  }
+
+  private fun reportDriver(state: PickupState, now: Long) {
+    val last = lastDriverReportAt
+    if (last != null && now - last < PickupPolicy.DRIVER_REPORT_INTERVAL_MILLIS) return
+    lastDriverReportAt = now
+    val remainingSeconds = state.remainingSeconds ?: return
+    val remainingMeters = state.remainingMeters ?: return
+    send("차량 위치 보고") { pickups.reportDriver(state.id, state.carLocation, remainingSeconds, remainingMeters, state.arrivalAtMillis) }
+  }
+
+  private fun run(state: PickupState, effect: PickupEffect) {
+    when (effect) {
+      is PickupEffect.Announce,
+      is PickupEffect.OfferCall -> _effects.tryEmit(effect)
+      is PickupEffect.NotifyEtaChanged ->
+        send("ETA 변경 문자") { pickups.notifyEtaChanged(state.id, effect.previousArrivalAtMillis, effect.arrivalAtMillis) }
+      is PickupEffect.NotifyArrivingSoon -> send("곧 도착 문자") { pickups.notifyArrivingSoon(state.id, effect.arrivalAtMillis) }
+      is PickupEffect.ReportArrived ->
+        send("정차 보고") { pickups.reportArrived(state.id, effect.atMillis, PickupPolicy.WAIT_SECONDS) }
+      is PickupEffect.Complete -> send("탑승 완료 보고") { pickups.complete(state.id, effect.outcome) }
+    }
+  }
+
+  // 픽업이 끝나도(구독 job 취소) 서버 보고는 마치도록 scope 에서 따로 돈다
+  private fun send(what: String, block: suspend () -> Unit) {
+    scope.launch {
+      try {
+        block()
+      } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        onError(what, e)
+      }
+    }
+  }
+}

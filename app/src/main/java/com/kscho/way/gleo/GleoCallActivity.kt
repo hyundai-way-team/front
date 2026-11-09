@@ -4,8 +4,8 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import com.kscho.way.WayApp
 import com.kscho.way.pickup.PassengerCall
-import com.kscho.way.pickup.PickupSessionStore
 
 /**
  * Gleo 음성 명령 "동승자에게 전화해 줘"(schema.json component="activity").
@@ -27,7 +27,7 @@ class GleoCallActivity : ComponentActivity() {
 
   private fun handle(intent: Intent) {
     if (intent.action != GleoActions.CALL_PASSENGER) return
-    val session = PickupSessionStore.session.value
+    val session = (application as WayApp).container.coordinator.state.value?.toGleoSummary()
     val dial = session?.let { PassengerCall.dialIntent(it.passengerPhone) }
     val reply = PickupGleoReplies.call(session, dialerAvailable = dial?.resolveActivity(packageManager) != null)
     if (reply.status == GleoStatus.SUCCESS && dial != null) {
