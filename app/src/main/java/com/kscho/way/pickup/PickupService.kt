@@ -1,6 +1,5 @@
 package com.kscho.way.pickup
 
-import android.app.ActivityManager
 import android.app.NotificationManager
 import android.app.Service
 import android.content.ActivityNotFoundException
@@ -10,7 +9,6 @@ import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -174,7 +172,7 @@ class PickupService : Service() {
         if (coordinator.state.value?.isBoarded != false) return
         // 안드로이드는 화면에 안 보이는 앱이 다른 화면을 띄우는 걸 말없이 막는다(포그라운드 서비스여도).
         // 내비가 앞에 있으면 전화 화면 대신 헤드업 알림의 '전화 걸기'를 남긴다.
-        if (!isOnScreen()) {
+        if (!WayScreen.isVisible(this)) {
           Log.w(TAG, "Way 가 화면에 없어 전화 화면을 못 띄움 — 알림 버튼으로 안내")
           notifications().notify(PickupNotifications.CALL_OFFER_ID, PickupNotifications.callTapNeeded(this, passenger))
           return
@@ -216,14 +214,6 @@ class PickupService : Service() {
   private fun abandonFocus() {
     focusRequest?.let { audio.abandonAudioFocusRequest(it) }
     focusRequest = null
-  }
-
-  /** Way 화면이 지금 보이는지(분할 화면 한쪽 포함). 보여야 전화 화면을 띄울 수 있다. */
-  private fun isOnScreen(): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true // Pleos 는 API 34 — 옛 OS 는 그냥 시도
-    return getSystemService(ActivityManager::class.java).appTasks.any {
-      runCatching { it.taskInfo.isVisible }.getOrDefault(false)
-    }
   }
 
   private fun notifications() = getSystemService(NotificationManager::class.java)

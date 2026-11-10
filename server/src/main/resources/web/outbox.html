@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Pleos 문자 · 사본</title>
+    <link rel="stylesheet" href="/web/app.css" />
+    <style>
+      /* 와이어프레임 P-00(Pleos 문자 앱 화면 예시) 모양의 개발용 사본함 — 문자는 차가 보낸다 */
+      body {
+        background: var(--grey-100);
+      }
+      .phone {
+        max-width: 430px;
+        margin: 0 auto;
+        min-height: 100dvh;
+        background: #f7f8fa;
+        display: flex;
+        flex-direction: column;
+      }
+      .phone header {
+        background: var(--white);
+        border-bottom: 1px solid var(--grey-200);
+        text-align: center;
+        padding: 20px 16px 16px;
+      }
+      .phone header .avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 22px;
+        margin: 0 auto 4px;
+        background: var(--primary-50);
+        color: var(--primary-500);
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .phone header b {
+        display: block;
+        font-size: 16px;
+      }
+      .phone header small {
+        color: var(--grey-500);
+        font-size: 12px;
+      }
+      .thread {
+        flex: 1;
+        padding: 20px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .when {
+        text-align: center;
+        font-size: 12px;
+        color: var(--grey-500);
+      }
+      .bubble {
+        max-width: 330px;
+        background: var(--white);
+        border: 1px solid #e6e8ec;
+        border-radius: 16px 16px 16px 4px;
+        padding: 12px 14px;
+        font-size: 14px;
+        line-height: 21px;
+        color: var(--ink);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .bubble.soon {
+        border: 2px solid var(--primary-500);
+      }
+      .bubble a {
+        color: var(--primary-500);
+      }
+      .demo-link {
+        display: inline-block;
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--grey-500);
+      }
+      .empty {
+        margin: auto;
+        text-align: center;
+        color: var(--grey-500);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      footer {
+        font-size: 12px;
+        color: var(--grey-500);
+        padding: 12px 16px 20px;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="phone">
+      <header>
+        <div class="avatar">문자</div>
+        <b>Pleos 문자</b>
+        <small>차가 운전자 번호로 보낸 문자 · 시연용 사본</small>
+      </header>
+      <section class="thread" id="thread" aria-live="polite">
+        <p class="empty" id="empty">아직 보낸 문자가 없어요.<br />차 앱에서 픽업을 출발하면 같은 문구가 여기 쌓여요.</p>
+      </section>
+      <footer>실제 문자는 차(Pleos 문자)에서 운전자 휴대폰으로 나가요. 휴대폰을 연결할 수 없는 에뮬레이터 시연 때 여기서 링크를 열어요. ‘시연용’은 가상 위치로 걸어오는 동승자를 흉내 내요.</footer>
+    </div>
+    <script>
+      const thread = document.getElementById("thread");
+      const empty = document.getElementById("empty");
+      const shown = new Set();
+      const fmt = new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZone: "Asia/Seoul" });
+      const mask = (p) => {
+        const d = p.replace(/\D/g, "");
+        return d.length < 9 ? d : `${d.slice(0, 3)}-****-${d.slice(-4)}`;
+      };
+
+      function bubble(sms) {
+        const b = document.createElement("div");
+        b.className = "bubble" + (sms.text.includes("곧 도착해요") ? " soon" : "");
+        // 링크만 a 로, 나머지는 글자 그대로(받은 문자 내용을 HTML 로 해석하지 않는다)
+        for (const part of sms.text.split(/(https?:\/\/\S+)/)) {
+          if (/^https?:\/\//.test(part)) {
+            const a = document.createElement("a");
+            a.href = part;
+            a.target = "_blank";
+            a.rel = "noopener";
+            a.textContent = part;
+            b.append(a, "\n");
+            const demo = document.createElement("a");
+            demo.className = "demo-link";
+            demo.href = part + "?demo";
+            demo.target = "_blank";
+            demo.rel = "noopener";
+            demo.textContent = "시연용으로 열기(가상 위치)";
+            b.append(demo);
+          } else b.append(part);
+        }
+        return b;
+      }
+
+      async function poll() {
+        try {
+          const list = await (await fetch("/api/dev/sms")).json();
+          let added = false;
+          for (const sms of list) {
+            if (shown.has(sms.id)) continue;
+            shown.add(sms.id);
+            empty.remove();
+            const when = document.createElement("p");
+            when.className = "when";
+            when.textContent = `${fmt.format(new Date(sms.at))} · ${mask(sms.to)}`;
+            thread.append(when, bubble(sms));
+            added = true;
+          }
+          if (added) window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+        } catch {
+          /* 서버가 다시 뜰 때까지 */
+        }
+        setTimeout(poll, 1000);
+      }
+      poll();
+    </script>
+  </body>
+</html>

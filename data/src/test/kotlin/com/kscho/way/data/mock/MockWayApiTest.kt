@@ -34,6 +34,7 @@ class MockWayApiTest {
       arrivalAtEpochMillis = epoch("2026-11-09T09:50:00"),
       vehicleDescription = "흰색 아반떼",
       plateNumber = "12가 3456",
+      driverName = "김도윤",
     )
 
   private fun TestScope.api(scenario: MockPassengerScenario = MockPassengerScenario()) =
@@ -105,7 +106,7 @@ class MockWayApiTest {
     val api = api()
     val id = api.createPickup(request).pickupId
     api.sendNotification(id, NotificationRequest(NotificationType.ETA_CHANGED, epoch("2026-11-09T09:55:00"), request.arrivalAtEpochMillis))
-    assertEquals("[WAY] 도착 시간이 09:50 → 09:55로 바뀌었어요", api.messages.value.last().text)
+    assertTrue(api.messages.value.last().text.startsWith("[WAY] 도착 시간이 09:50 → 09:55로 바뀌었어요."))
   }
 
   @Test

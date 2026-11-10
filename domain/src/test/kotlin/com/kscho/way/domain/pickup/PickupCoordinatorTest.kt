@@ -1,5 +1,6 @@
 package com.kscho.way.domain.pickup
 
+import com.kscho.way.domain.messaging.PassengerText
 import com.kscho.way.domain.model.BoardingSource
 import com.kscho.way.domain.model.LocationSharing
 import com.kscho.way.domain.model.NavEvent
@@ -23,9 +24,10 @@ class PickupCoordinatorTest {
   private val repo = FakePickupRepository()
   private val nav = FakeNavigator()
   private val door = FakeBoardingSensor()
+  private val messenger = FakePassengerMessenger()
 
   private fun TestScope.coordinator() =
-    PickupCoordinator(repo, nav, door, backgroundScope, clock = { testScheduler.currentTime })
+    PickupCoordinator(repo, nav, door, messenger, backgroundScope, clock = { testScheduler.currentTime })
 
   private fun TestScope.collectEffects(coordinator: PickupCoordinator): MutableList<PickupEffect> {
     val effects = mutableListOf<PickupEffect>()
@@ -42,6 +44,41 @@ class PickupCoordinatorTest {
     assertEquals(Fixtures.pickupLocation, nav.guidedTo)
     assertEquals(PickupPhase.DRIVING, state.phase)
     assertTrue(coordinator.hasActivePickup)
+  }
+
+  @Test
+  fun start_textsJoinLinkFromCar() = runTest {
+    val coordinator = coordinator()
+    val state = coordinator.start(Fixtures.plan())
+    runCurrent()
+
+    // 문자는 서버가 아니라 차(운전자 번호)가 보낸다 — 서버에서 받은 참여 링크를 넣어서
+    val (to, text) = messenger.sent.single()
+    assertEquals(Fixtures.plan().passenger, to)
+    val departure = text as PassengerText.Departure
+    assertEquals(state.shareUrl, departure.link)
+    assertEquals(state.arrivalAtMillis, departure.arrivalAtMillis)
+    assertEquals("김도윤", departure.driverName)
+    assertEquals(Fixtures.plan().pickupPoint.description.title, departure.pickupTitle)
+  }
+
+  @Test
+  fun etaChangeAndArrivingSoon_areTextedFromCar_andToldToServer() = runTest {
+    val coordinator = coordinator()
+    val state = coordinator.start(Fixtures.plan())
+    runCurrent()
+
+    // 정체로 12분 → 20분: 3분 넘게 바뀌어 다시 알린다
+    nav.events.emit(NavEvent.Progress(null, 20 * 60, 3_000, 20 * 60_000L))
+    runCurrent()
+    assertEquals(PassengerText.EtaChanged(state.shareUrl, 12 * 60_000L, 20 * 60_000L), messenger.sent.last().second)
+    assertEquals(listOf(12 * 60_000L to 20 * 60_000L), repo.etaChanges) // 서버는 동승자 웹 배너용
+
+    nav.events.emit(NavEvent.Progress(null, 4 * 60, 1_100, 20 * 60_000L))
+    runCurrent()
+    assertEquals(PassengerText.ArrivingSoon(state.shareUrl), messenger.sent.last().second)
+    assertEquals(1, repo.arrivingSoon.size)
+    assertEquals(3, messenger.sent.size)
   }
 
   @Test
@@ -128,6 +165,7 @@ class PickupCoordinatorTest {
     val error = runCatching { coordinator.start(Fixtures.plan()) }.exceptionOrNull()
     assertTrue(error is SecurityException)
     assertTrue(repo.created.isEmpty()) // 내비를 못 켰으면 동승자에게 문자도 안 보낸다
+    assertTrue(messenger.sent.isEmpty())
     assertNull(coordinator.state.value)
     assertFalse(coordinator.hasActivePickup)
     nav.failGuidance = null
@@ -140,7 +178,9 @@ class PickupCoordinatorTest {
     val coordinator = coordinator()
     repo.failCreate = IllegalStateException("서버 오류")
     assertTrue(runCatching { coordinator.start(Fixtures.plan()) }.isFailure)
+    runCurrent()
     assertEquals(1, nav.stopped)
+    assertTrue(messenger.sent.isEmpty()) // 링크가 없으면 문자도 없다
     assertNull(coordinator.state.value)
   }
 

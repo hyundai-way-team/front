@@ -27,6 +27,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Way 서버(픽업 세션·동승자 위치) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Gleo '동승자에게 전화' 때 차량 전화 화면이 있는지 확인 -->
     <queries>
         <intent>

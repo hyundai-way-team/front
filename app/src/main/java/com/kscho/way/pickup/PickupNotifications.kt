@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import com.kscho.way.MainActivity
+import com.kscho.way.domain.messaging.PassengerText
 import com.kscho.way.domain.model.Contact
 
 /**
@@ -21,6 +22,16 @@ import com.kscho.way.domain.model.Contact
 object PickupNotifications {
   const val ONGOING_ID = 1001
   const val CALL_OFFER_ID = 1002
+  private const val TEXT_ID_BASE = 1010
+
+  /** 문자마다 다른 알림(출발·도착 시간 변경·곧 도착이 서로 덮지 않게). */
+  fun textId(text: PassengerText): Int =
+    TEXT_ID_BASE +
+      when (text) {
+        is PassengerText.Departure -> 0
+        is PassengerText.EtaChanged -> 1
+        is PassengerText.ArrivingSoon -> 2
+      }
 
   private const val EXTRA_NO_HEADS_UP = "exclude_from_heads_up_notification"
   private const val CHANNEL_ONGOING = "pickup_ongoing"
@@ -76,6 +87,30 @@ object PickupNotifications {
       .setContentIntent(dial(context, passenger))
       .addAction(0, "전화 걸기", dial(context, passenger))
       .setAutoCancel(true)
+
+  /**
+   * Way 가 화면 뒤에 있어(내비가 앞) 문자 보내기 화면을 직접 못 띄울 때 — 누르면 Pleos 문자 화면이 열린다.
+   * 헤드업으로 뜨는 category 중 msg 를 쓴다.
+   */
+  fun textNeeded(context: Context, passenger: Contact, text: PassengerText, send: Intent): Notification {
+    val what =
+      when (text) {
+        is PassengerText.Departure -> "출발 문자"
+        is PassengerText.EtaChanged -> "도착 시간 변경 문자"
+        is PassengerText.ArrivingSoon -> "'곧 도착해요' 문자"
+      }
+    val open = PendingIntent.getActivity(context, textId(text), send, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    return NotificationCompat.Builder(context, CHANNEL_ASK)
+      .setSmallIcon(android.R.drawable.sym_action_email)
+      .setContentTitle("${passenger.callName} 님에게 $what 보내기")
+      .setContentText("누르면 문구가 채워진 Pleos 문자 화면이 열려요")
+      .setPriority(NotificationCompat.PRIORITY_HIGH)
+      .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+      .setContentIntent(open)
+      .addAction(0, "문자 보내기", open)
+      .setAutoCancel(true)
+      .build()
+  }
 
   /** 알림을 누르는 건 사용자 동작이라, Way 가 뒤에 있어도 전화 화면이 열린다. */
   private fun dial(context: Context, passenger: Contact): PendingIntent =

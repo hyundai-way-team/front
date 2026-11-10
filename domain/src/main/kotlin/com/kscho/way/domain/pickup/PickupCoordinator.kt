@@ -1,5 +1,7 @@
 package com.kscho.way.domain.pickup
 
+import com.kscho.way.domain.messaging.PassengerMessenger
+import com.kscho.way.domain.messaging.PassengerText
 import com.kscho.way.domain.model.BoardingSource
 import com.kscho.way.domain.model.NavEvent
 import com.kscho.way.domain.model.PickupPlan
@@ -25,6 +27,7 @@ import kotlinx.coroutines.launch
  * 진행 중인 픽업 1건을 끝까지 끌고 간다.
  * 내비(진행·도착) · 서버(동승자 상태) · 도어(탑승) · 시계를 한 줄로 모아 [PickupRules] 에 넣고,
  * 규칙이 정한 일(문자·서버 보고)은 여기서, 음성은 [effects] 를 받은 앱이 한다.
+ * 문자는 차가 운전자 번호로 보내고([messenger]), 서버에는 같은 일을 알려 동승자 웹 화면을 바꾼다.
  *
  * 앱 전체에서 하나만 둔다(화면·포그라운드 서비스·Gleo 가 같은 [state] 를 본다).
  */
@@ -32,6 +35,7 @@ class PickupCoordinator(
   private val pickups: PickupRepository,
   private val navigator: Navigator,
   private val boardingSensor: BoardingSensor,
+  private val messenger: PassengerMessenger,
   private val scope: CoroutineScope,
   private val clock: () -> Long = System::currentTimeMillis,
   private val tickMillis: Long = 500L,
@@ -54,8 +58,8 @@ class PickupCoordinator(
     get() = _state.value?.let { !it.isBoarded } ?: false
 
   /**
-   * 출발(D-05). 내비 안내를 먼저 켜고, 서버에 세션을 만들어 동승자에게 문자(차량 번호·픽업 위치·ETA·링크)를 보내게 한다.
-   * 내비를 못 켜면 문자를 보내지 않고, 서버가 실패하면 내비 안내를 거둔다 — 어느 쪽이든 픽업은 남지 않는다.
+   * 출발(D-05). 내비 안내를 먼저 켜고, 서버에 세션을 만들어 참여 링크를 받은 뒤 차에서 동승자에게 문자(차량 번호·픽업 위치·ETA·링크)를 보낸다.
+   * 내비를 못 켜면 문자를 보내지 않고, 서버가 실패하면(링크가 없으니 문자도 없다) 내비 안내를 거둔다 — 어느 쪽이든 픽업은 남지 않는다.
    */
   suspend fun start(plan: PickupPlan): PickupState {
     check(!hasActivePickup) { "이미 진행 중인 픽업이 있어요" }
@@ -83,6 +87,7 @@ class PickupCoordinator(
     val initial = PickupState(id = created.id, shareUrl = created.shareUrl, plan = plan, startedAtMillis = now, arrivalAtMillis = arrival)
     lastDriverReportAt = null
     _state.value = initial
+    text("출발 문자", initial, PassengerText.Departure(created.shareUrl, plan.vehicle.driverName, plan.vehicle, point.description.title, arrival))
     listening.launch { pickups.passengerStatus(created.id).collect { events.send(PickupEvent.Passenger(it)) } }
     return initial
   }
@@ -156,14 +161,22 @@ class PickupCoordinator(
     when (effect) {
       is PickupEffect.Announce,
       is PickupEffect.OfferCall -> _effects.tryEmit(effect)
-      is PickupEffect.NotifyEtaChanged ->
-        send("ETA 변경 문자") { pickups.notifyEtaChanged(state.id, effect.previousArrivalAtMillis, effect.arrivalAtMillis) }
-      is PickupEffect.NotifyArrivingSoon -> send("곧 도착 문자") { pickups.notifyArrivingSoon(state.id, effect.arrivalAtMillis) }
+      is PickupEffect.NotifyEtaChanged -> {
+        text("ETA 변경 문자", state, PassengerText.EtaChanged(state.shareUrl, effect.previousArrivalAtMillis, effect.arrivalAtMillis))
+        send("ETA 변경 알림") { pickups.notifyEtaChanged(state.id, effect.previousArrivalAtMillis, effect.arrivalAtMillis) }
+      }
+      is PickupEffect.NotifyArrivingSoon -> {
+        text("곧 도착 문자", state, PassengerText.ArrivingSoon(state.shareUrl))
+        send("곧 도착 알림") { pickups.notifyArrivingSoon(state.id, effect.arrivalAtMillis) }
+      }
       is PickupEffect.ReportArrived ->
         send("정차 보고") { pickups.reportArrived(state.id, effect.atMillis, PickupPolicy.WAIT_SECONDS) }
       is PickupEffect.Complete -> send("탑승 완료 보고") { pickups.complete(state.id, effect.outcome) }
     }
   }
+
+  /** 차에서 동승자에게 문자 — 서버 알림과 따로(서버가 안 돼도 문자는 나간다). */
+  private fun text(what: String, state: PickupState, text: PassengerText) = send(what) { messenger.send(state.plan.passenger, text) }
 
   // 픽업이 끝나도(구독 job 취소) 서버 보고는 마치도록 scope 에서 따로 돈다
   private fun send(what: String, block: suspend () -> Unit) {

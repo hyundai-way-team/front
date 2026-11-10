@@ -1,5 +1,8 @@
 package com.kscho.way.domain.pickup
 
+import com.kscho.way.domain.messaging.PassengerMessenger
+import com.kscho.way.domain.messaging.PassengerText
+import com.kscho.way.domain.model.Contact
 import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.NavEvent
 import com.kscho.way.domain.model.PassengerStatus
@@ -79,5 +82,13 @@ class FakePickupRepository : PickupRepository {
 
   override suspend fun complete(pickupId: String, outcome: PickupOutcome) {
     completed += outcome
+  }
+}
+
+class FakePassengerMessenger : PassengerMessenger {
+  val sent = mutableListOf<Pair<Contact, PassengerText>>()
+
+  override suspend fun send(to: Contact, text: PassengerText) {
+    sent += to to text
   }
 }

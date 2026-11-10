@@ -1,0 +1,779 @@
+/* WAY 동승자 웹 — 와이어프레임 v2(P-01·P-02 디자인 토큰)를 기준으로 P-03~P-06 도 같은 토큰으로 맞춘다. */
+
+@font-face {
+  font-family: "Pretendard Variable";
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src: url("/web/fonts/PretendardVariable.woff2") format("woff2-variations");
+}
+
+:root {
+  --primary-500: #3b67f6;
+  --primary-200: #bfcefe;
+  --primary-50: #f5f7ff;
+  --grey-100: #f4f8fc;
+  --grey-200: #e2e8f0;
+  --grey-400: #94a3b8;
+  --grey-500: #64748b;
+  --grey-700: #334155;
+  --black: #000;
+  --ink: #1f2328;
+  --white: #fff;
+  --passenger: #d9822b;
+  --warn-bg: #fcefe3;
+  --warn-line: #e3b98c;
+  --warn-ink: #8a4b12;
+  --ring: #d6deec;
+  --tile: #e6e8ec;
+  --map-bg: #eef0f2;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--white);
+  color: var(--black);
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  word-break: keep-all;
+}
+
+p,
+h1 {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible {
+  outline: 3px solid var(--primary-200);
+  outline-offset: 2px;
+}
+
+/* ── 화면 틀 */
+
+.screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+  max-width: 430px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+}
+
+.screen.soft {
+  background: linear-gradient(to bottom, var(--white), var(--grey-100));
+}
+
+body:has(.screen.soft) {
+  background: var(--grey-100);
+}
+
+.screen.wide {
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.grow {
+  flex: 1 0 24px;
+}
+
+.logo {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--primary-500);
+  margin-bottom: 16px;
+}
+
+/* ── 글자 */
+
+.title-xl {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+}
+
+.title-l {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+}
+
+.m-regular {
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+}
+
+.s-regular {
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+}
+
+.caption {
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+  color: var(--grey-500);
+  text-align: center;
+}
+
+.muted {
+  color: var(--grey-500);
+}
+
+.center {
+  text-align: center;
+}
+
+/* ── 버튼 */
+
+.btn {
+  width: 100%;
+  height: 56px;
+  border-radius: 16px;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px;
+}
+
+.btn.primary {
+  background: var(--primary-500);
+  color: var(--white);
+}
+
+.btn.primary:active {
+  filter: brightness(0.94);
+}
+
+.btn.ghost {
+  color: var(--grey-500);
+}
+
+.btn[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── 카드(P-01) */
+
+.eta-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--primary-50);
+  border: 1px solid var(--primary-200);
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+
+.eta-box .label {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  color: var(--grey-700);
+}
+
+.eta-box .value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+  color: var(--primary-500);
+}
+
+.icon-btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+}
+
+.icon-btn img {
+  width: 24px;
+  height: 24px;
+}
+
+.icon-btn.spin img {
+  animation: spin 0.8s linear;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.card {
+  background: var(--white);
+  border: 1px solid var(--grey-200);
+  border-radius: 14px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+  color: var(--primary-500);
+}
+
+.card-head img {
+  width: 20px;
+  height: 20px;
+}
+
+.vehicle-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vehicle-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.car-tile {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: var(--grey-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.car-tile::after {
+  content: "";
+  width: 28px;
+  height: 28px;
+  background: var(--grey-400);
+  -webkit-mask: url("/web/icons/car.svg") center / contain no-repeat;
+  mask: url("/web/icons/car.svg") center / contain no-repeat;
+}
+
+.car-tile.big {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  background: var(--tile);
+}
+
+.plate {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+}
+
+.vehicle-desc {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  color: var(--grey-500);
+}
+
+.map-card {
+  overflow: hidden;
+}
+
+.map-card .place {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--white);
+}
+
+.place-title {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+}
+
+/* ── 지도 */
+
+.map {
+  position: relative;
+  background: var(--map-bg);
+  width: 100%;
+}
+
+.map.h180 {
+  height: 180px;
+}
+
+.map.h220 {
+  height: 220px;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.map.h240 {
+  height: 240px;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.map-chip {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  background: var(--white);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--grey-500);
+  pointer-events: none;
+}
+
+.map-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--grey-500);
+}
+
+.mk-pin {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  background: var(--primary-500);
+  border-radius: 15px 15px 15px 0;
+  transform: rotate(-45deg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.mk-pin::after {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: var(--white);
+}
+
+.mk-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 3px solid var(--white);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.mk-dot.car {
+  width: 24px;
+  height: 24px;
+  background: var(--ink);
+}
+
+.mk-dot.me {
+  background: var(--passenger);
+}
+
+/* 위치는 MapLibre 가 잡는다(position:absolute) — 감싸는 상자를 점 크기로만 */
+.mk-wrap {
+  width: max-content;
+}
+
+.mk-label {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 4px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: var(--white);
+  border-radius: 8px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.mk-wrap.me .mk-label {
+  top: 50%;
+  left: calc(100% + 6px);
+  transform: translateY(-50%);
+  color: var(--warn-ink);
+}
+
+.maplibregl-ctrl-attrib {
+  font-size: 9px;
+}
+
+/* ── P-02 */
+
+.status-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 40px;
+  background: var(--primary-50);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.status-icon img {
+  width: 40px;
+  height: 40px;
+}
+
+.checklist {
+  background: var(--grey-100);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.checklist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  color: var(--grey-700);
+  list-style: none;
+}
+
+.checklist ul {
+  display: contents;
+}
+
+.checklist img {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+
+.note {
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+  color: var(--grey-400);
+  text-align: center;
+}
+
+.toast {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--warn-ink);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+/* ── P-03 대기 */
+
+.banner-warn {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--warn-ink);
+}
+
+.banner-warn b {
+  font-weight: 700;
+}
+
+.eta-hero {
+  background: var(--primary-50);
+  border-radius: 16px;
+  padding: 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.eta-hero .who {
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--ink);
+}
+
+.eta-hero .time {
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 68px;
+  color: var(--primary-500);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.eta-hero .left {
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--grey-500);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.row .k {
+  color: var(--grey-500);
+  flex: none;
+}
+
+.row .v {
+  font-weight: 700;
+  color: var(--ink);
+  text-align: right;
+}
+
+.hint-box {
+  background: var(--grey-100);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--grey-500);
+  text-align: center;
+}
+
+/* ── P-04 곧 도착 */
+
+.banner-blue {
+  background: var(--primary-500);
+  color: var(--white);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.banner-blue .big {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 36px;
+}
+
+.banner-blue .small {
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.label-13 {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--grey-500);
+}
+
+.spot-18 {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 26px;
+  color: var(--ink);
+}
+
+.find-car {
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.find-car .plate-big {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 38px;
+  letter-spacing: 2px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.find-car .desc {
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--grey-500);
+}
+
+/* ── P-05 타이머 */
+
+.timer-card {
+  background: var(--primary-50);
+  border-radius: 16px;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.ring {
+  position: relative;
+  width: 168px;
+  height: 168px;
+}
+
+.ring svg {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+
+.ring .center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.ring .sec {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 56px;
+  color: var(--primary-500);
+  font-variant-numeric: tabular-nums;
+}
+
+.ring .sub {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--grey-500);
+}
+
+.timer-card.over .sec {
+  color: var(--warn-ink);
+}
+
+.timer-text {
+  text-align: center;
+}
+
+.timer-text .main {
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--ink);
+}
+
+.timer-text .sub {
+  font-size: 14px;
+  line-height: 24px;
+  color: var(--grey-500);
+}
+
+/* ── P-06 종료 */
+
+.done {
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.done-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 40px;
+  background: var(--primary-500);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.done-icon img {
+  width: 40px;
+  height: 40px;
+}
+
+.done-title {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 36px;
+  color: var(--ink);
+}
+
+.done-box {
+  background: var(--grey-100);
+  border-radius: 14px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--ink);
+}
+
+.demo-badge {
+  position: fixed;
+  right: 8px;
+  bottom: 8px;
+  z-index: 10;
+  font-size: 11px;
+  background: var(--ink);
+  color: var(--white);
+  border-radius: 8px;
+  padding: 2px 8px;
+  opacity: 0.7;
+}

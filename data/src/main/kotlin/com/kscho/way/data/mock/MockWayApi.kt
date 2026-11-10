@@ -19,6 +19,7 @@ import com.kscho.way.data.remote.StopRestrictionDto
 import com.kscho.way.data.remote.VehicleDto
 import com.kscho.way.data.remote.WayApi
 import com.kscho.way.data.remote.ZoneDto
+import com.kscho.way.data.sms.PickupTexts
 import com.kscho.way.domain.model.Geo
 import com.kscho.way.domain.model.LatLng
 import java.time.Instant
@@ -52,7 +53,7 @@ data class MockPassengerScenario(
   val updateIntervalMillis: Long = 1_000,
 )
 
-/** mock 서버가 '보낸' Pleos 문자 — 문구·형식은 기획서 미정이라 예시. */
+/** mock 서버가 남긴 문자 사본 — 실제 문자는 차가 운전자 번호로 보낸다(PassengerMessenger). */
 data class MockSms(val pickupId: String, val to: String, val text: String, val atMillis: Long)
 
 /**
@@ -64,7 +65,7 @@ class MockWayApi(
   private val scenario: MockPassengerScenario = MockPassengerScenario(),
   private val log: (String) -> Unit = {},
 ) : WayApi {
-  private class Session(val id: String, val request: CreatePickupRequest) {
+  private class Session(val id: String, val request: CreatePickupRequest, val url: String) {
     val status = MutableStateFlow(PassengerStatusDto())
     val leave = CompletableDeferred<Unit>()
     var simulation: Job? = null
@@ -147,7 +148,7 @@ class MockWayApi(
     return StopRestrictionDto(restricted = hit != null, zone = hit?.dto())
   }
 
-  override suspend fun myVehicle(): VehicleDto = VehicleDto("흰색 아반떼", "12가 3456")
+  override suspend fun myVehicle(): VehicleDto = VehicleDto("흰색 아반떼", "12가 3456", driverName = "김도윤")
 
   // ── 픽업 세션
 
@@ -155,12 +156,18 @@ class MockWayApi(
     val n = counter.incrementAndGet()
     val id = "pickup-$n"
     val url = "https://way.mock/p/${id.hashCode().toUInt().toString(36)}"
-    val session = Session(id, request)
+    val session = Session(id, request, url)
     sessions[id] = session
     sms(
       session,
-      "[WAY] ${request.passengerName} 님, ${request.vehicleDescription} ${request.plateNumber} 차량이 데리러 가요. " +
-        "픽업 위치: ${request.pickupTitle} · ${hhmm.format(Instant.ofEpochMilli(request.arrivalAtEpochMillis))} 도착 예정 · $url",
+      PickupTexts.departure(
+        driverName = request.driverName,
+        vehicleDescription = request.vehicleDescription,
+        plateNumber = request.plateNumber,
+        pickupTitle = request.pickupTitle,
+        arrivalAt = hhmm.format(Instant.ofEpochMilli(request.arrivalAtEpochMillis)),
+        link = url,
+      ),
     )
     session.simulation = scope.launch { simulatePassenger(session) }
     return CreatePickupResponse(id, url)
@@ -178,10 +185,10 @@ class MockWayApi(
     when (request.type) {
       NotificationType.ETA_CHANGED -> {
         val before = request.previousArrivalAtEpochMillis?.let { hhmm.format(Instant.ofEpochMilli(it)) } ?: "?"
-        sms(session, "[WAY] 도착 시간이 $before → ${eta}로 바뀌었어요")
+        sms(session, PickupTexts.etaChanged(before, eta, session.url))
       }
       NotificationType.ARRIVING_SOON -> {
-        sms(session, "[WAY] 곧 도착해요! ${session.request.pickupTitle}에서 만나요 (${eta} 도착 예정)")
+        sms(session, PickupTexts.arrivingSoon(session.url))
         session.leave.complete(Unit)
       }
     }
@@ -247,7 +254,7 @@ class MockWayApi(
   private fun sms(session: Session, text: String) {
     val message = MockSms(session.id, session.request.passengerPhone, text, clock())
     _messages.update { it + message }
-    log("Pleos 문자 → ${session.request.passengerName}: $text")
+    log("문자 사본(차가 보냄) → ${session.request.passengerName}: $text")
   }
 
   private fun seedHistory(): List<PickupRecordDto> {

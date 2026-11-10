@@ -18,7 +18,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class StopRestrictionDto(val restricted: Boolean, val zone: ZoneDto? = null)
 
-@Serializable data class VehicleDto(val description: String, val plateNumber: String)
+/** 운전자 프로필 — 차량 설명·번호판 + 동승자 웹·문자에 나오는 운전자 이름("김도윤" → "도윤 님"). */
+@Serializable data class VehicleDto(val description: String, val plateNumber: String, val driverName: String)
 
 @Serializable
 data class CreatePickupRequest(
@@ -31,6 +32,8 @@ data class CreatePickupRequest(
   val arrivalAtEpochMillis: Long,
   val vehicleDescription: String,
   val plateNumber: String,
+  /** 문자·동승자 웹의 "김도윤 님이 데리러 가고 있어요" */
+  val driverName: String,
 )
 
 @Serializable data class CreatePickupResponse(val pickupId: String, val shareUrl: String)

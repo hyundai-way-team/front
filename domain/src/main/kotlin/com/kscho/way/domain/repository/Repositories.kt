@@ -42,11 +42,12 @@ interface VehicleProfileRepository {
 data class CreatedPickup(val id: String, val shareUrl: String)
 
 /**
- * 픽업 세션 — 서버가 동승자 웹 링크·Pleos 문자를 맡는다.
+ * 픽업 세션 — 서버가 동승자 웹 링크를 만들고 차와 동승자 웹을 실시간으로 잇는다.
+ * 문자는 서버가 아니라 차가 운전자 번호로 보낸다([com.kscho.way.domain.messaging.PassengerMessenger]).
  * 운전자 앱은 상황을 알리고(보고), 동승자 상태를 받는다.
  */
 interface PickupRepository {
-  /** 세션을 만들고 동승자에게 차량 번호·픽업 위치·ETA·참여 링크 문자를 보낸다(기획 3-4). */
+  /** 세션을 만들고 참여 링크를 받는다(기획 3-4) — 문자는 이 링크로 차가 보낸다. */
   suspend fun create(plan: PickupPlan, arrivalAtMillis: Long): CreatedPickup
 
   /** 동승자 링크 확인·위치 공유·실시간 위치(기획 3-7). */
@@ -55,10 +56,10 @@ interface PickupRepository {
   /** 차량 위치·ETA — 동승자 웹이 실시간으로 보여 준다. */
   suspend fun reportDriver(pickupId: String, location: LatLng?, remainingSeconds: Int, remainingMeters: Int, arrivalAtMillis: Long)
 
-  /** "도착 시간이 10:00 → 10:05로 바뀌었어요" 문자(기획 3-5). */
+  /** 도착 시간이 바뀌었다 — 동승자 웹에 "도착 시간이 바뀌었어요" 배너(기획 3-5). */
   suspend fun notifyEtaChanged(pickupId: String, previousArrivalAtMillis: Long, arrivalAtMillis: Long)
 
-  /** "곧 도착해요" 문자 — 픽업 1건당 1회(기획 3-6). */
+  /** 곧 도착 — 동승자 웹이 '곧 도착해요' 화면으로(기획 3-6). */
   suspend fun notifyArrivingSoon(pickupId: String, arrivalAtMillis: Long)
 
   /** 정차 — 동승자 웹에도 같은 대기 타이머를 띄운다(기획 3-9). */

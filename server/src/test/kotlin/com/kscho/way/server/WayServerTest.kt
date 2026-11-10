@@ -1,0 +1,143 @@
+package com.kscho.way.server
+
+import com.kscho.way.data.remote.CompletePickupRequest
+import com.kscho.way.data.remote.CreatePickupRequest
+import com.kscho.way.data.remote.CreatePickupResponse
+import com.kscho.way.data.remote.LatLngDto
+import com.kscho.way.data.remote.PassengerStatusDto
+import com.kscho.way.data.remote.SharingWire
+import com.kscho.way.server.pickup.PassengerViewDto
+import io.ktor.client.HttpClient
+import io.ktor.client.plugins.websocket.WebSockets
+import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsBytes
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
+import io.ktor.server.testing.ApplicationTestBuilder
+import io.ktor.server.testing.testApplication
+import io.ktor.websocket.Frame
+import io.ktor.websocket.readText
+import java.io.File
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class WayServerTest {
+  private val mapDir = System.getProperty("way.mapDir")?.let(::File)
+
+  private val request =
+    CreatePickupRequest(
+      passengerName = "이서연",
+      passengerPhone = "01000001234",
+      placeName = "신촌 XX 빌라",
+      pickupPoint = LatLngDto(37.5567, 126.942),
+      pickupTitle = "신촌 XX 빌라 골목 입구 앞",
+      pickupDetail = "신촌로 · 도로 북쪽(빌라 쪽) 인도",
+      arrivalAtEpochMillis = 1_800_000_000_000,
+      vehicleDescription = "흰색 아반떼",
+      plateNumber = "12가 3456",
+      driverName = "김도윤",
+    )
+
+  private fun server(block: suspend ApplicationTestBuilder.(ServerDeps) -> Unit) = testApplication {
+    val deps = createDeps("http://localhost:8080", mapDir)
+    application { wayModule(deps) }
+    block(deps)
+  }
+
+  private suspend fun HttpClient.postJson(path: String, body: String) =
+    post(path) {
+      contentType(ContentType.Application.Json)
+      setBody(body)
+    }
+
+  private suspend fun HttpClient.createPickup(): CreatePickupResponse {
+    val res = postJson("/api/pickups", WayJson.encodeToString(request))
+    assertEquals(HttpStatusCode.OK, res.status)
+    return WayJson.decodeFromString(res.bodyAsText())
+  }
+
+  private fun CreatePickupResponse.token() = shareUrl.substringAfterLast("/p/")
+
+  @Test
+  fun departure_textsLink_andPassengerPageOpens() = server { deps ->
+    val created = client.createPickup()
+
+    assertTrue(deps.outbox.messages.value.single().text.contains(created.shareUrl))
+    // 개발용 발송함(동승자 휴대폰 대신)에서도 보인다
+    val outbox = client.get("/api/dev/sms")
+    assertEquals(HttpStatusCode.OK, outbox.status)
+    assertTrue(outbox.bodyAsText().contains(created.token()))
+    val page = client.get("/p/${created.token()}")
+    assertEquals(HttpStatusCode.OK, page.status)
+    assertTrue(page.bodyAsText().contains("/web/app.js"))
+    assertEquals(HttpStatusCode.OK, client.get("/web/app.js").status)
+    val view: PassengerViewDto = WayJson.decodeFromString(client.get("/api/p/${created.token()}").bodyAsText())
+    assertEquals("도윤", view.driverCallName)
+    assertEquals("EN_ROUTE", view.phase)
+  }
+
+  @Test
+  fun passengerSharing_reachesDriverOverWebSocket() = server { _ ->
+    val created = client.createPickup()
+    val token = created.token()
+    val ws = createClient { install(WebSockets) }
+
+    ws.webSocket("/api/pickups/${created.pickupId}/passenger") {
+      val first: PassengerStatusDto = WayJson.decodeFromString((incoming.receive() as Frame.Text).readText())
+      assertEquals(PassengerStatusDto(), first)
+
+      assertEquals(HttpStatusCode.NoContent, client.postJson("/api/p/$token/open", "{}").status)
+      assertEquals(HttpStatusCode.NoContent, client.postJson("/api/p/$token/sharing", """{"allow":true}""").status)
+      assertEquals(HttpStatusCode.NoContent, client.postJson("/api/p/$token/location", """{"lat":37.5571,"lng":126.942}""").status)
+
+      var last = first
+      while (last.location == null) last = WayJson.decodeFromString((incoming.receive() as Frame.Text).readText())
+      assertTrue(last.linkOpened)
+      assertEquals(SharingWire.SHARING, last.sharing)
+      assertEquals(LatLngDto(37.5571, 126.942), last.location)
+    }
+  }
+
+  @Test
+  fun afterBoarding_linkIsExpired() = server { _ ->
+    val created = client.createPickup()
+    val token = created.token()
+    client.postJson("/api/p/$token/sharing", """{"allow":true}""")
+    client.postJson("/api/pickups/${created.pickupId}/complete", WayJson.encodeToString(CompletePickupRequest(boarded = true, pickupLocationChanges = 0)))
+
+    assertEquals(HttpStatusCode.Gone, client.postJson("/api/p/$token/location", """{"lat":37.5571,"lng":126.942}""").status)
+    val view: PassengerViewDto = WayJson.decodeFromString(client.get("/api/p/$token").bodyAsText())
+    assertEquals("BOARDED", view.phase)
+    assertEquals(SharingWire.ENDED, view.sharing)
+  }
+
+  @Test
+  fun unknownLink_isNotFound() = server { _ ->
+    assertEquals(HttpStatusCode.NotFound, client.get("/api/p/nope").status)
+    assertEquals(HttpStatusCode.NotFound, client.postJson("/api/pickups/nope/arrival", """{"arrivedAtEpochMillis":0,"waitSeconds":60}""").status)
+  }
+
+  @Test
+  fun offlineMap_servesByteRanges() = server { _ ->
+    // pmtiles 는 파일 전체가 아니라 필요한 부분만 Range 로 읽는다
+    val res = client.get("/map/way.pmtiles") { header(HttpHeaders.Range, "bytes=0-6") }
+    assertEquals(HttpStatusCode.PartialContent, res.status)
+    assertEquals("PMTiles", res.bodyAsBytes().decodeToString())
+    assertEquals(HttpStatusCode.OK, client.get("/map/style.json").status)
+  }
+
+  @Test
+  fun placeSearch_usesDemoNeighborhood() = server { _ ->
+    val body = client.get("/api/places?query=xx").bodyAsText()
+    assertTrue(body.contains("신촌 XX 빌라"))
+    assertTrue(client.get("/api/me/vehicle").bodyAsText().contains("김도윤"))
+  }
+}

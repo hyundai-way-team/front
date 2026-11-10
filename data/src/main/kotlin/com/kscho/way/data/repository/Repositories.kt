@@ -61,7 +61,7 @@ class StopRestrictionRepositoryImpl(private val api: WayApi) : StopRestrictionRe
 }
 
 class VehicleProfileRepositoryImpl(private val api: WayApi) : VehicleProfileRepository {
-  override suspend fun myVehicle(): MyVehicle = api.myVehicle().let { MyVehicle(it.description, it.plateNumber) }
+  override suspend fun myVehicle(): MyVehicle = api.myVehicle().let { MyVehicle(it.description, it.plateNumber, it.driverName) }
 }
 
 class PickupRepositoryImpl(private val api: WayApi) : PickupRepository {
@@ -79,6 +79,7 @@ class PickupRepositoryImpl(private val api: WayApi) : PickupRepository {
           arrivalAtEpochMillis = arrivalAtMillis,
           vehicleDescription = plan.vehicle.description,
           plateNumber = plan.vehicle.plateNumber,
+          driverName = plan.vehicle.driverName,
         )
       )
     return CreatedPickup(response.pickupId, response.shareUrl)
