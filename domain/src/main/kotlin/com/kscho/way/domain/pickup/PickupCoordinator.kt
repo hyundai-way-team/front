@@ -172,8 +172,14 @@ class PickupCoordinator(
         text("곧 도착 문자", state, PassengerText.ArrivingSoon(state.shareUrl))
         send("곧 도착 알림") { pickups.notifyArrivingSoon(state.id, effect.arrivalAtMillis) }
       }
-      is PickupEffect.ReportArrived ->
+      is PickupEffect.ReportArrived -> {
+        // 서기 직전 위치를 바로 보낸다 — 5초 간격 보고만으론 동승자 지도의 차가 픽업 지점 앞에서 멈춰 보인다.
+        // 내비 위치를 한 번도 못 받았으면 도착한 곳 = 픽업 지점
+        lastDriverReportAt = effect.atMillis
+        val last = state.carLocation ?: state.plan.pickupPoint.location
+        send("정차 위치 보고") { pickups.reportDriver(state.id, last, 0, 0, effect.atMillis) }
         send("정차 보고") { pickups.reportArrived(state.id, effect.atMillis, PickupPolicy.WAIT_SECONDS) }
+      }
       is PickupEffect.Complete -> {
         send("탑승 완료 보고") { pickups.complete(state.id, effect.outcome) }
         val record = PickupRecords.of(state, effect.outcome, clock())

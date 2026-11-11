@@ -21,6 +21,8 @@ dependencies {
 
   implementation(libs.ktor.server.core)
   implementation(libs.ktor.server.cio)
+  // 로컬 https(시연용, WAY_TLS_DIR) — CIO 는 서버 TLS 를 못 열어 그때만 Netty 로 띄운다
+  implementation(libs.ktor.server.netty)
   implementation(libs.ktor.server.websockets)
   implementation(libs.ktor.server.content.negotiation)
   implementation(libs.ktor.server.partial.content)

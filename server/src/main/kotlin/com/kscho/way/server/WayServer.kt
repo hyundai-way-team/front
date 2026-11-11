@@ -12,6 +12,7 @@ import com.kscho.way.server.pickup.PickupError
 import com.kscho.way.server.pickup.PickupHub
 import com.kscho.way.server.pickup.SharingRequest
 import com.kscho.way.server.sms.OutboxTextLog
+import com.kscho.way.server.tls.RootCaProfile
 import io.ktor.http.CacheControl
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -31,6 +32,7 @@ import io.ktor.server.request.path
 import io.ktor.server.request.receive
 import io.ktor.server.response.cacheControl
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
@@ -60,6 +62,8 @@ class ServerDeps(
   val mapDir: File?,
   /** 개발용: 웹 파일을 jar 대신 이 폴더(server/src/main/resources/web)에서 바로 읽는다 — 고치고 새로고침만 하면 된다. */
   val webDir: File? = null,
+  /** 시연용 로컬 https 의 인증 기관(CA) 인증서 — 아이폰이 /dev/ca.cer 로 받아 신뢰 등록한다(공개 인증서만, 개인 키 아님). */
+  val caCert: File? = null,
 )
 
 @Serializable data class ErrorDto(val error: String)
@@ -83,7 +87,7 @@ fun Application.wayModule(deps: ServerDeps) {
   install(CallLogging) {
     level = Level.INFO
     // 5초마다 오는 차량 위치·1초마다 오는 동승자 위치는 빼고 굵직한 요청만
-    filter { call -> call.request.path().startsWith("/api/") && !call.request.path().endsWith("/driver-status") && !call.request.path().endsWith("/location") && call.request.path() != "/api/dev/sms" }
+    filter { call -> call.request.path().startsWith("/dev/ca") || call.request.path().startsWith("/api/") && !call.request.path().endsWith("/driver-status") && !call.request.path().endsWith("/location") && call.request.path() != "/api/dev/sms" }
     format { call -> "${call.request.httpMethod.value} ${call.request.path()} → ${call.response.status()}" }
   }
   install(StatusPages) {
@@ -108,6 +112,15 @@ fun Application.wayModule(deps: ServerDeps) {
 
     // 개발용: 차가 보낸 문자 사본 보기(동승자 휴대폰 문자 앱 흉내)
     get("/dev/sms") { call.respondPage(deps.webDir, "outbox.html") }
+    // 개발용: 로컬 https 인증서(CA) 받기 — 아이폰 사파리로 .mobileconfig 를 열면 '프로파일 다운로드됨 → 설정에서 설치'
+    get("/dev/ca.mobileconfig") {
+      val ca = deps.caCert?.takeIf { it.isFile } ?: return@get call.respond(HttpStatusCode.NotFound)
+      call.respondText(RootCaProfile.mobileConfig(ca.readBytes()), ContentType.parse(RootCaProfile.CONTENT_TYPE))
+    }
+    get("/dev/ca.cer") {
+      val ca = deps.caCert?.takeIf { it.isFile } ?: return@get call.respond(HttpStatusCode.NotFound)
+      call.respondBytes(ca.readBytes(), ContentType("application", "x-x509-ca-cert"))
+    }
     get("/") { call.respondRedirect("/dev/sms") }
   }
 }

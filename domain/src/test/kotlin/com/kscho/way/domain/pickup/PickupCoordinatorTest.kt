@@ -2,6 +2,7 @@ package com.kscho.way.domain.pickup
 
 import com.kscho.way.domain.messaging.PassengerText
 import com.kscho.way.domain.model.BoardingSource
+import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.LocationSharing
 import com.kscho.way.domain.model.NavEvent
 import com.kscho.way.domain.model.PassengerStatus
@@ -111,6 +112,7 @@ class PickupCoordinatorTest {
     nav.events.emit(NavEvent.Arrived(arrivedAt))
     runCurrent()
     assertEquals(listOf(arrivedAt), repo.arrivals)
+    assertEquals(listOf(4 * 60, 0), repo.driverReports) // 정차 때 마지막 위치 한 번 더
     assertEquals(PickupPhase.WAITING, coordinator.state.value?.phase)
 
     advanceTimeBy(46_000)
@@ -125,6 +127,36 @@ class PickupCoordinatorTest {
     assertEquals(1, repo.completed.size)
     assertEquals(1, nav.stopped)
     assertFalse(coordinator.hasActivePickup)
+  }
+
+  @Test
+  fun arrival_reportsLastCarPositionRightAway() = runTest {
+    val coordinator = coordinator()
+    coordinator.start(Fixtures.plan())
+    val far = LatLng(37.5570, 126.9450)
+    val near = LatLng(37.55671, 126.94205)
+    nav.events.emit(NavEvent.Progress(far, 60, 300, 12 * 60_000L))
+    runCurrent()
+    advanceTimeBy(2_000) // 5초 간격 안 — 이 위치는 보고를 건너뛴다
+    nav.events.emit(NavEvent.Progress(near, 3, 8, 12 * 60_000L))
+    runCurrent()
+
+    nav.events.emit(NavEvent.Arrived(testScheduler.currentTime))
+    runCurrent()
+
+    // 정차하면 서기 직전 위치를 바로 — 동승자 지도의 차가 픽업 지점 앞에서 멈춰 보이지 않게
+    assertEquals(listOf(far, near), repo.driverLocations)
+    assertEquals(0, repo.driverReports.last())
+    assertEquals(1, repo.arrivals.size)
+  }
+
+  @Test
+  fun arrivalWithoutAnyPosition_reportsPickupPoint() = runTest {
+    val coordinator = coordinator()
+    coordinator.start(Fixtures.plan())
+    nav.events.emit(NavEvent.Arrived(testScheduler.currentTime))
+    runCurrent()
+    assertEquals(listOf(Fixtures.pickupLocation), repo.driverLocations)
   }
 
   @Test

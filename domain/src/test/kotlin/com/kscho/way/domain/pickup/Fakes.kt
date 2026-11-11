@@ -56,6 +56,7 @@ class FakePickupRepository : PickupRepository {
   val arrivals = mutableListOf<Long>()
   val completed = mutableListOf<PickupOutcome>()
   val driverReports = mutableListOf<Int>()
+  val driverLocations = mutableListOf<LatLng?>()
   var failCreate: Exception? = null
 
   override suspend fun create(plan: PickupPlan, arrivalAtMillis: Long): CreatedPickup {
@@ -68,6 +69,7 @@ class FakePickupRepository : PickupRepository {
 
   override suspend fun reportDriver(pickupId: String, location: LatLng?, remainingSeconds: Int, remainingMeters: Int, arrivalAtMillis: Long) {
     driverReports += remainingSeconds
+    driverLocations += location
   }
 
   override suspend fun notifyEtaChanged(pickupId: String, previousArrivalAtMillis: Long, arrivalAtMillis: Long) {

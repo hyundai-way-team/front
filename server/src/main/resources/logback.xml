@@ -9,4 +9,6 @@
   </root>
   <logger name="io.ktor" level="WARN" />
   <logger name="ktor.application" level="INFO" />
+  <!-- Ktor 3 의 요청 기록(CallLogging) 이름 — io.ktor 를 WARN 으로 막아 둬서 따로 연다 -->
+  <logger name="io.ktor.server.Application" level="INFO" />
 </configuration>

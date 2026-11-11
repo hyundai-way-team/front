@@ -147,4 +147,25 @@ class WayServerTest {
     val zones = client.get("/api/stop-zones?lat=37.556783&lng=126.942649&radius=200").bodyAsText()
     assertTrue(zones.startsWith("[") && zones.contains("\"startMinute\"") && !zones.contains("\"roads\""))
   }
+
+  @Test
+  fun caCert_isServedForPhone_onlyWhenHttpsIsOn() {
+    server { _ -> assertEquals(HttpStatusCode.NotFound, client.get("/dev/ca.cer").status) }
+    val ca = File.createTempFile("way-ca", ".cer").apply { writeBytes(byteArrayOf(0x30, 0x03, 1, 2, 3)); deleteOnExit() }
+    testApplication {
+      val deps = createDeps("https://localhost:8443", mapDir, caCert = ca)
+      application { wayModule(deps) }
+      val res = client.get("/dev/ca.cer")
+      assertEquals(HttpStatusCode.OK, res.status)
+      assertEquals("application/x-x509-ca-cert", res.headers[HttpHeaders.ContentType])
+      assertEquals(5, res.bodyAsBytes().size)
+      // 아이폰 사파리는 구성 프로파일로 받아야 설치 안내를 띄운다
+      val profile = client.get("/dev/ca.mobileconfig")
+      assertEquals("application/x-apple-aspen-config", profile.headers[HttpHeaders.ContentType]?.substringBefore(';'))
+      val body = profile.bodyAsText()
+      assertTrue(body.contains("<string>com.apple.security.root</string>"))
+      assertTrue(body.contains(java.util.Base64.getEncoder().encodeToString(ca.readBytes())))
+    }
+  }
+
 }

@@ -23,6 +23,8 @@ data class LoggedText(val id: Long, val pickupId: String, val to: String, val te
 class OutboxTextLog(
   private val clock: () -> Long = System::currentTimeMillis,
   private val log: (String) -> Unit = {},
+  /** 남긴 뒤 할 일 — 시연 때 맥 메시지 앱으로 실제 휴대폰에 보내기([MacMessagesRelay]) */
+  private val onRecorded: (LoggedText) -> Unit = {},
 ) : TextLog {
   private val seq = AtomicLong(0)
   private val _messages = MutableStateFlow<List<LoggedText>>(emptyList())
@@ -32,5 +34,6 @@ class OutboxTextLog(
     val entry = LoggedText(seq.incrementAndGet(), pickupId, to, text, clock())
     _messages.update { it + entry }
     log("차 → $to (사본)\n$text")
+    onRecorded(entry)
   }
 }
