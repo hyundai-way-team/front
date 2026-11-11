@@ -22,12 +22,13 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class PickupCoordinatorTest {
   private val repo = FakePickupRepository()
+  private val history = FakePickupHistory()
   private val nav = FakeNavigator()
   private val door = FakeBoardingSensor()
   private val messenger = FakePassengerMessenger()
 
   private fun TestScope.coordinator() =
-    PickupCoordinator(repo, nav, door, messenger, backgroundScope, clock = { testScheduler.currentTime })
+    PickupCoordinator(repo, history, nav, door, messenger, backgroundScope, clock = { testScheduler.currentTime })
 
   private fun TestScope.collectEffects(coordinator: PickupCoordinator): MutableList<PickupEffect> {
     val effects = mutableListOf<PickupEffect>()
@@ -124,6 +125,23 @@ class PickupCoordinatorTest {
     assertEquals(1, repo.completed.size)
     assertEquals(1, nav.stopped)
     assertFalse(coordinator.hasActivePickup)
+  }
+
+  @Test
+  fun boarding_savesRecordInAppNotOnServer() = runTest {
+    val coordinator = coordinator()
+    coordinator.start(Fixtures.plan())
+    advanceTimeBy(30_000)
+    coordinator.confirmBoarded(BoardingSource.MANUAL)
+    runCurrent()
+
+    // 홈 '최근 픽업'은 앱 기록 — 서버엔 지표(탑승·대기·위치 변경)만 간다
+    val record = history.saved.single()
+    assertEquals(Fixtures.seoyeon, record.passenger)
+    assertEquals(Fixtures.plan().pickupPoint, record.pickupPoint)
+    assertTrue(record.boarded)
+    assertEquals(testScheduler.currentTime, record.endedAtMillis)
+    assertEquals(1, repo.completed.size)
   }
 
   @Test

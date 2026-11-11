@@ -34,10 +34,10 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kscho.way.R
 import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.MapFeatures
 import com.kscho.way.domain.model.PickupRecord
+import com.kscho.way.domain.model.RestrictedZone
 import com.kscho.way.domain.repository.PickupHistoryRepository
-import com.kscho.way.domain.repository.PlaceRepository
+import com.kscho.way.domain.repository.StopRestrictionRepository
 import com.kscho.way.domain.vehicle.Navigator
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
@@ -56,9 +56,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-data class HomeUiState(val recent: List<PickupRecord> = emptyList(), val here: LatLng? = null, val features: MapFeatures? = null)
+data class HomeUiState(val recent: List<PickupRecord> = emptyList(), val here: LatLng? = null, val zones: List<RestrictedZone> = emptyList())
 
-class HomeViewModel(private val history: PickupHistoryRepository, private val navigator: Navigator, private val places: PlaceRepository) :
+class HomeViewModel(private val history: PickupHistoryRepository, private val navigator: Navigator, private val restrictions: StopRestrictionRepository) :
   ViewModel() {
   private val _state = MutableStateFlow(HomeUiState())
   val state = _state.asStateFlow()
@@ -68,7 +68,7 @@ class HomeViewModel(private val history: PickupHistoryRepository, private val na
       runCatching { history.recent(limit = 3) }.onSuccess { list -> _state.update { it.copy(recent = list) } }
       val here = runCatching { navigator.currentLocation() }.getOrNull() ?: return@launch
       _state.update { it.copy(here = here) }
-      runCatching { places.mapFeatures(here, 600) }.onSuccess { f -> _state.update { it.copy(features = f) } }
+      runCatching { restrictions.zonesNear(here, 600) }.onSuccess { z -> _state.update { it.copy(zones = z) } }
     }
   }
 }
@@ -77,7 +77,7 @@ class HomeViewModel(private val history: PickupHistoryRepository, private val na
 @Composable
 fun HomeScreen(onCreatePickup: () -> Unit, onReuse: (PickupRecord) -> Unit) {
   val c = appContainer()
-  val vm = viewModel { HomeViewModel(c.history, c.navigator, c.places) }
+  val vm = viewModel { HomeViewModel(c.history, c.navigator, c.restrictions) }
   val state by vm.state.collectAsStateWithLifecycle()
   LaunchedEffect(Unit) { vm.refresh() }
 
@@ -116,7 +116,7 @@ fun HomeScreen(onCreatePickup: () -> Unit, onReuse: (PickupRecord) -> Unit) {
           center = here,
           metersPerDp = 1.2f,
           modifier = Modifier.fillMaxSize(),
-          features = state.features,
+          zones = state.zones,
           pins = listOf(MapPin(here, PinKind.CAR, "현재 위치")),
           caption = "지도 · 현재 위치",
           interactive = true,

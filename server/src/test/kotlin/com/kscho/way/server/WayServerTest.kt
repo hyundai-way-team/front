@@ -35,7 +35,7 @@ class WayServerTest {
   private val request =
     CreatePickupRequest(
       passengerName = "이서연",
-      passengerPhone = "01000001234",
+      passengerCallName = "서연",
       placeName = "신촌 XX 빌라",
       pickupPoint = LatLngDto(37.5567, 126.942),
       pickupTitle = "신촌 XX 빌라 골목 입구 앞",
@@ -44,6 +44,7 @@ class WayServerTest {
       vehicleDescription = "흰색 아반떼",
       plateNumber = "12가 3456",
       driverName = "김도윤",
+      driverCallName = "도윤",
     )
 
   private fun server(block: suspend ApplicationTestBuilder.(ServerDeps) -> Unit) = testApplication {
@@ -138,6 +139,12 @@ class WayServerTest {
   fun placeSearch_usesDemoNeighborhood() = server { _ ->
     val body = client.get("/api/places?query=xx").bodyAsText()
     assertTrue(body.contains("신촌 XX 빌라"))
-    assertTrue(client.get("/api/me/vehicle").bodyAsText().contains("김도윤"))
+    // 앱이 할 일(내 차 정보 · 정차 금지 판단 · 지난 픽업 · 지도 도로·장소)은 서버에 없다
+    assertEquals(HttpStatusCode.NotFound, client.get("/api/me/vehicle").status)
+    assertEquals(HttpStatusCode.NotFound, client.get("/api/stop-restrictions/check?lat=37.5&lng=126.9&arrivalAt=0").status)
+    assertEquals(HttpStatusCode.NotFound, client.get("/api/pickups/recent").status)
+    assertEquals(HttpStatusCode.NotFound, client.get("/api/map/features?lat=37.556783&lng=126.942649&radius=200").status)
+    val zones = client.get("/api/stop-zones?lat=37.556783&lng=126.942649&radius=200").bodyAsText()
+    assertTrue(zones.startsWith("[") && zones.contains("\"startMinute\"") && !zones.contains("\"roads\""))
   }
 }

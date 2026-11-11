@@ -17,14 +17,8 @@ interface WayApi {
   /** GET /api/places/reverse?lat=&lng= — 핀 좌표 → "신촌 XX 빌라 골목 입구 앞" / "신촌로 · 도로 북쪽 인도" */
   suspend fun describeLocation(location: LatLngDto): LocationDescriptionDto
 
-  /** GET /api/map/features?lat=&lng=&radius= — 임시 지도용(지도 SDK 를 정하면 빠질 수 있다) */
-  suspend fun mapFeatures(center: LatLngDto, radiusMeters: Int): MapFeaturesDto
-
-  /** GET /api/stop-restrictions/check?lat=&lng=&arrivalAt= — 도착 예정 시각 기준 정차 금지 구간인지 */
-  suspend fun checkStopRestriction(location: LatLngDto, arrivalAtEpochMillis: Long): StopRestrictionDto
-
-  /** GET /api/me/vehicle — 운전자 이름·차량 설명·번호판(Pleos CarInfo 엔 번호판이 없다) */
-  suspend fun myVehicle(): VehicleDto
+  /** GET /api/stop-zones?lat=&lng=&radius= — 주변 정차 금지 구간 데이터. 지도에 그리기·정차 금지 판단은 앱이 한다(도로·장소는 앱 속 오프라인 지도) */
+  suspend fun stopZones(center: LatLngDto, radiusMeters: Int): List<ZoneDto>
 
   // ── 픽업 세션
 
@@ -43,9 +37,6 @@ interface WayApi {
   /** POST /api/pickups/{id}/arrival — 정차, 동승자 웹에 같은 1분 대기 타이머 */
   suspend fun reportArrival(pickupId: String, request: ArrivalRequest)
 
-  /** POST /api/pickups/{id}/complete — 탑승 완료: 위치 공유 종료·링크 만료·기록 저장 */
+  /** POST /api/pickups/{id}/complete — 탑승 완료: 위치 공유 종료·링크 만료·지표(최근 픽업 기록은 앱에 둔다) */
   suspend fun completePickup(pickupId: String, request: CompletePickupRequest)
-
-  /** GET /api/pickups/recent?limit= — 최근 픽업(같은 사람·같은 위치 다시 불러오기) */
-  suspend fun recentPickups(limit: Int): List<PickupRecordDto>
 }

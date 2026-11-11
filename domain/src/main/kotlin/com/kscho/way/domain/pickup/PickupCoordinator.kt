@@ -5,6 +5,7 @@ import com.kscho.way.domain.messaging.PassengerText
 import com.kscho.way.domain.model.BoardingSource
 import com.kscho.way.domain.model.NavEvent
 import com.kscho.way.domain.model.PickupPlan
+import com.kscho.way.domain.repository.PickupHistoryRepository
 import com.kscho.way.domain.repository.PickupRepository
 import com.kscho.way.domain.vehicle.BoardingSensor
 import com.kscho.way.domain.vehicle.Navigator
@@ -28,11 +29,13 @@ import kotlinx.coroutines.launch
  * 내비(진행·도착) · 서버(동승자 상태) · 도어(탑승) · 시계를 한 줄로 모아 [PickupRules] 에 넣고,
  * 규칙이 정한 일(문자·서버 보고)은 여기서, 음성은 [effects] 를 받은 앱이 한다.
  * 문자는 차가 운전자 번호로 보내고([messenger]), 서버에는 같은 일을 알려 동승자 웹 화면을 바꾼다.
+ * 끝난 픽업 기록은 앱에 남긴다([history]).
  *
  * 앱 전체에서 하나만 둔다(화면·포그라운드 서비스·Gleo 가 같은 [state] 를 본다).
  */
 class PickupCoordinator(
   private val pickups: PickupRepository,
+  private val history: PickupHistoryRepository,
   private val navigator: Navigator,
   private val boardingSensor: BoardingSensor,
   private val messenger: PassengerMessenger,
@@ -171,7 +174,11 @@ class PickupCoordinator(
       }
       is PickupEffect.ReportArrived ->
         send("정차 보고") { pickups.reportArrived(state.id, effect.atMillis, PickupPolicy.WAIT_SECONDS) }
-      is PickupEffect.Complete -> send("탑승 완료 보고") { pickups.complete(state.id, effect.outcome) }
+      is PickupEffect.Complete -> {
+        send("탑승 완료 보고") { pickups.complete(state.id, effect.outcome) }
+        val record = PickupRecords.of(state, effect.outcome, clock())
+        send("픽업 기록 저장") { history.save(record) }
+      }
     }
   }
 

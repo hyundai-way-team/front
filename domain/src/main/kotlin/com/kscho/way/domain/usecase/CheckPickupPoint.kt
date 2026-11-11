@@ -28,7 +28,10 @@ data class PickupPointCheck(
 
 /**
  * 기획 3-2: 운전자가 맞춘 핀 → 위치 이름 · 약속 장소에서 거리 · 경로(ETA) · 도착 시각 기준 정차 규제.
+ * 정차 금지 판단은 앱이 한다(서버는 근처 구간 데이터만).
  */
+private const val ZONE_SEARCH_METERS = 100
+
 class CheckPickupPoint(
   private val places: PlaceRepository,
   private val restrictions: StopRestrictionRepository,
@@ -39,7 +42,7 @@ class CheckPickupPoint(
     val description = async { places.describe(location) }
     val route = navigator.preview(location, place?.name ?: "픽업 위치")
     val arrival = clock() + route.durationSeconds * 1000L
-    val restriction = restrictions.check(location, arrival)
+    val restriction = StopRestrictionRules.check(location, arrival, restrictions.zonesNear(location, ZONE_SEARCH_METERS))
     val distance = place?.let { Geo.distanceMeters(it.location, location).roundToInt() }
     PickupPointCheck(PickupPoint(location, description.await(), distance), route, arrival, restriction)
   }

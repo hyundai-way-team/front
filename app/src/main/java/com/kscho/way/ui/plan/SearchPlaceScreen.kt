@@ -32,9 +32,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.MapFeatures
 import com.kscho.way.domain.model.Place
+import com.kscho.way.domain.model.RestrictedZone
 import com.kscho.way.domain.repository.PlaceRepository
+import com.kscho.way.domain.repository.StopRestrictionRepository
 import com.kscho.way.domain.vehicle.Navigator
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
@@ -61,20 +62,25 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-class SearchPlaceViewModel(private val places: PlaceRepository, private val navigator: Navigator, private val draft: PickupDraft) : ViewModel() {
+class SearchPlaceViewModel(
+  private val places: PlaceRepository,
+  private val restrictions: StopRestrictionRepository,
+  private val navigator: Navigator,
+  private val draft: PickupDraft,
+) : ViewModel() {
   val query = MutableStateFlow(draft.place.value?.name ?: "")
   val results: StateFlow<List<Place>> =
     query.debounce(250).mapLatest { runCatching { places.search(it) }.getOrDefault(emptyList()) }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
   val selected: StateFlow<Place?> = draft.place
   val here = MutableStateFlow<LatLng?>(null)
-  val features = MutableStateFlow<MapFeatures?>(null)
+  val zones = MutableStateFlow<List<RestrictedZone>>(emptyList())
   val passengerName: String = draft.passenger.value?.callName ?: ""
 
   fun load() {
     viewModelScope.launch {
       val at = draft.place.value?.location ?: runCatching { navigator.currentLocation() }.getOrNull() ?: return@launch
       here.value = at
-      features.value = runCatching { places.mapFeatures(at, 500) }.getOrNull()
+      zones.value = runCatching { restrictions.zonesNear(at, 500) }.getOrDefault(emptyList())
     }
   }
 
@@ -82,7 +88,7 @@ class SearchPlaceViewModel(private val places: PlaceRepository, private val navi
     draft.place.value = place
     draft.pinStart.value = place.location
     draft.check.value = null
-    viewModelScope.launch { features.value = runCatching { places.mapFeatures(place.location, 400) }.getOrNull() }
+    viewModelScope.launch { zones.value = runCatching { restrictions.zonesNear(place.location, 400) }.getOrDefault(emptyList()) }
   }
 }
 
@@ -92,12 +98,12 @@ fun SearchPlaceScreen(onBack: () -> Unit, onNext: () -> Unit) {
   val c = appContainer()
   val keyboard = LocalSoftwareKeyboardController.current
   val focus = LocalFocusManager.current
-  val vm = viewModel { SearchPlaceViewModel(c.places, c.navigator, c.draft) }
+  val vm = viewModel { SearchPlaceViewModel(c.places, c.restrictions, c.navigator, c.draft) }
   val query by vm.query.collectAsStateWithLifecycle()
   val results by vm.results.collectAsStateWithLifecycle()
   val selected by vm.selected.collectAsStateWithLifecycle()
   val here by vm.here.collectAsStateWithLifecycle()
-  val features by vm.features.collectAsStateWithLifecycle()
+  val zones by vm.zones.collectAsStateWithLifecycle()
   val list = rememberLazyListState()
   LaunchedEffect(Unit) { vm.load() }
 
@@ -146,7 +152,7 @@ fun SearchPlaceScreen(onBack: () -> Unit, onNext: () -> Unit) {
           center = center,
           metersPerDp = if (place != null) 0.35f else 1.2f,
           modifier = Modifier.fillMaxSize(),
-          features = features,
+          zones = zones,
           pins = if (place != null) listOf(MapPin(place.location, PinKind.PLACE, "검색한 약속 장소")) else listOf(MapPin(center, PinKind.CAR, "현재 위치")),
           caption = if (place != null) "지도 · 검색한 약속 장소" else "지도 · 현재 위치",
           interactive = true,

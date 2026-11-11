@@ -31,7 +31,7 @@ class PickupHubTest {
   private val request =
     CreatePickupRequest(
       passengerName = "이서연",
-      passengerPhone = "01000001234",
+      passengerCallName = "서연",
       placeName = "신촌 XX 빌라",
       pickupPoint = pickupPoint,
       pickupTitle = "신촌 XX 빌라 골목 입구 앞",
@@ -40,6 +40,7 @@ class PickupHubTest {
       vehicleDescription = "흰색 아반떼",
       plateNumber = "12가 3456",
       driverName = "김도윤",
+      driverCallName = "도윤",
     )
 
   private fun created() = hub.create(request)
@@ -52,7 +53,7 @@ class PickupHubTest {
 
     // 문자는 차가 보낸다 — 서버는 같은 문구를 사본으로만
     val copy = outbox.messages.value.single()
-    assertEquals("01000001234", copy.to)
+    assertEquals("이서연", copy.to) // 서버엔 동승자 번호가 없다
     assertEquals(response.pickupId, copy.pickupId)
     assertTrue(response.shareUrl.startsWith("http://localhost:8080/p/"))
     assertEquals(PickupTexts.departure("김도윤", "흰색 아반떼", "12가 3456", "신촌 XX 빌라 골목 입구 앞", "09:50", response.shareUrl), copy.text)
@@ -167,7 +168,7 @@ class PickupHubTest {
   }
 
   @Test
-  fun complete_endsSharingExpiresLinkAndRecords() {
+  fun complete_endsSharingAndExpiresLink() {
     val response = created()
     val token = tokenOf(response.shareUrl)
     hub.openLink(token)
@@ -182,10 +183,6 @@ class PickupHubTest {
     assertEquals(Phase.BOARDED.name, hub.view(token).phase)
     assertNull(hub.view(token).me)
     assertTrue(runCatching { hub.updateLocation(token, pickupPoint) }.exceptionOrNull() is PickupError.LinkExpired)
-    val record = hub.recent(5).first()
-    assertEquals("신촌 XX 빌라 골목 입구 앞", record.pickupTitle)
-    assertTrue(record.boarded)
-    assertEquals(30, record.waitedSeconds)
   }
 
   @Test
@@ -195,10 +192,12 @@ class PickupHubTest {
   }
 
   @Test
-  fun passengerView_usesCallNames() {
-    val view = hub.view(tokenOf(created().shareUrl))
-    assertEquals("도윤", view.driverCallName)
-    assertEquals("서연", view.passengerCallName)
+  fun passengerView_usesCallNamesSentByApp() {
+    // 호칭은 앱이 정해 보낸다 — 서버는 이름 규칙 없이 받은 그대로
+    val view = hub.view(tokenOf(hub.create(request.copy(passengerCallName = "서연이", driverCallName = "도윤 기사")).shareUrl))
+    assertEquals("도윤 기사", view.driverCallName)
+    assertEquals("서연이", view.passengerCallName)
+    assertEquals("김도윤", view.driverName)
     assertEquals("12가 3456", view.vehicle.plateNumber)
     assertEquals("신촌 XX 빌라 골목 입구 앞", view.pickup.title)
   }

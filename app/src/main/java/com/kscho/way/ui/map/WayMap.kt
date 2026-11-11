@@ -47,7 +47,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.MapFeatures
+import com.kscho.way.domain.model.RestrictedZone
 import com.kscho.way.theme.WayColors
 import kotlin.math.cos
 import kotlin.math.ln
@@ -107,7 +107,8 @@ fun WayMap(
   center: LatLng,
   metersPerDp: Float,
   modifier: Modifier = Modifier,
-  features: MapFeatures? = null,
+  /** 정차 금지 구간(서버 데이터) — 빨간 선. 도로·장소는 오프라인 지도에 있다. */
+  zones: List<RestrictedZone> = emptyList(),
   lines: List<MapLine> = emptyList(),
   pins: List<MapPin> = emptyList(),
   caption: String? = null,
@@ -158,7 +159,7 @@ fun WayMap(
     }
   }
 
-  LaunchedEffect(style, features) { style?.getSourceAs<GeoJsonSource>(SRC_ZONES)?.setGeoJson(zonesGeoJson(features)) }
+  LaunchedEffect(style, zones) { style?.getSourceAs<GeoJsonSource>(SRC_ZONES)?.setGeoJson(zonesGeoJson(zones)) }
   LaunchedEffect(style, lines) { style?.getSourceAs<GeoJsonSource>(SRC_LINES)?.setGeoJson(linesGeoJson(lines)) }
   LaunchedEffect(style, pins) { style?.getSourceAs<GeoJsonSource>(SRC_PINS)?.setGeoJson(pinsGeoJson(pins)) }
 
@@ -452,9 +453,9 @@ private fun iconBitmap(kind: PinKind, density: Float): Bitmap {
   }
 }
 
-private fun zonesGeoJson(features: MapFeatures?): FeatureCollection =
+private fun zonesGeoJson(zones: List<RestrictedZone>): FeatureCollection =
   FeatureCollection.fromFeatures(
-    features?.zones.orEmpty().filter { it.path.size >= 2 }.map { Feature.fromGeometry(LineString.fromLngLats(it.path.map { p -> p.point() })) }
+    zones.filter { it.path.size >= 2 }.map { Feature.fromGeometry(LineString.fromLngLats(it.path.map { p -> p.point() })) }
   )
 
 private fun linesGeoJson(lines: List<MapLine>): FeatureCollection =

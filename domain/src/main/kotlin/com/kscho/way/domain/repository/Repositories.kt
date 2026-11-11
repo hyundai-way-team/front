@@ -3,14 +3,13 @@ package com.kscho.way.domain.repository
 import com.kscho.way.domain.model.Contact
 import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.LocationDescription
-import com.kscho.way.domain.model.MapFeatures
 import com.kscho.way.domain.model.MyVehicle
 import com.kscho.way.domain.model.PassengerStatus
 import com.kscho.way.domain.model.PickupOutcome
 import com.kscho.way.domain.model.PickupPlan
 import com.kscho.way.domain.model.PickupRecord
 import com.kscho.way.domain.model.Place
-import com.kscho.way.domain.model.StopRestriction
+import com.kscho.way.domain.model.RestrictedZone
 import kotlinx.coroutines.flow.Flow
 
 /** 운전자 연락처(기획: Pleos 연락처 — 실제 연동 가능 여부 미정). */
@@ -25,16 +24,14 @@ interface PlaceRepository {
 
   /** 핀 좌표를 사람이 알아보는 말로(역지오코딩). */
   suspend fun describe(location: LatLng): LocationDescription
-
-  /** 지도에 그릴 주변 도로·장소·정차 금지 구간. */
-  suspend fun mapFeatures(center: LatLng, radiusMeters: Int): MapFeatures
 }
 
 interface StopRestrictionRepository {
-  /** 도착 예정 시각([arrivalAtMillis]) 기준으로 그 좌표가 정차 금지 구간인지. */
-  suspend fun check(location: LatLng, arrivalAtMillis: Long): StopRestriction
+  /** [location] 근처([radiusMeters]) 정차 금지 구간 데이터 — 지도에 그리고, 정차 금지인지는 앱이 판단한다([com.kscho.way.domain.usecase.StopRestrictionRules]). */
+  suspend fun zonesNear(location: LatLng, radiusMeters: Int): List<RestrictedZone>
 }
 
+/** 운전자 이름 · 차량 설명 · 번호판 — 앱에 둔다(Pleos SDK 에 번호판·차종 API 가 없다. CarInfo 는 VIN 뿐). */
 interface VehicleProfileRepository {
   suspend fun myVehicle(): MyVehicle
 }
@@ -69,7 +66,11 @@ interface PickupRepository {
   suspend fun complete(pickupId: String, outcome: PickupOutcome)
 }
 
+/** 지난 픽업 — 운전자 본인 기록이라 앱에 둔다(서버에 동승자 이름·번호·위치를 쌓지 않는다). */
 interface PickupHistoryRepository {
   /** 최근 픽업, 최근 것부터. */
   suspend fun recent(limit: Int): List<PickupRecord>
+
+  /** 끝난 픽업을 남긴다. 같은 사람·같은 위치는 최근 것 하나만([com.kscho.way.domain.pickup.PickupRecords.add]). */
+  suspend fun save(record: PickupRecord)
 }

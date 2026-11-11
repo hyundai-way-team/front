@@ -8,24 +8,20 @@ import com.kscho.way.data.remote.DriverStatusRequest
 import com.kscho.way.data.remote.NotificationRequest
 import com.kscho.way.data.remote.NotificationType
 import com.kscho.way.data.remote.WayApi
+import com.kscho.way.domain.model.CallNames
 import com.kscho.way.domain.model.Contact
 import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.LocationDescription
-import com.kscho.way.domain.model.MapFeatures
-import com.kscho.way.domain.model.MyVehicle
 import com.kscho.way.domain.model.PassengerStatus
 import com.kscho.way.domain.model.PickupOutcome
 import com.kscho.way.domain.model.PickupPlan
-import com.kscho.way.domain.model.PickupRecord
 import com.kscho.way.domain.model.Place
-import com.kscho.way.domain.model.StopRestriction
+import com.kscho.way.domain.model.RestrictedZone
 import com.kscho.way.domain.repository.ContactRepository
 import com.kscho.way.domain.repository.CreatedPickup
-import com.kscho.way.domain.repository.PickupHistoryRepository
 import com.kscho.way.domain.repository.PickupRepository
 import com.kscho.way.domain.repository.PlaceRepository
 import com.kscho.way.domain.repository.StopRestrictionRepository
-import com.kscho.way.domain.repository.VehicleProfileRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -45,23 +41,12 @@ class PlaceRepositoryImpl(private val api: WayApi) : PlaceRepository {
     if (query.isBlank()) emptyList() else api.searchPlaces(query.trim()).map { it.toDomain() }
 
   override suspend fun describe(location: LatLng): LocationDescription = api.describeLocation(location.toDto()).toDomain()
-
-  override suspend fun mapFeatures(center: LatLng, radiusMeters: Int): MapFeatures {
-    val dto = api.mapFeatures(center.toDto(), radiusMeters)
-    return MapFeatures(dto.roads.map { it.toDomain() }, dto.places.map { it.toDomain() }, dto.zones.map { it.toDomain() })
-  }
 }
 
+/** 정차 금지 구간 데이터(서버). 지도에 그리기·판단(StopRestrictionRules)은 앱이 한다. */
 class StopRestrictionRepositoryImpl(private val api: WayApi) : StopRestrictionRepository {
-  override suspend fun check(location: LatLng, arrivalAtMillis: Long): StopRestriction {
-    val dto = api.checkStopRestriction(location.toDto(), arrivalAtMillis)
-    val zone = dto.zone
-    return if (dto.restricted && zone != null) StopRestriction.NoStopping(zone.toDomain()) else StopRestriction.NotFound
-  }
-}
-
-class VehicleProfileRepositoryImpl(private val api: WayApi) : VehicleProfileRepository {
-  override suspend fun myVehicle(): MyVehicle = api.myVehicle().let { MyVehicle(it.description, it.plateNumber, it.driverName) }
+  override suspend fun zonesNear(location: LatLng, radiusMeters: Int): List<RestrictedZone> =
+    api.stopZones(location.toDto(), radiusMeters).map { it.toDomain() }
 }
 
 class PickupRepositoryImpl(private val api: WayApi) : PickupRepository {
@@ -71,7 +56,7 @@ class PickupRepositoryImpl(private val api: WayApi) : PickupRepository {
       api.createPickup(
         CreatePickupRequest(
           passengerName = plan.passenger.name,
-          passengerPhone = plan.passenger.phone,
+          passengerCallName = plan.passenger.callName,
           placeName = plan.place?.name,
           pickupPoint = point.location.toDto(),
           pickupTitle = point.description.title,
@@ -80,6 +65,7 @@ class PickupRepositoryImpl(private val api: WayApi) : PickupRepository {
           vehicleDescription = plan.vehicle.description,
           plateNumber = plan.vehicle.plateNumber,
           driverName = plan.vehicle.driverName,
+          driverCallName = CallNames.of(plan.vehicle.driverName),
         )
       )
     return CreatedPickup(response.pickupId, response.shareUrl)
@@ -116,8 +102,4 @@ class PickupRepositoryImpl(private val api: WayApi) : PickupRepository {
       ),
     )
   }
-}
-
-class PickupHistoryRepositoryImpl(private val api: WayApi) : PickupHistoryRepository {
-  override suspend fun recent(limit: Int): List<PickupRecord> = api.recentPickups(limit).map { it.toDomain() }
 }

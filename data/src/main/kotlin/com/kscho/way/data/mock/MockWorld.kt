@@ -1,7 +1,12 @@
 package com.kscho.way.data.mock
 
+import com.kscho.way.domain.model.Contact
 import com.kscho.way.domain.model.Geo
 import com.kscho.way.domain.model.LatLng
+import com.kscho.way.domain.model.LocationDescription
+import com.kscho.way.domain.model.PickupPoint
+import com.kscho.way.domain.model.PickupRecord
+import com.kscho.way.domain.model.Place
 import java.time.DayOfWeek
 import java.time.ZoneId
 
@@ -79,9 +84,37 @@ object MockWorld {
       Spot("ewha", "이화여자대학교 정문", "서울 서대문구 이화여대길 52", LatLng(37.559000, 126.946500)),
     )
 
-  data class NamedRoad(val name: String, val path: List<LatLng>)
-
-  val roads = listOf(NamedRoad("신촌로", SINCHON_RO_NORTH), NamedRoad("신촌로", SINCHON_RO_SOUTH))
+  /**
+   * 홈 '최근 픽업' 시연용 지난 기록 두 건 — 기록은 앱에 두므로(FilePickupHistory) 처음 설치 때만 넣는다.
+   * [now] 기준 2일·5일 전.
+   */
+  fun demoHistory(now: Long): List<PickupRecord> {
+    val day = 24 * 60 * 60 * 1000L
+    val villa = places.first { it.id == "villa" }
+    val hyundai = places.first { it.id == "hyundai" }
+    return listOf(
+      PickupRecord(
+        id = "demo-1",
+        passenger = Contact("c-seoyeon", "이서연", "01000001234"),
+        place = Place(villa.id, villa.name, villa.address, villa.location),
+        pickupPoint = PickupPoint(VILLA_ALLEY_ENTRANCE, LocationDescription("신촌 XX 빌라 골목 입구 앞", "신촌로 · 도로 북쪽(빌라 쪽) 인도"), 40),
+        boarded = true,
+        pickupLocationChanges = 0,
+        waitedSeconds = 38,
+        endedAtMillis = now - 2 * day,
+      ),
+      PickupRecord(
+        id = "demo-2",
+        passenger = Contact("c-minjun", "김민준", "01000005678"),
+        place = Place(hyundai.id, hyundai.name, hyundai.address, hyundai.location),
+        pickupPoint = PickupPoint(LatLng(37.55560, 126.93580), LocationDescription("현대백화점 신촌점 정문 앞", "신촌로 · 도로 북쪽 인도"), 44),
+        boarded = true,
+        pickupLocationChanges = 0,
+        waitedSeconds = 20,
+        endedAtMillis = now - 5 * day,
+      ),
+    )
+  }
 
   /** 정차 금지 구간. [days]·[startMinute]·[endMinute] 가 없으면 상시. */
   data class Zone(

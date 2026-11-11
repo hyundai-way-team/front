@@ -27,10 +27,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kscho.way.R
 import com.kscho.way.domain.model.Geo
 import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.MapFeatures
 import com.kscho.way.domain.model.Place
 import com.kscho.way.domain.model.StopRestriction
-import com.kscho.way.domain.repository.PlaceRepository
+import com.kscho.way.domain.model.RestrictedZone
+import com.kscho.way.domain.repository.StopRestrictionRepository
 import com.kscho.way.domain.usecase.CheckPickupPoint
 import com.kscho.way.domain.usecase.PickupPointCheck
 import com.kscho.way.theme.WayColors
@@ -73,15 +73,15 @@ data class AdjustPinUiState(
 )
 
 @OptIn(FlowPreview::class)
-class AdjustPinViewModel(private val check: CheckPickupPoint, private val places: PlaceRepository, private val draft: PickupDraft) : ViewModel() {
+class AdjustPinViewModel(private val check: CheckPickupPoint, private val restrictions: StopRestrictionRepository, private val draft: PickupDraft) : ViewModel() {
   val place: Place? = draft.place.value
   val origin: LatLng = draft.pinStart.value ?: place?.location ?: draft.check.value?.point?.location ?: LatLng(37.5555, 126.939)
   private val _state = MutableStateFlow(AdjustPinUiState(pin = draft.check.value?.point?.location ?: origin))
   val state = _state.asStateFlow()
-  val features = MutableStateFlow<MapFeatures?>(null)
+  val zones = MutableStateFlow<List<RestrictedZone>>(emptyList())
 
   init {
-    viewModelScope.launch { features.value = runCatching { places.mapFeatures(origin, 500) }.getOrNull() }
+    viewModelScope.launch { zones.value = runCatching { restrictions.zonesNear(origin, 500) }.getOrDefault(emptyList()) }
     viewModelScope.launch {
       // 핀이 멈추면 확인(진행 표시가 바뀌어도 다시 묻지 않게 좌표만 본다)
       _state.map { it.pin }.distinctUntilChanged().debounce(350).collectLatest { pin ->
@@ -125,9 +125,9 @@ class AdjustPinViewModel(private val check: CheckPickupPoint, private val places
 @Composable
 fun AdjustPinScreen(onBack: () -> Unit, onSearchAgain: () -> Unit, onConfirmed: () -> Unit) {
   val c = appContainer()
-  val vm = viewModel { AdjustPinViewModel(c.checkPickupPoint, c.places, c.draft) }
+  val vm = viewModel { AdjustPinViewModel(c.checkPickupPoint, c.restrictions, c.draft) }
   val state by vm.state.collectAsStateWithLifecycle()
-  val features by vm.features.collectAsStateWithLifecycle()
+  val zones by vm.zones.collectAsStateWithLifecycle()
   // 지도는 처음 핀 위치에서 시작하고, 이후엔 운전자가 움직인다
   val startCenter = remember { state.pin }
   val result = state.result?.takeIf { it.point.location == state.pin }
@@ -171,7 +171,7 @@ fun AdjustPinScreen(onBack: () -> Unit, onSearchAgain: () -> Unit, onConfirmed: 
         center = startCenter,
         metersPerDp = 0.35f,
         modifier = Modifier.fillMaxSize(),
-        features = features,
+        zones = zones,
         lines = if (moved) listOf(MapLine(listOf(vm.origin, state.pin), WayColors.Blue, 2f, dashed = true)) else emptyList(),
         pins =
           buildList {

@@ -46,13 +46,13 @@ import com.kscho.way.domain.model.BoardingSource
 import com.kscho.way.domain.model.Geo
 import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.LocationSharing
-import com.kscho.way.domain.model.MapFeatures
+import com.kscho.way.domain.model.RestrictedZone
 import com.kscho.way.domain.pickup.Announcement
 import com.kscho.way.domain.pickup.PickupCoordinator
 import com.kscho.way.domain.pickup.PickupPhase
 import com.kscho.way.domain.pickup.PickupPolicy
 import com.kscho.way.domain.pickup.PickupState
-import com.kscho.way.domain.repository.PlaceRepository
+import com.kscho.way.domain.repository.StopRestrictionRepository
 import com.kscho.way.domain.vehicle.BoardingSensor
 import com.kscho.way.pickup.PassengerCall
 import com.kscho.way.theme.WayColors
@@ -68,10 +68,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class DriveViewModel(val coordinator: PickupCoordinator, boardingSensor: BoardingSensor, private val places: PlaceRepository) : ViewModel() {
+class DriveViewModel(val coordinator: PickupCoordinator, boardingSensor: BoardingSensor, private val restrictions: StopRestrictionRepository) : ViewModel() {
   val state: StateFlow<PickupState?> = coordinator.state
   val doorAvailable: StateFlow<Boolean?> = boardingSensor.available
-  val features = MutableStateFlow<MapFeatures?>(null)
+  val zones = MutableStateFlow<List<RestrictedZone>>(emptyList())
 
   init {
     coordinator.state.value?.let { s ->
@@ -79,7 +79,7 @@ class DriveViewModel(val coordinator: PickupCoordinator, boardingSensor: Boardin
       // 출발 지점부터 픽업 위치까지 지도에 보이게
       val reach = s.plan.route.path.maxOfOrNull { Geo.distanceMeters(it, pickup) } ?: 0.0
       val radius = (reach + 500).coerceIn(600.0, 5_000.0).toInt()
-      viewModelScope.launch { features.value = runCatching { places.mapFeatures(pickup, radius) }.getOrNull() }
+      viewModelScope.launch { zones.value = runCatching { restrictions.zonesNear(pickup, radius) }.getOrDefault(emptyList()) }
     }
   }
 
@@ -95,10 +95,10 @@ class DriveViewModel(val coordinator: PickupCoordinator, boardingSensor: Boardin
 @Composable
 fun DriveScreen(onClosed: () -> Unit) {
   val c = appContainer()
-  val vm = viewModel { DriveViewModel(c.coordinator, c.boardingSensor, c.places) }
+  val vm = viewModel { DriveViewModel(c.coordinator, c.boardingSensor, c.restrictions) }
   val state by vm.state.collectAsStateWithLifecycle()
   val doorAvailable by vm.doorAvailable.collectAsStateWithLifecycle()
-  val features by vm.features.collectAsStateWithLifecycle()
+  val zones by vm.zones.collectAsStateWithLifecycle()
   val s = state ?: return
   val context = LocalContext.current
 
@@ -127,7 +127,7 @@ fun DriveScreen(onClosed: () -> Unit) {
       center = if (driving && car != null) car else pickup,
       metersPerDp = if (driving) 1.6f else 0.3f,
       modifier = Modifier.fillMaxSize(),
-      features = features,
+      zones = zones,
       lines =
         buildList {
           if (driving && car != null) add(MapLine(remainingPath(s), WayColors.Blue, 7f))

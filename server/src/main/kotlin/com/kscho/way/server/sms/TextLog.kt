@@ -12,6 +12,7 @@ import kotlinx.serialization.Serializable
  * 서버는 같은 문구(PickupTexts)를 사본으로만 남긴다 — 휴대폰을 연결할 수 없는 에뮬레이터 시연에서 링크를 열고, 기록으로 쓴다.
  */
 fun interface TextLog {
+  /** [to] 는 받는 사람 이름 — 서버는 동승자 번호를 받지 않는다. */
   fun record(pickupId: String, to: String, text: String)
 }
 

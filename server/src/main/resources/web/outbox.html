@@ -113,10 +113,6 @@
       const empty = document.getElementById("empty");
       const shown = new Set();
       const fmt = new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZone: "Asia/Seoul" });
-      const mask = (p) => {
-        const d = p.replace(/\D/g, "");
-        return d.length < 9 ? d : `${d.slice(0, 3)}-****-${d.slice(-4)}`;
-      };
 
       function bubble(sms) {
         const b = document.createElement("div");
@@ -152,7 +148,7 @@
             empty.remove();
             const when = document.createElement("p");
             when.className = "when";
-            when.textContent = `${fmt.format(new Date(sms.at))} · ${mask(sms.to)}`;
+            when.textContent = `${fmt.format(new Date(sms.at))} · ${sms.to} 님`;
             thread.append(when, bubble(sms));
             added = true;
           }

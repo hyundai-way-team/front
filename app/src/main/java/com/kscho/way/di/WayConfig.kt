@@ -23,4 +23,10 @@ object WayConfig {
    *         Pleos 문자가 '기기를 연결하세요' 화면으로 Way 를 가리므로, 화면 흐름 녹화 때만 끈다.
    */
   const val TEXTS_VIA_PLEOS = true
+
+  /**
+   * 홈 '최근 픽업'은 앱 파일에 둔다(서버에 묻지 않음). true 면 처음 설치 때(기록 파일이 없을 때) 시연용 지난 픽업 두 건을 넣는다.
+   * 실제 배포 땐 false.
+   */
+  const val DEMO_HISTORY = true
 }

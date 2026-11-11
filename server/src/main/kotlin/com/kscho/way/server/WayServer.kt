@@ -51,7 +51,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.slf4j.event.Level
 
-/** 서버가 쓰는 것들. [places] 는 시연 동네(신촌) 장소·정차 금지 구간 — 실제 장소 API 를 정하면 바뀐다. */
+/** 서버가 쓰는 것들. [places] 는 시연 동네(신촌) 장소·정차 금지 구간 데이터 — 실제 데이터 출처를 정하면 바뀐다. */
 class ServerDeps(
   val hub: PickupHub,
   val places: WayApi,
@@ -118,16 +118,11 @@ private fun Route.driverRoutes(deps: ServerDeps) {
 
   get("/places") { call.respond(places.searchPlaces(call.query("query"))) }
   get("/places/reverse") { call.respond(places.describeLocation(call.latLng())) }
-  get("/map/features") { call.respond(places.mapFeatures(call.latLng(), call.query("radius").toIntOrNull() ?: 300)) }
-  get("/stop-restrictions/check") {
-    val arrivalAt = call.query("arrivalAt").toLongOrNull() ?: throw BadRequestException("arrivalAt 이 필요해요")
-    call.respond(places.checkStopRestriction(call.latLng(), arrivalAt))
-  }
-  get("/me/vehicle") { call.respond(places.myVehicle()) }
+  // 주변 정차 금지 구간 데이터만 — 지도에 그리기·정차 금지 판단은 앱이 한다(도로·장소는 앱 속 오프라인 지도)
+  get("/stop-zones") { call.respond(places.stopZones(call.latLng(), call.query("radius").toIntOrNull() ?: 300)) }
 
   route("/pickups") {
     post { call.respond(hub.create(call.receive<CreatePickupRequest>())) }
-    get("/recent") { call.respond(hub.recent(call.query("limit").toIntOrNull() ?: 5)) }
 
     // 운전자 앱: 동승자 링크 확인·위치 공유·위치 — 연결하면 지금 상태부터 보낸다
     webSocket("/{id}/passenger") {

@@ -26,7 +26,7 @@ class MockWayApiTest {
   private val request =
     CreatePickupRequest(
       passengerName = "이서연",
-      passengerPhone = "01000001234",
+      passengerCallName = "서연",
       placeName = "신촌 XX 빌라",
       pickupPoint = MockWorld.VILLA_ALLEY_ENTRANCE.dto(),
       pickupTitle = "신촌 XX 빌라 골목 입구 앞",
@@ -35,6 +35,7 @@ class MockWayApiTest {
       vehicleDescription = "흰색 아반떼",
       plateNumber = "12가 3456",
       driverName = "김도윤",
+      driverCallName = "도윤",
     )
 
   private fun TestScope.api(scenario: MockPassengerScenario = MockPassengerScenario()) =
@@ -49,22 +50,16 @@ class MockWayApiTest {
   }
 
   @Test
-  fun busStop_isNoStoppingAnyTime() = runTest {
-    val api = api()
-    val result = api.checkStopRestriction(MockWorld.BUS_STOP.dto(), epoch("2026-11-14T23:30:00"))
-    assertTrue(result.restricted)
-    assertEquals("버스정류장", result.zone?.name)
-    assertFalse(api.checkStopRestriction(MockWorld.VILLA_ALLEY_ENTRANCE.dto(), epoch("2026-11-09T09:50:00")).restricted)
-  }
-
-  @Test
-  fun southCurb_dependsOnArrivalTime() = runTest {
-    val api = api()
-    // 신촌로 남쪽 차로에서 8m 바깥 길가
-    val curb = com.kscho.way.domain.model.Geo.offset(com.kscho.way.domain.model.LatLng(MockWorld.latitudeAt(MockWorld.SINCHON_RO_SOUTH, 126.944)!!, 126.944), 0.0, -8.0).dto()
-    assertTrue(api.checkStopRestriction(curb, epoch("2026-11-09T09:50:00")).restricted) // 월 09:50
-    assertFalse(api.checkStopRestriction(curb, epoch("2026-11-09T22:30:00")).restricted) // 월 22:30
-    assertFalse(api.checkStopRestriction(curb, epoch("2026-11-14T09:50:00")).restricted) // 토
+  fun zones_carryRadiusAndSchedule_forTheAppToJudge() = runTest {
+    // 정차 금지 판단은 앱이 한다 — 서버(mock)는 구간 데이터만
+    val zones = api().stopZones(MockWorld.BUS_STOP.dto(), 300).associateBy { it.id }
+    val busStop = zones.getValue("bus-stop")
+    assertEquals(12.0, busStop.radiusMeters, 0.0)
+    assertNull(busStop.days) // 상시
+    val curb = zones.getValue("south-curb")
+    assertEquals(listOf("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"), curb.days)
+    assertEquals(7 * 60, curb.startMinute)
+    assertEquals(22 * 60, curb.endMinute)
   }
 
   @Test
@@ -120,17 +115,15 @@ class MockWayApiTest {
   }
 
   @Test
-  fun complete_endsSharingAndPutsRecordFirst() = runTest {
+  fun complete_endsSharing() = runTest {
     val api = api()
     val id = api.createPickup(request).pickupId
     val status = api.passengerUpdates(id) as kotlinx.coroutines.flow.StateFlow
     api.reportArrival(id, ArrivalRequest(testScheduler.currentTime, 60))
     api.completePickup(id, CompletePickupRequest(boarded = true, waitedSeconds = 38, pickupLocationChanges = 0, boardingSource = "DOOR"))
     assertEquals(SharingWire.ENDED, status.value.sharing)
-    val recent = api.recentPickups(5)
-    assertEquals(id, recent.first().id)
-    assertEquals(40, recent.first().distanceFromPlaceMeters)
-    // 같은 사람·같은 위치의 옛 기록은 하나로 합친다
-    assertEquals(1, recent.count { it.passengerName == "이서연" })
+    assertNull(status.value.location)
+    // 서버엔 동승자 번호가 없다 — 문자 사본도 이름으로만
+    assertTrue(api.messages.value.all { it.to == "이서연" })
   }
 }

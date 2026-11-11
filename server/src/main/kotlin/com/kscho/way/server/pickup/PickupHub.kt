@@ -10,12 +10,8 @@ import com.kscho.way.data.remote.LatLngDto
 import com.kscho.way.data.remote.NotificationRequest
 import com.kscho.way.data.remote.NotificationType
 import com.kscho.way.data.remote.PassengerStatusDto
-import com.kscho.way.data.remote.PickupRecordDto
 import com.kscho.way.data.remote.SharingWire
 import com.kscho.way.data.sms.PickupTexts
-import com.kscho.way.domain.model.Contact
-import com.kscho.way.domain.model.Geo
-import com.kscho.way.domain.model.LatLng
 import com.kscho.way.server.sms.TextLog
 import java.security.SecureRandom
 import java.time.Instant
@@ -23,7 +19,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -77,6 +72,7 @@ data class PickupState(
  * 서버는 참여 링크를 만들고 둘을 실시간으로 잇는다. 문자는 차가 운전자 번호로 보내고, 서버는 같은 문구([PickupTexts])를 [TextLog] 에 사본으로만 남긴다.
  *
  * 무엇을 언제 보낼지(ETA 재발송 기준·곧 도착 시점)는 운전자 앱의 PickupRules 가 정하고, 서버는 받은 대로 보낸다.
+ * 앱에서 끝나는 일은 서버가 갖지 않는다: 동승자 번호(문자는 차가) · 지난 픽업 기록(앱 파일) · 부르는 이름(앱이 정해 보냄).
  */
 class PickupHub(
   private val clock: () -> Long,
@@ -85,11 +81,9 @@ class PickupHub(
   private val linkBase: String,
   private val newId: () -> String = ::randomToken,
   private val zone: ZoneId = MockWorld.ZONE,
-  seedHistory: List<PickupRecordDto> = emptyList(),
 ) {
   private val byId = ConcurrentHashMap<String, MutableStateFlow<PickupState>>()
   private val byToken = ConcurrentHashMap<String, MutableStateFlow<PickupState>>()
-  private val history = MutableStateFlow(seedHistory)
   private val hhmm = DateTimeFormatter.ofPattern("HH:mm").withZone(zone)
 
   // ── 운전자 앱
@@ -104,7 +98,7 @@ class PickupHub(
     byToken[token] = state
     texts.record(
       id,
-      request.passengerPhone,
+      request.passengerName,
       PickupTexts.departure(
         driverName = request.driverName,
         vehicleDescription = request.vehicleDescription,
@@ -134,13 +128,13 @@ class PickupHub(
       NotificationType.ETA_CHANGED -> {
         val before = request.previousArrivalAtEpochMillis ?: current.arrivalAt
         state.update { it.copy(etaChange = EtaChangeDto(before, request.arrivalAtEpochMillis), arrivalAt = request.arrivalAtEpochMillis) }
-        texts.record(pickupId, current.request.passengerPhone, PickupTexts.etaChanged(time(before), time(request.arrivalAtEpochMillis), current.shareUrl))
+        texts.record(pickupId, current.request.passengerName, PickupTexts.etaChanged(time(before), time(request.arrivalAtEpochMillis), current.shareUrl))
       }
       NotificationType.ARRIVING_SOON -> {
         // 픽업 1건당 1번(기획 3-6) — 이미 받았거나 차가 섰으면 다시 안 남긴다
         if (current.phase != Phase.EN_ROUTE) return
         state.update { if (it.phase == Phase.EN_ROUTE) it.copy(phase = Phase.ARRIVING_SOON) else it }
-        texts.record(pickupId, current.request.passengerPhone, PickupTexts.arrivingSoon(current.shareUrl))
+        texts.record(pickupId, current.request.passengerName, PickupTexts.arrivingSoon(current.shareUrl))
       }
       else -> throw IllegalArgumentException("모르는 알림 ${request.type}")
     }
@@ -155,23 +149,20 @@ class PickupHub(
     }
   }
 
-  /** 탑승(또는 접음) — 위치 공유 종료·링크 만료·기록(기획 3-10, 3-11). */
+  /**
+   * 탑승(또는 접음) — 위치 공유 종료·링크 만료(기획 3-10). [request] 는 지표(기획 3-11: 탑승·대기·위치 변경)로만 쓴다.
+   * 홈 '최근 픽업' 기록은 앱이 갖는다.
+   */
   fun complete(pickupId: String, request: CompletePickupRequest) {
-    val state = pickup(pickupId)
-    var finished: PickupState? = null
-    state.update {
+    pickup(pickupId).update {
       if (it.phase.ended) it
       else
         it.copy(
-            phase = if (request.boarded) Phase.BOARDED else Phase.CLOSED,
-            passenger = it.passenger.copy(sharing = SharingWire.ENDED, location = null),
-          )
-          .also { done -> finished = done }
+          phase = if (request.boarded) Phase.BOARDED else Phase.CLOSED,
+          passenger = it.passenger.copy(sharing = SharingWire.ENDED, location = null),
+        )
     }
-    finished?.let { record(it, request) }
   }
-
-  fun recent(limit: Int): List<PickupRecordDto> = history.value.take(limit)
 
   // ── 동승자 웹(링크 토큰)
 
@@ -215,8 +206,8 @@ class PickupHub(
       phase = phase.name,
       serverNow = clock(),
       driverName = r.driverName,
-      driverCallName = callName(r.driverName),
-      passengerCallName = callName(r.passengerName),
+      driverCallName = r.driverCallName,
+      passengerCallName = r.passengerCallName,
       vehicle = VehicleViewDto(r.vehicleDescription, r.plateNumber),
       pickup = PickupSpotDto(r.pickupPoint, r.pickupTitle, r.pickupDetail),
       arrivalAt = arrivalAt,
@@ -230,35 +221,11 @@ class PickupHub(
     )
   }
 
-  private fun record(state: PickupState, request: CompletePickupRequest) {
-    val r = state.request
-    val place = r.placeName?.let { name -> MockWorld.places.firstOrNull { it.name == name } }
-    val entry =
-      PickupRecordDto(
-        id = state.id,
-        passengerName = r.passengerName,
-        passengerPhone = r.passengerPhone,
-        place = place?.let { com.kscho.way.data.remote.PlaceDto(it.id, it.name, it.address, LatLngDto(it.location.latitude, it.location.longitude)) },
-        pickupPoint = r.pickupPoint,
-        pickupTitle = r.pickupTitle,
-        pickupDetail = r.pickupDetail,
-        distanceFromPlaceMeters = place?.let { Geo.distanceMeters(it.location, LatLng(r.pickupPoint.lat, r.pickupPoint.lng)).roundToInt() },
-        boarded = request.boarded,
-        pickupLocationChanges = request.pickupLocationChanges,
-        waitedSeconds = request.waitedSeconds,
-        endedAtEpochMillis = clock(),
-      )
-    // 같은 사람·같은 위치는 최근 것 하나만(홈 '최근 픽업')
-    history.update { listOf(entry) + it.filterNot { old -> old.passengerPhone == r.passengerPhone && old.pickupTitle == r.pickupTitle } }
-  }
-
   private fun pickup(id: String) = byId[id] ?: throw PickupError.NotFound()
 
   private fun link(token: String) = byToken[token] ?: throw PickupError.NotFound()
 
   private fun time(epochMillis: Long) = hhmm.format(Instant.ofEpochMilli(epochMillis))
-
-  private fun callName(name: String) = Contact(id = "", name = name, phone = "").callName
 
   companion object {
     private val random = SecureRandom()

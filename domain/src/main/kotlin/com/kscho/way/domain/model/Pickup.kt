@@ -27,7 +27,7 @@ enum class BoardingSource {
   VOICE,
 }
 
-/** 픽업이 끝났을 때 서버에 남기는 결과(가설 검증용 기록, 기획 3-11). */
+/** 픽업이 끝났을 때 서버에 알리는 결과(가설 검증용 지표, 기획 3-11) — 동승자 정보 없이 숫자만. */
 data class PickupOutcome(
   val boarded: Boolean,
   val boardedAtMillis: Long?,
@@ -38,7 +38,7 @@ data class PickupOutcome(
   val boardingSource: BoardingSource?,
 )
 
-/** 지난 픽업(홈 '최근 픽업' · 같은 사람을 같은 곳에서 다시 태울 때 불러오기). */
+/** 지난 픽업(홈 '최근 픽업' · 같은 사람을 같은 곳에서 다시 태울 때 불러오기). 앱에만 둔다. */
 data class PickupRecord(
   val id: String,
   val passenger: Contact,

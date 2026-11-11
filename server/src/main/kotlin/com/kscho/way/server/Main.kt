@@ -9,7 +9,6 @@ import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.runBlocking
 
 /**
  * 임시 로컬 서버.
@@ -52,10 +51,10 @@ fun createDeps(
   scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
   log: (String) -> Unit = {},
 ): ServerDeps {
-  // 시연 동네 데이터(장소 검색·역지오코딩·정차 금지 구간·운전자 프로필·지난 픽업)는 앱 mock 과 같은 것을 쓴다
+  // 시연 동네 데이터(장소 검색·역지오코딩·정차 금지 구간)는 앱 mock 과 같은 것을 쓴다. 지난 픽업 기록은 앱에 있다
   val places = MockWayApi(scope, clock)
   val outbox = OutboxTextLog(clock, log = { log("[문자 사본] $it") })
-  val hub = PickupHub(clock, outbox, publicUrl, seedHistory = runBlocking { places.recentPickups(20) })
+  val hub = PickupHub(clock, outbox, publicUrl)
   return ServerDeps(hub, places, outbox, mapDir, webDir)
 }
 

@@ -7,16 +7,11 @@ import com.kscho.way.data.remote.CreatePickupResponse
 import com.kscho.way.data.remote.DriverStatusRequest
 import com.kscho.way.data.remote.LatLngDto
 import com.kscho.way.data.remote.LocationDescriptionDto
-import com.kscho.way.data.remote.MapFeaturesDto
 import com.kscho.way.data.remote.NotificationRequest
 import com.kscho.way.data.remote.NotificationType
 import com.kscho.way.data.remote.PassengerStatusDto
-import com.kscho.way.data.remote.PickupRecordDto
 import com.kscho.way.data.remote.PlaceDto
-import com.kscho.way.data.remote.RoadDto
 import com.kscho.way.data.remote.SharingWire
-import com.kscho.way.data.remote.StopRestrictionDto
-import com.kscho.way.data.remote.VehicleDto
 import com.kscho.way.data.remote.WayApi
 import com.kscho.way.data.remote.ZoneDto
 import com.kscho.way.data.sms.PickupTexts
@@ -27,7 +22,6 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.min
-import kotlin.math.roundToInt
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -53,7 +47,7 @@ data class MockPassengerScenario(
   val updateIntervalMillis: Long = 1_000,
 )
 
-/** mock 서버가 남긴 문자 사본 — 실제 문자는 차가 운전자 번호로 보낸다(PassengerMessenger). */
+/** mock 서버가 남긴 문자 사본 — 실제 문자는 차가 운전자 번호로 보낸다(PassengerMessenger). 서버엔 번호가 없어 [to] 는 이름. */
 data class MockSms(val pickupId: String, val to: String, val text: String, val atMillis: Long)
 
 /**
@@ -74,7 +68,6 @@ class MockWayApi(
 
   private val sessions = ConcurrentHashMap<String, Session>()
   private val counter = AtomicInteger(0)
-  private val history = MutableStateFlow(seedHistory())
   private val _messages = MutableStateFlow<List<MockSms>>(emptyList())
 
   /** 지금까지 보낸 문자(시연 확인용). */
@@ -124,31 +117,10 @@ class MockWayApi(
     return LocationDescriptionDto(title, detail)
   }
 
-  override suspend fun mapFeatures(center: LatLngDto, radiusMeters: Int): MapFeaturesDto {
+  override suspend fun stopZones(center: LatLngDto, radiusMeters: Int): List<ZoneDto> {
     val c = center.domain()
-    val inRange = { l: LatLng -> Geo.distanceMeters(c, l) <= radiusMeters }
-    return MapFeaturesDto(
-      roads = MockWorld.roads.filter { r -> Geo.distanceToPathMeters(c, r.path) <= radiusMeters }.map { r -> RoadDto(r.name, r.path.map { it.dto() }) },
-      places = MockWorld.places.filter { inRange(it.location) }.map { PlaceDto(it.id, it.name, it.address, it.location.dto()) },
-      zones = MockWorld.zones.filter { z -> Geo.distanceToPathMeters(c, z.path) <= radiusMeters }.map { it.dto() },
-    )
+    return MockWorld.zones.filter { z -> Geo.distanceToPathMeters(c, z.path) <= radiusMeters }.map { it.dto() }
   }
-
-  override suspend fun checkStopRestriction(location: LatLngDto, arrivalAtEpochMillis: Long): StopRestrictionDto {
-    val p = location.domain()
-    val at = Instant.ofEpochMilli(arrivalAtEpochMillis).atZone(MockWorld.ZONE)
-    val minute = at.hour * 60 + at.minute
-    val hit =
-      MockWorld.zones.firstOrNull { z ->
-        val inside = Geo.distanceToPathMeters(p, z.path) <= z.radiusMeters
-        val dayOk = z.days?.contains(at.dayOfWeek) ?: true
-        val timeOk = if (z.startMinute != null && z.endMinute != null) minute in z.startMinute until z.endMinute else true
-        inside && dayOk && timeOk
-      }
-    return StopRestrictionDto(restricted = hit != null, zone = hit?.dto())
-  }
-
-  override suspend fun myVehicle(): VehicleDto = VehicleDto("흰색 아반떼", "12가 3456", driverName = "김도윤")
 
   // ── 픽업 세션
 
@@ -205,28 +177,8 @@ class MockWayApi(
     val session = sessions.remove(pickupId) ?: return
     session.simulation?.cancel()
     session.status.update { it.copy(sharing = SharingWire.ENDED, location = null) }
-    val r = session.request
-    val record =
-      PickupRecordDto(
-        id = pickupId,
-        passengerName = r.passengerName,
-        passengerPhone = r.passengerPhone,
-        place = r.placeName?.let { name -> MockWorld.places.firstOrNull { it.name == name } }?.let { PlaceDto(it.id, it.name, it.address, it.location.dto()) },
-        pickupPoint = r.pickupPoint,
-        pickupTitle = r.pickupTitle,
-        pickupDetail = r.pickupDetail,
-        distanceFromPlaceMeters =
-          MockWorld.places.firstOrNull { it.name == r.placeName }?.let { Geo.distanceMeters(it.location, r.pickupPoint.domain()).roundToInt() },
-        boarded = request.boarded,
-        pickupLocationChanges = request.pickupLocationChanges,
-        waitedSeconds = request.waitedSeconds,
-        endedAtEpochMillis = clock(),
-      )
-    history.update { listOf(record) + it.filterNot { old -> old.passengerPhone == r.passengerPhone && old.pickupTitle == r.pickupTitle } }
-    log("탑승 완료 $pickupId — 위치 공유 끝, 링크 만료")
+    log("탑승 완료 $pickupId — 위치 공유 끝, 링크 만료 (탑승 ${request.boarded} · 대기 ${request.waitedSeconds}초)")
   }
-
-  override suspend fun recentPickups(limit: Int): List<PickupRecordDto> = history.value.take(limit)
 
   // ── 동승자 흉내
 
@@ -252,45 +204,9 @@ class MockWayApi(
   }
 
   private fun sms(session: Session, text: String) {
-    val message = MockSms(session.id, session.request.passengerPhone, text, clock())
+    val message = MockSms(session.id, session.request.passengerName, text, clock())
     _messages.update { it + message }
     log("문자 사본(차가 보냄) → ${session.request.passengerName}: $text")
-  }
-
-  private fun seedHistory(): List<PickupRecordDto> {
-    val villa = MockWorld.places.first { it.id == "villa" }
-    val hyundai = MockWorld.places.first { it.id == "hyundai" }
-    val day = 24 * 60 * 60 * 1000L
-    return listOf(
-      PickupRecordDto(
-        id = "seed-1",
-        passengerName = "이서연",
-        passengerPhone = "01000001234",
-        place = PlaceDto(villa.id, villa.name, villa.address, villa.location.dto()),
-        pickupPoint = MockWorld.VILLA_ALLEY_ENTRANCE.dto(),
-        pickupTitle = "신촌 XX 빌라 골목 입구 앞",
-        pickupDetail = "신촌로 · 도로 북쪽(빌라 쪽) 인도",
-        distanceFromPlaceMeters = 40,
-        boarded = true,
-        pickupLocationChanges = 0,
-        waitedSeconds = 38,
-        endedAtEpochMillis = clock() - 2 * day,
-      ),
-      PickupRecordDto(
-        id = "seed-2",
-        passengerName = "김민준",
-        passengerPhone = "01000005678",
-        place = PlaceDto(hyundai.id, hyundai.name, hyundai.address, hyundai.location.dto()),
-        pickupPoint = LatLng(37.55560, 126.93580).dto(),
-        pickupTitle = "현대백화점 신촌점 정문 앞",
-        pickupDetail = "신촌로 · 도로 북쪽 인도",
-        distanceFromPlaceMeters = 44,
-        boarded = true,
-        pickupLocationChanges = 0,
-        waitedSeconds = 20,
-        endedAtEpochMillis = clock() - 5 * day,
-      ),
-    )
   }
 }
 
@@ -300,4 +216,5 @@ internal fun LatLng.dto() = LatLngDto(latitude, longitude)
 
 internal fun LatLngDto.domain() = LatLng(lat, lng)
 
-private fun MockWorld.Zone.dto() = ZoneDto(id, name, rule, path.map { it.dto() })
+private fun MockWorld.Zone.dto() =
+  ZoneDto(id, name, rule, path.map { it.dto() }, radiusMeters, days?.sorted()?.map { it.name }, startMinute, endMinute)

@@ -8,8 +8,10 @@ import com.kscho.way.domain.model.NavEvent
 import com.kscho.way.domain.model.PassengerStatus
 import com.kscho.way.domain.model.PickupOutcome
 import com.kscho.way.domain.model.PickupPlan
+import com.kscho.way.domain.model.PickupRecord
 import com.kscho.way.domain.model.RoutePreview
 import com.kscho.way.domain.repository.CreatedPickup
+import com.kscho.way.domain.repository.PickupHistoryRepository
 import com.kscho.way.domain.repository.PickupRepository
 import com.kscho.way.domain.vehicle.BoardingSensor
 import com.kscho.way.domain.vehicle.Navigator
@@ -82,6 +84,16 @@ class FakePickupRepository : PickupRepository {
 
   override suspend fun complete(pickupId: String, outcome: PickupOutcome) {
     completed += outcome
+  }
+}
+
+class FakePickupHistory : PickupHistoryRepository {
+  val saved = mutableListOf<PickupRecord>()
+
+  override suspend fun recent(limit: Int): List<PickupRecord> = saved.reversed().take(limit)
+
+  override suspend fun save(record: PickupRecord) {
+    saved += record
   }
 }
 

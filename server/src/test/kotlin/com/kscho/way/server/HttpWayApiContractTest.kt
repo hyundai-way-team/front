@@ -46,7 +46,7 @@ class HttpWayApiContractTest {
   private val request =
     CreatePickupRequest(
       passengerName = "이서연",
-      passengerPhone = "01000001234",
+      passengerCallName = "서연",
       placeName = "신촌 XX 빌라",
       pickupPoint = LatLngDto(MockWorld.VILLA_ALLEY_ENTRANCE.latitude, MockWorld.VILLA_ALLEY_ENTRANCE.longitude),
       pickupTitle = "신촌 XX 빌라 골목 입구 앞",
@@ -55,17 +55,18 @@ class HttpWayApiContractTest {
       vehicleDescription = "흰색 아반떼",
       plateNumber = "12가 3456",
       driverName = "김도윤",
+      driverCallName = "도윤",
     )
 
   @Test
-  fun placesAndProfile() = runBlocking {
+  fun placesAndZoneData() = runBlocking {
     assertEquals("신촌 XX 빌라", api.searchPlaces("xx").first().name)
     val here = LatLngDto(MockWorld.VILLA_ALLEY_ENTRANCE.latitude, MockWorld.VILLA_ALLEY_ENTRANCE.longitude)
     assertEquals("신촌 XX 빌라 골목 입구 앞", api.describeLocation(here).title)
-    assertTrue(api.mapFeatures(here, 300).zones.isNotEmpty())
-    val busStop = LatLngDto(MockWorld.BUS_STOP.latitude, MockWorld.BUS_STOP.longitude)
-    assertTrue(api.checkStopRestriction(busStop, System.currentTimeMillis()).restricted)
-    assertEquals("김도윤", api.myVehicle().driverName)
+    // 정차 금지 구간은 데이터로만(반경·시간) — 지도에 그리기·판단은 앱
+    val zones = api.stopZones(here, 300)
+    assertEquals(12.0, zones.first { it.id == "bus-stop" }.radiusMeters, 0.0)
+    assertEquals(7 * 60, zones.first { it.id == "south-curb" }.startMinute)
   }
 
   @Test
@@ -89,7 +90,7 @@ class HttpWayApiContractTest {
     api.completePickup(created.pickupId, CompletePickupRequest(boarded = true, boardedAtEpochMillis = System.currentTimeMillis(), waitedSeconds = 20, pickupLocationChanges = 0, boardingSource = "DOOR"))
 
     assertEquals("BOARDED", deps.hub.view(token).phase)
-    assertEquals(created.pickupId, api.recentPickups(5).first().id)
+    assertEquals(SharingWire.ENDED, deps.hub.passengerStatus(created.pickupId).sharing)
   }
 
   @Test

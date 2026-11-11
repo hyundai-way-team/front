@@ -10,6 +10,7 @@ class ContactTest {
     assertEquals("지수", Contact("2", "지수", "01000001234").callName)
     assertEquals("남궁민수", Contact("3", "남궁민수", "01000001234").callName)
     assertEquals("Alex", Contact("4", "Alex", "01000001234").callName)
+    assertEquals("도윤", CallNames.of("김도윤")) // 운전자 이름도 같은 규칙(앱이 정해 서버에 보낸다)
   }
 
   @Test

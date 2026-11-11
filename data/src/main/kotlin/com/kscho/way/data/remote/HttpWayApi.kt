@@ -51,13 +51,9 @@ class HttpWayApi(
 
   override suspend fun describeLocation(location: LatLngDto): LocationDescriptionDto = get("places/reverse", *location.query())
 
-  override suspend fun mapFeatures(center: LatLngDto, radiusMeters: Int): MapFeaturesDto =
-    get("map/features", *center.query(), "radius" to radiusMeters.toString())
+  override suspend fun stopZones(center: LatLngDto, radiusMeters: Int): List<ZoneDto> =
+    get("stop-zones", *center.query(), "radius" to radiusMeters.toString())
 
-  override suspend fun checkStopRestriction(location: LatLngDto, arrivalAtEpochMillis: Long): StopRestrictionDto =
-    get("stop-restrictions/check", *location.query(), "arrivalAt" to arrivalAtEpochMillis.toString())
-
-  override suspend fun myVehicle(): VehicleDto = get("me/vehicle")
 
   // ── 픽업 세션
 
@@ -98,8 +94,6 @@ class HttpWayApi(
   override suspend fun completePickup(pickupId: String, request: CompletePickupRequest) {
     post("pickups/$pickupId/complete", json.encodeToString(request))
   }
-
-  override suspend fun recentPickups(limit: Int): List<PickupRecordDto> = get("pickups/recent", "limit" to limit.toString())
 
   /** 앱이 끝날 때 연결·스레드를 정리한다(테스트용). */
   fun close() {
