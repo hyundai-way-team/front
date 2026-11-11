@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 와이어프레임 v2 아이콘(Figma) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <path
+        android:pathData="M16 3C23.1773 3 29 8.82272 29 16C29 23.1773 23.1773 29 16 29C8.82272 29 3 23.1773 3 16C3 8.82272 8.82272 3 16 3ZM16 5C9.92728 5 5 9.92728 5 16C5 22.0727 9.92728 27 16 27C22.0727 27 27 22.0727 27 16C27 9.92728 22.0727 5 16 5ZM16 8C20.4183 8 24 11.5817 24 16C24 20.4183 20.4183 24 16 24C11.5817 24 8 20.4183 8 16C8 11.5817 11.5817 8 16 8Z"
+        android:fillColor="#3B67F6" />
+</vector>

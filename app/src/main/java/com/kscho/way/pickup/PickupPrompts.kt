@@ -19,6 +19,7 @@ object PickupPrompts {
       when (announcement) {
         is Announcement.LinkChecked -> "link_checked"
         is Announcement.ArrivingSoonSent -> "arriving_soon_sent"
+        is Announcement.PassengerLate -> "passenger_late"
         is Announcement.CallOffer -> "call_offer"
         Announcement.Boarded -> "boarded"
       },

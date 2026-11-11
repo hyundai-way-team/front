@@ -37,6 +37,8 @@ data class PassengerViewDto(
   val sharing: String,
   /** 서버가 받은 내 위치(공유 중일 때만) */
   val me: LatLngDto? = null,
+  /** '늦어요'를 이미 보냈는지 */
+  val late: Boolean = false,
 )
 
 @Serializable data class SharingRequest(val allow: Boolean)

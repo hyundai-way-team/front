@@ -89,13 +89,15 @@ object PickupRules {
   }
 
   private fun onPassenger(state: PickupState, status: PassengerStatus, now: Long): Transition {
-    val next = state.copy(passenger = status)
-    // 3-8 링크 확인 안내 — 처음 열었을 때만
-    if (!state.passenger.linkOpened && status.linkOpened) {
-      val said = Announcement.LinkChecked(state.plan.passenger)
-      return Transition(next.copy(lastAnnouncement = SpokenAnnouncement(said, now)), listOf(PickupEffect.Announce(said)))
+    val said = buildList {
+      // 3-8 링크 확인 안내 — 처음 열었을 때만
+      if (!state.passenger.linkOpened && status.linkOpened) add(Announcement.LinkChecked(state.plan.passenger))
+      // 동승자 '늦어요' — 처음 눌렀을 때만
+      if (!state.passenger.late && status.late) add(Announcement.PassengerLate(state.plan.passenger))
     }
-    return Transition(next)
+    val next = state.copy(passenger = status)
+    if (said.isEmpty()) return Transition(next)
+    return Transition(next.copy(lastAnnouncement = SpokenAnnouncement(said.last(), now)), said.map { PickupEffect.Announce(it) })
   }
 
   private fun onTick(state: PickupState, now: Long): Transition {

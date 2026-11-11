@@ -185,6 +185,10 @@ private fun Route.passengerRoutes(hub: PickupHub) {
       hub.setSharing(call.token(), call.receive<SharingRequest>().allow)
       call.respond(HttpStatusCode.NoContent)
     }
+    post("/late") {
+      hub.markLate(call.token())
+      call.respond(HttpStatusCode.NoContent)
+    }
     post("/location") {
       val body = call.receive<PassengerLocationRequest>()
       if (body.lat !in -90.0..90.0 || body.lng !in -180.0..180.0) throw BadRequestException("좌표가 이상해요")

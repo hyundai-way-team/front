@@ -93,6 +93,26 @@ class PickupHubTest {
   }
 
   @Test
+  fun passengerSaysLate_driverSeesItOnce_andWebShowsIt() {
+    val response = created()
+    val token = tokenOf(response.shareUrl)
+    hub.openLink(token)
+    hub.markLate(token)
+    hub.markLate(token)
+
+    assertTrue(hub.passengerStatus(response.pickupId).late)
+    assertTrue(hub.view(token).late)
+  }
+
+  @Test
+  fun lateAfterBoarding_isRejected() {
+    val response = created()
+    val token = tokenOf(response.shareUrl)
+    hub.complete(response.pickupId, CompletePickupRequest(boarded = true, pickupLocationChanges = 0))
+    assertTrue(runCatching { hub.markLate(token) }.exceptionOrNull() is PickupError.LinkExpired)
+  }
+
+  @Test
   fun driverReport_showsCarOnPassengerView() {
     val response = created()
     now += 60_000

@@ -8,9 +8,23 @@ data class Contact(val id: String, val name: String, val phone: String) {
 
   val maskedPhone: String
     get() = PhoneNumbers.mask(phone)
+
+  /** 차 화면에 보이는 번호 "010 - 0000 - 1234"(와이어프레임 v2). */
+  val displayPhone: String
+    get() = PhoneNumbers.display(phone)
 }
 
 object PhoneNumbers {
+  /** "01000001234" → "010 - 0000 - 1234", "0212345678" → "02 - 1234 - 5678". 모르는 모양은 숫자 그대로. */
+  fun display(phone: String): String {
+    val d = phone.filter(Char::isDigit)
+    val area = if (d.startsWith("02")) 2 else 3
+    val rest = d.length - area
+    if (rest !in 7..8) return d
+    val mid = rest - 4
+    return "${d.take(area)} - ${d.substring(area, area + mid)} - ${d.takeLast(4)}"
+  }
+
   /** "01012341234" · "010-1234-1234" → "010-****-1234". 짧은 번호는 끝 4자리만 남긴다. */
   fun mask(phone: String): String {
     val digits = phone.filter(Char::isDigit)

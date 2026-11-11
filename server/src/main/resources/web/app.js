@@ -194,17 +194,6 @@ const screens = {
     const title = h("p", { class: "title-xl" });
     const sub = h("p", { class: "m-regular muted" });
     const eta = h("span");
-    const refresh = h("button", { class: "icon-btn", type: "button", "aria-label": "도착 예정 시간 새로 보기" }, h("img", { src: "/web/icons/refresh.svg", alt: "" }));
-    refresh.addEventListener("click", async () => {
-      refresh.classList.remove("spin");
-      void refresh.offsetWidth; // 애니메이션 다시 시작
-      refresh.classList.add("spin");
-      try {
-        receive(await api(""));
-      } catch {
-        /* 실시간 연결로 곧 다시 온다 */
-      }
-    });
     const plate = h("p", { class: "plate" });
     const desc = h("p", { class: "vehicle-desc" });
     const mapBox = h("div", { class: "map h180" });
@@ -229,7 +218,7 @@ const screens = {
           "div",
           { class: "stack", style: "gap:16px" },
           h("div", { class: "stack", style: "gap:4px" }, title, sub),
-          h("div", { class: "eta-box" }, h("span", { class: "label" }, "실시간 도착 예정"), h("span", { class: "value" }, eta, refresh)),
+          h("div", { class: "eta-box" }, h("span", { class: "label" }, "도착 예정 시간"), h("span", { class: "value" }, eta)),
         ),
         h(
           "div",
@@ -337,49 +326,60 @@ const screens = {
     };
   },
 
-  // P-03 대기 — 도착 예정 시간을 가장 크게
+  // P-03 대기(와이어프레임 v2) — 도착 예정 시간을 크게, 바뀌면 위에 배너. '늦어요'로 운전자에게 알린다
   wait() {
-    const banner = h("div", { class: "banner-warn", hidden: "" });
+    const banner = h("div", { class: "banner-changed", hidden: "" }, h("img", { src: "/web/icons/info-warning.svg", alt: "" }), h("span", {}, "도착 시간이 변경되었어요"));
     const who = h("p", { class: "who" });
     const time = h("p", { class: "time" });
     const left = h("p", { class: "left" });
-    const mapBox = h("div", { class: "map h220" });
-    const chip = h("div", { class: "map-chip" });
-    mapBox.append(chip);
+    const mapBox = h("div", { class: "map h180" });
     const car = h("span", { class: "v" });
     const spot = h("span", { class: "v" });
+    const late = h("button", { class: "btn outline", type: "button" }, "늦어요");
+    late.addEventListener("click", async () => {
+      late.disabled = true;
+      try {
+        await api("/late", {});
+      } catch {
+        late.disabled = false; // 다시 누를 수 있게
+      }
+    });
     let map = null;
 
     const el = h(
       "section",
-      { class: "screen wide" },
+      { class: "screen" },
       logo(),
+      banner,
       h(
         "div",
-        { class: "stack", style: "gap:14px" },
-        banner,
-        h("div", { class: "eta-hero" }, who, time, left),
-        mapBox,
-        h("div", { class: "rows" }, h("div", { class: "row" }, h("span", { class: "k" }, "차량"), car), h("div", { class: "row" }, h("span", { class: "k" }, "픽업 위치"), spot)),
-        h("p", { class: "hint-box" }, "도착 5분 전에 “곧 도착해요” 문자를 보내 드려요.", h("br"), "그때 나오시면 돼요."),
+        { class: "stack", style: "gap:20px" },
+        h("div", { class: "eta-card" }, h("div", { class: "stack", style: "gap:8px;flex:1" }, who, h("div", { class: "stack", style: "gap:2px" }, time, left)), h("div", { class: "car-tile hero" })),
+        h(
+          "div",
+          { class: "card map-card" },
+          mapBox,
+          h("div", { class: "rows-v2" }, h("div", { class: "row" }, h("span", { class: "k" }, "차량"), car), h("div", { class: "row" }, h("span", { class: "k" }, "픽업 위치"), spot)),
+        ),
+        h("p", { class: "note quiet" }, "도착 5분 전에 픽업 안내 문자를 보내드려요.", h("br"), "문자를 받으면 픽업 장소로 이동해 주세요."),
       ),
+      h("div", { class: "grow" }),
+      late,
     );
 
     return {
       el,
       update(v) {
         map ??= createMap(mapBox, { carLabel: `${v.driverCallName} 님 차` });
-        if (v.etaChange) {
-          banner.replaceChildren(h("b", {}, "도착 시간이 바뀌었어요"), ` · ${hhmm(v.etaChange.from)} → ${hhmm(v.etaChange.to)} (문자로도 보냈어요)`);
-          banner.hidden = false;
-        } else banner.hidden = true;
-        set(who, `${v.driverCallName} 님 도착 예정`);
+        banner.hidden = !v.etaChange;
+        set(who, `${v.driverCallName} 님의 도착 예정`);
         set(time, hhmm(v.arrivalAt));
         const sec = secondsLeft(v);
         set(left, sec < 60 ? "곧 도착해요" : `${minutesText(sec)} 남았어요`);
-        set(chip, v.me ? "차 · 나 · 픽업 위치 실시간" : "차 · 픽업 위치 실시간");
-        set(car, `${v.vehicle.plateNumber} · ${v.vehicle.description}`);
+        set(car, `${v.vehicle.plateNumber} | ${v.vehicle.description}`);
         set(spot, v.pickup.title);
+        late.disabled = v.late;
+        set(late, v.late ? `${v.driverCallName} 님에게 늦는다고 알렸어요` : "늦어요");
         map.update(mapView(v));
       },
       destroy: () => map?.destroy(),

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 와이어프레임 v2 아이콘(Figma) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="40dp"
+    android:height="40dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+    <path
+        android:pathData="M23.9583 8.75L12.7083 20L23.9583 31.25"
+        android:strokeColor="#64748B"
+        android:strokeWidth="3.33333"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

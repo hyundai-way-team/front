@@ -2,23 +2,49 @@ package com.kscho.way.theme
 
 import androidx.compose.ui.graphics.Color
 
-/** 와이어프레임 색(디자인 확정 전 임시). */
+/** 와이어프레임 v2 디자인 토큰(Figma 변수 이름 그대로) + 주행 화면(D-06~D-10, v1)이 쓰는 옛 이름. */
 object WayColors {
-  val Blue = Color(0xFF2257D5)
-  val BlueSoft = Color(0xFFD6DEEC)
-  val BlueBg = Color(0xFFF0F5FE)
-  val Ink = Color(0xFF1F2328)
-  val Sub = Color(0xFF5B6270)
-  val Line = Color(0xFFC9CED6)
-  val Chip = Color(0xFFE6E8EC)
-  val Panel = Color(0xFFF4F5F7)
-  val Red = Color(0xFFD7301F)
-  val RedBg = Color(0xFFFDEEEC)
+  // ── v2 토큰
+  val Primary500 = Color(0xFF3B67F6)
+  val Primary200 = Color(0xFFBFCEFE)
+  val Primary100 = Color(0xFFDBE3FE)
+  val Primary50 = Color(0xFFF5F7FF)
+  val Grey900 = Color(0xFF0F172A)
+  val Grey700 = Color(0xFF334155)
+  val Grey600 = Color(0xFF475569)
+  val Grey500 = Color(0xFF64748B)
+  val Grey400 = Color(0xFF94A3B8)
+  val Grey300 = Color(0xFFCBD5E1)
+  val Grey200 = Color(0xFFE2E8F0)
+  val Grey100 = Color(0xFFF4F8FC)
+  val Error600 = Color(0xFFDC2626)
+  val Error200 = Color(0xFFFECACA)
+  val Error50 = Color(0xFFFEF2F2)
+  val Warning700 = Color(0xFFB45309)
+  val Warning200 = Color(0xFFFDE68A)
+  val Warning50 = Color(0xFFFFFBEB)
+  /** 로고·사진 자리(디자인 임시 회색) */
+  val Placeholder = Color(0xFFD9D9D9)
+  /** 카드 그림자(Shadow Grey-Medium · Grey-Weak) */
+  val ShadowMedium = Color(0xFFE2E8F0)
+  val ShadowWeak = Color(0xFFF1F5F9)
+
+  // ── 옛 이름(주행 화면 · 지도) — v2 토큰에 맞춘다
+  val Blue = Primary500
+  val BlueSoft = Primary100
+  val BlueBg = Primary50
+  val Ink = Grey900
+  val Sub = Grey500
+  val Line = Grey300
+  val Chip = Grey200
+  val Panel = Grey100
+  val Red = Error600
+  val RedBg = Error50
   val Orange = Color(0xFFC2410C)
   val Passenger = Color(0xFFE07F26)
   val Dark = Color(0xFF1F2328)
 
-  // 임시 지도
+  // 지도 배경(오프라인 지도가 뜨기 전)
   val MapBg = Color(0xFFEDEEF1)
   val MapBlock = Color(0xFFDDE0E5)
   val MapRoad = Color.White

@@ -11,6 +11,11 @@ sealed interface Announcement {
     override val text = "${passenger.callName} 님이 픽업 위치를 확인했어요"
   }
 
+  /** 동승자가 웹에서 '늦어요'를 눌렀다. */
+  data class PassengerLate(val passenger: Contact) : Announcement {
+    override val text = "${passenger.callName} 님이 조금 늦는대요"
+  }
+
   /** 도착 5분 전 문자를 보냈다. */
   data class ArrivingSoonSent(val passenger: Contact) : Announcement {
     override val text = "${passenger.callName} 님에게 곧 도착한다고 알렸어요"

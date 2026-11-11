@@ -194,6 +194,13 @@ class PickupHub(
     }
   }
 
+  /** '늦어요'(와이어프레임 v2 P-03) — 운전자에게 "OO님이 조금 늦는대요". 한 번만 의미가 있다. */
+  fun markLate(token: String) {
+    val state = link(token)
+    if (state.value.phase.ended) throw PickupError.LinkExpired()
+    state.update { if (it.phase.ended || it.passenger.late) it else it.copy(passenger = it.passenger.copy(linkOpened = true, late = true)) }
+  }
+
   fun updateLocation(token: String, location: LatLngDto) {
     val state = link(token)
     val now = state.value
@@ -219,6 +226,7 @@ class PickupHub(
       linkOpened = passenger.linkOpened,
       sharing = passenger.sharing,
       me = passenger.location,
+      late = passenger.late,
     )
   }
 

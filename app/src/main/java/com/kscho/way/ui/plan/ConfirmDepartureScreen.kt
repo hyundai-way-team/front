@@ -2,18 +2,18 @@ package com.kscho.way.ui.plan
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,10 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -41,9 +38,16 @@ import com.kscho.way.domain.model.StopRestriction
 import com.kscho.way.domain.pickup.PickupCoordinator
 import com.kscho.way.domain.repository.VehicleProfileRepository
 import com.kscho.way.theme.WayColors
+import com.kscho.way.theme.WayType
+import com.kscho.way.ui.common.ActionButton
+import com.kscho.way.ui.common.AlertBox
+import com.kscho.way.ui.common.BackButton
 import com.kscho.way.ui.common.Format
-import com.kscho.way.ui.common.PrimaryButton
-import com.kscho.way.ui.common.StepHeader
+import com.kscho.way.ui.common.MapFrame
+import com.kscho.way.ui.common.Panel
+import com.kscho.way.ui.common.ScreenFrame
+import com.kscho.way.ui.common.StepDots
+import com.kscho.way.ui.common.Tone
 import com.kscho.way.ui.common.appContainer
 import com.kscho.way.ui.map.MapLine
 import com.kscho.way.ui.map.MapPin
@@ -75,7 +79,7 @@ class ConfirmDepartureViewModel(
     }
   }
 
-  /** 출발: 서버에 픽업을 만들고(문자 발송) 내비 목적지를 픽업 위치로(기획 3-3). */
+  /** 출발: 서버에 픽업을 만들어 참여 링크를 받고, 차에서 문자를 보내고, 내비 목적지를 픽업 위치로(기획 3-3). */
   fun start(onStarted: () -> Unit) {
     val passenger = passenger ?: return
     val check = check ?: return
@@ -94,7 +98,7 @@ class ConfirmDepartureViewModel(
   }
 }
 
-/** D-05 확인 · 출발. 출발 뒤에는 운전자 화면 조작이 없다. */
+/** D-05 확인 · 출발(와이어프레임 v2). 출발 뒤에는 운전자 화면 조작이 없다. */
 @Composable
 fun ConfirmDepartureScreen(onBack: () -> Unit, onStarted: () -> Unit) {
   val c = appContainer()
@@ -109,59 +113,62 @@ fun ConfirmDepartureScreen(onBack: () -> Unit, onStarted: () -> Unit) {
   val now = System.currentTimeMillis()
   val arrival = now + check.route.durationSeconds * 1000L
 
-  Row(Modifier.fillMaxSize().background(Color.White)) {
-    Column(Modifier.width(560.dp).fillMaxHeight().padding(40.dp)) {
-      StepHeader(step = 3, onBack = onBack)
-      Spacer(Modifier.height(20.dp))
-      Text("이대로 출발할까요?", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = WayColors.Ink)
-      Spacer(Modifier.height(16.dp))
-      Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).border(1.dp, WayColors.Line, RoundedCornerShape(10.dp))) {
-        SummaryRow("동승자") { Text("${passenger.name} · ${passenger.maskedPhone}", fontSize = 19.sp, color = WayColors.Ink) }
-        HorizontalDivider(color = WayColors.Chip)
-        SummaryRow("픽업 위치") {
-          Text(check.point.description.title, fontSize = 19.sp, color = WayColors.Ink)
-          Text(check.point.description.detail, fontSize = 14.sp, color = WayColors.Sub)
+  ScreenFrame {
+    Panel(width = 560.dp) {
+      Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(32.dp)) {
+        Box(Modifier.fillMaxWidth()) {
+          BackButton(onBack)
+          Box(Modifier.align(Alignment.CenterEnd)) { StepDots(step = 3, lineWidth = 40.dp) }
         }
-        HorizontalDivider(color = WayColors.Chip)
-        SummaryRow("규제 확인") {
-          val blocked = check.restriction as? StopRestriction.NoStopping
-          Text(if (blocked == null) "● 정차 금지 구간 확인 안 됨" else "● ${blocked.zone.name} 정차 금지", fontSize = 19.sp, color = if (blocked == null) WayColors.Ink else WayColors.Red)
-          Text("${Format.clock(check.arrivalAtMillis)} 도착 기준 · 현장 표지판을 확인해 주세요", fontSize = 14.sp, color = WayColors.Sub)
+        Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+          Text("이대로 출발할까요?", style = WayType.HeadingM, color = Color.Black)
+          Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            Column(
+              Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, WayColors.Primary500, RoundedCornerShape(16.dp)).padding(20.dp),
+              verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+              InfoRow("동승자") { Text("${passenger.name} (${passenger.displayPhone})", style = WayType.TitleM, color = WayColors.Grey900) }
+              HorizontalDivider(color = WayColors.Grey200)
+              InfoRow("픽업 위치") {
+                Text(check.point.description.title, style = WayType.TitleM, color = WayColors.Grey900)
+                Text(check.point.description.detail, style = WayType.MRegular, color = WayColors.Grey500)
+              }
+              HorizontalDivider(color = WayColors.Grey200)
+              InfoRow("규제 확인") {
+                val blocked = check.restriction as? StopRestriction.NoStopping
+                if (blocked == null) Text("정차 금지 구간 확인 안 됨", style = WayType.TitleM, color = WayColors.Grey900)
+                else Text("정차 금지 구간 · ${blocked.zone.name}", style = WayType.TitleM, color = WayColors.Error600)
+                Text("${Format.clock(check.arrivalAtMillis)} 도착 기준 | 현장 표지판을 확인해 주세요", style = WayType.MRegular, color = WayColors.Grey500)
+              }
+              HorizontalDivider(color = WayColors.Grey200)
+              InfoRow("도착 예정") {
+                Text("${Format.clock(arrival)} (${Format.duration(check.route.durationSeconds)})", style = WayType.TitleM, color = WayColors.Primary500)
+              }
+            }
+            Text("차량 번호, 픽업 위치, 도착 예정 시간과 참여 링크가 문자로 전송돼요.", style = WayType.LMedium, color = WayColors.Grey500)
+            state.error?.let { AlertBox(it, Tone.ERROR) }
+          }
         }
-        HorizontalDivider(color = WayColors.Chip)
-        SummaryRow("도착 예정") {
-          Text("${Format.clock(arrival)} · ${Format.duration(check.route.durationSeconds)}", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = WayColors.Blue)
-        }
-        HorizontalDivider(color = WayColors.Chip)
-        SummaryRow("내 차") { Text(state.vehicle?.label ?: "불러오는 중…", fontSize = 19.sp, color = WayColors.Ink) }
       }
-      Spacer(Modifier.height(16.dp))
-      Text(
-        buildAnnotatedString {
-          append("출발하면 ${passenger.callName} 님에게 Pleos 문자로 ")
-          withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = WayColors.Ink)) { append("차량 번호 · 픽업 위치 · 도착 예정 시간 · 참여 링크") }
-          append("를 보내요. 이후에는 화면을 만지지 않아도 돼요.")
-        },
-        fontSize = 15.sp,
-        color = WayColors.Sub,
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(WayColors.Panel).padding(16.dp),
+      ActionButton(
+        if (state.starting) "출발 준비 중…" else "출발",
+        { vm.start(onStarted) },
+        Modifier.fillMaxWidth().padding(top = 16.dp),
+        enabled = state.vehicle != null && !state.starting,
       )
-      state.error?.let {
-        Spacer(Modifier.height(8.dp))
-        Text(it, fontSize = 15.sp, color = WayColors.Red)
-      }
-      Spacer(Modifier.weight(1f))
-      PrimaryButton(if (state.starting) "출발 준비 중…" else "출발", { vm.start(onStarted) }, Modifier.fillMaxWidth(), enabled = state.vehicle != null && !state.starting)
     }
-    RoutePreviewMap(check.route.path.ifEmpty { listOf(check.point.location) }, check.point.location, check.route.distanceMeters, check.route.durationSeconds, Modifier.weight(1f).fillMaxHeight())
+    MapFrame {
+      RoutePreviewMap(check.route.path.ifEmpty { listOf(check.point.location) }, check.point.location, check.route.distanceMeters, check.route.durationSeconds, Modifier.fillMaxSize())
+    }
   }
 }
 
+/** 확인 표 한 줄: 이름(L/Medium · Grey-500 · 폭 66) · 내용. */
 @Composable
-private fun SummaryRow(label: String, content: @Composable () -> Unit) {
-  Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp)) {
-    Text(label, fontSize = 15.sp, color = WayColors.Sub, modifier = Modifier.width(100.dp))
-    Column(Modifier.weight(1f)) { content() }
+private fun InfoRow(label: String, content: @Composable () -> Unit) {
+  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+    Text(label, style = WayType.LMedium, color = WayColors.Grey500, modifier = Modifier.width(66.dp))
+    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) { content() }
   }
 }
 

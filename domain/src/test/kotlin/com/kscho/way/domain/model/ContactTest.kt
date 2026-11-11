@@ -18,4 +18,13 @@ class ContactTest {
     assertEquals("010-****-5678", PhoneNumbers.mask("010-1234-5678"))
     assertEquals("****1234", PhoneNumbers.mask("1234"))
   }
+
+  @Test
+  fun displayPhone_spacesDashesLikeWireframe() {
+    // 와이어프레임 v2: "010 - 0000 - 0000"
+    assertEquals("010 - 0000 - 1234", Contact("1", "이서연", "01000001234").displayPhone)
+    assertEquals("010 - 123 - 4567", PhoneNumbers.display("0101234567"))
+    assertEquals("02 - 1234 - 5678", PhoneNumbers.display("02-1234-5678"))
+    assertEquals("1234", PhoneNumbers.display("1234"))
+  }
 }

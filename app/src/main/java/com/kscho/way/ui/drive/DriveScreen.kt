@@ -312,7 +312,8 @@ private fun PassengerLine(s: PickupState) {
   Row(verticalAlignment = Alignment.CenterVertically) {
     Box(Modifier.size(16.dp).clip(CircleShape).background(WayColors.Passenger))
     Spacer(Modifier.width(10.dp))
-    Text(text, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = WayColors.Ink)
+    // 동승자 웹 '늦어요'
+    Text(if (s.passenger.late) "$text · 늦는대요" else text, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = WayColors.Ink)
   }
 }
 

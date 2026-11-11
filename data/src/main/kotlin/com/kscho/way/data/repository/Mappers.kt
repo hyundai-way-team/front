@@ -42,6 +42,7 @@ internal fun PassengerStatusDto.toDomain() =
         else -> LocationSharing.NOT_YET
       },
     location = location?.toDomain(),
+    late = late,
   )
 
 internal fun PickupRecordDto.toDomain() =

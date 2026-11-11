@@ -46,7 +46,13 @@ object SharingWire {
 }
 
 @Serializable
-data class PassengerStatusDto(val linkOpened: Boolean = false, val sharing: String = SharingWire.NOT_YET, val location: LatLngDto? = null)
+data class PassengerStatusDto(
+  val linkOpened: Boolean = false,
+  val sharing: String = SharingWire.NOT_YET,
+  val location: LatLngDto? = null,
+  /** 동승자 웹 '늦어요'(와이어프레임 v2 P-03) */
+  val late: Boolean = false,
+)
 
 @Serializable
 data class DriverStatusRequest(val location: LatLngDto? = null, val remainingSeconds: Int, val remainingMeters: Int, val arrivalAtEpochMillis: Long)

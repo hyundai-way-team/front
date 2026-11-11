@@ -82,6 +82,25 @@ class PickupRulesTest {
     assertEquals(said, state.lastAnnouncement?.announcement)
   }
 
+  // ── 동승자 '늦어요'(와이어프레임 v2 P-03)
+
+  @Test
+  fun passengerLate_announcedOnceToDriver() {
+    val opened = PickupEvent.Passenger(PassengerStatus(linkOpened = true, sharing = LocationSharing.SHARING))
+    val late = PickupEvent.Passenger(PassengerStatus(linkOpened = true, sharing = LocationSharing.SHARING, late = true))
+    val (state, effects) = reduceAll(start, opened to 1_000L, late to 2_000L, late to 3_000L)
+    assertTrue(state.passenger.late)
+    val said = effects.filterIsInstance<PickupEffect.Announce>().map { it.announcement.text }
+    assertEquals(listOf("서연 님이 픽업 위치를 확인했어요", "서연 님이 조금 늦는대요"), said)
+  }
+
+  @Test
+  fun linkOpenedAndLateTogether_bothAnnounced() {
+    val both = PickupEvent.Passenger(PassengerStatus(linkOpened = true, late = true))
+    val (_, effects) = reduceAll(start, both to 1_000L)
+    assertEquals(2, effects.count { it is PickupEffect.Announce })
+  }
+
   // ── 3-9 정차 · 대기 타이머 · 전화 연결 제안
 
   @Test

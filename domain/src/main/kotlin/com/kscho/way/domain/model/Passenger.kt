@@ -15,4 +15,6 @@ data class PassengerStatus(
   val linkOpened: Boolean = false,
   val sharing: LocationSharing = LocationSharing.NOT_YET,
   val location: LatLng? = null,
+  /** 동승자 웹 '늦어요'를 눌렀다(와이어프레임 v2 P-03) */
+  val late: Boolean = false,
 )
