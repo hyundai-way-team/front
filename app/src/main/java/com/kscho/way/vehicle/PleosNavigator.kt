@@ -6,6 +6,7 @@ import ai.pleos.playground.navi.data.CurrentLocationInfo
 import ai.pleos.playground.navi.data.DestinationArrivedInfo
 import ai.pleos.playground.navi.data.DrivingInfo
 import ai.pleos.playground.navi.data.RouteInfo
+import ai.pleos.playground.navi.data.RouteStartInfo
 import ai.pleos.playground.navi.data.TBTInfo
 import ai.pleos.playground.navi.data.TripInfo
 import ai.pleos.playground.navi.data.TripRequest
@@ -54,8 +55,8 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
   private val locations = MutableSharedFlow<LatLng>(extraBufferCapacity = 4)
 
   @Volatile private var lastLocation: LatLng? = null
-  @Volatile private var guiding = false
-  @Volatile private var arrived = false
+  /** 픽업 위치 안내 — 요청한 경로가 시작되기 전 소식(지난 경로의 남은 0초 등)은 버린다. */
+  private val route = RouteSession()
   private var poll: Job? = null
 
   private val listener =
@@ -70,21 +71,24 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
         locations.tryEmit(here)
       }
 
+      override fun onRouteStarted(routeStartInfo: RouteStartInfo) {
+        route.started()
+      }
+
       override fun onDrivingInfo(drivingInfo: DrivingInfo) {
-        if (!guiding || arrived) return
+        if (!route.live) return
         val dest = drivingInfo.destination ?: return
         _events.tryEmit(NavEvent.Progress(lastLocation, dest.duration, dest.distance, clock() + dest.duration * 1000L))
       }
 
       override fun onTBTInfo(tbtInfoList: List<TBTInfo>) {
-        if (!guiding || arrived) return
+        if (!route.live) return
         val next = tbtInfoList.firstOrNull() ?: return
         _events.tryEmit(NavEvent.Turn(TurnInstruction(turnKind(next.type), next.distance.roundToInt(), next.description)))
       }
 
       override fun onDestinationArrived(destinationArrivedInfo: DestinationArrivedInfo) {
-        if (!guiding || arrived) return
-        arrived = true
+        if (!route.arrive()) return
         _events.tryEmit(NavEvent.Arrived(clock()))
       }
 
@@ -143,8 +147,7 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
 
   override suspend fun startGuidance(destination: LatLng, name: String, address: String) {
     check(ensureReady()) { "내비에 연결하지 못했어요" }
-    guiding = true
-    arrived = false
+    route.requested()
     navi.requestRoute(
       RouteInfo(
         latitude = destination.latitude,
@@ -161,7 +164,7 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
     poll?.cancel()
     poll =
       scope.launch {
-        while (isActive && guiding) {
+        while (isActive) { // handOver·stopGuidance 가 이 일을 멈춘다
           navi.getCurrentLocationInfo()
           delay(3_000)
         }
@@ -172,8 +175,7 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
   override suspend fun handOver(destination: LatLng, name: String, address: String) {
     poll?.cancel()
     poll = null
-    guiding = false
-    arrived = false
+    route.stopped()
     check(ensureReady()) { "내비에 연결하지 못했어요" }
     navi.requestRoute(
       RouteInfo(
@@ -190,8 +192,8 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
   }
 
   override fun stopGuidance() {
-    if (guiding && !arrived) runCatching { navi.cancelRoute() }
-    guiding = false
+    if (route.guidingUnarrived) runCatching { navi.cancelRoute() }
+    route.stopped()
     poll?.cancel()
     poll = null
   }
