@@ -17,6 +17,6 @@ object PickupPolicy {
   /** 차량 위치·ETA 를 서버에 보내는 간격. */
   const val DRIVER_REPORT_INTERVAL_MILLIS = 5_000L
 
-  /** D-10: 목적지를 정해 둔 픽업은 탑승 뒤 이만큼 지나면 목적지 안내를 Pleos 내비에 넘긴다. */
-  const val DESTINATION_HANDOVER_SECONDS = 10
+  /** D-11: 탑승 뒤 이만큼 지나면 다음으로 잇는다 — 목적지가 있으면 그곳 안내를 Pleos 내비에 넘기고, 없으면 기본 내비를 띄운다. */
+  const val CONNECT_AFTER_BOARDING_SECONDS = 5
 }

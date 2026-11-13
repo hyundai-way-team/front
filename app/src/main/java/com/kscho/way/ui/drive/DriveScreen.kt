@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +17,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -29,8 +29,10 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -100,8 +102,14 @@ class DriveViewModel(val coordinator: PickupCoordinator, boardingSensor: Boardin
 
   fun confirmBoarded() = coordinator.confirmBoarded(BoardingSource.MANUAL)
 
-  /** D-10 '탑승 완료' · 10초 카운트다운 끝: 목적지가 있으면 Pleos 내비로 넘기고 픽업을 닫는다. */
+  /** D-10 '탑승 완료'(D-11 에서 '취소'한 뒤) · 뒤로 가기: 픽업 화면을 닫는다. */
   fun done() = coordinator.finish()
+
+  /** D-11 '안내 시작' · '지금 연결': 목적지 안내(또는 기본 내비)로 바로 잇고 닫는다. */
+  fun connectNext() = coordinator.connectNext()
+
+  /** D-11 '취소': 잇지 않고 D-10 에 남는다. */
+  fun cancelNext() = coordinator.cancelNext()
 }
 
 /**
@@ -126,8 +134,12 @@ fun DriveScreen(onClosed: () -> Unit) {
     onClosed()
   }
 
-  // 주행·대기 중엔 뒤로 가기로 빠지지 않는다(운전자 조작 없음). 탑승 뒤엔 닫는다(목적지 안내도 넘긴다).
-  BackHandler { if (s.isBoarded) done() }
+  fun connect() {
+    if (closed) return
+    closed = true
+    vm.connectNext()
+    onClosed()
+  }
 
   var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
   LaunchedEffect(Unit) {
@@ -136,81 +148,106 @@ fun DriveScreen(onClosed: () -> Unit) {
       delay(200)
     }
   }
+  // D-11: 탑승 뒤 5초 동안 다음 목적지 연결 창(남은 시간은 PickupCoordinator 가 세는 것과 같은 탑승 시각 기준)
+  val connecting = s.connectRemainingMillis(now) != null
+
+  // 주행·대기 중엔 뒤로 가기로 빠지지 않는다(운전자 조작 없음). D-11 에선 '취소', D-10 에선 닫기.
+  BackHandler {
+    when {
+      connecting -> vm.cancelNext()
+      s.isBoarded -> done()
+    }
+  }
 
   val pickup = s.plan.pickupPoint.location
   val name = s.plan.passenger.callName
   Box(Modifier.fillMaxSize()) {
-    val driving = s.phase == PickupPhase.DRIVING
-    val car = s.carLocation
-    WayMap(
-      center = if (driving && car != null) car else pickup,
-      metersPerDp = if (driving) 1.6f else 0.3f,
-      modifier = Modifier.fillMaxSize(),
-      zones = zones,
-      lines =
-        buildList {
-          if (driving && car != null) add(MapLine(remainingPath(s), WayColors.Blue, 7f))
-          val passenger = s.passenger.location
-          if (!s.isBoarded && passenger != null) add(MapLine(listOf(passenger, pickup), WayColors.Passenger, 3f, dashed = true))
-        },
-      pins =
-        buildList {
-          add(MapPin(pickup, PinKind.PICKUP, "픽업 위치"))
-          if (!s.isBoarded) {
+    // D-11 창이 뜨면 뒤(지도·카드)는 흐리게
+    Box(Modifier.fillMaxSize().then(if (connecting) Modifier.blur(2.dp) else Modifier)) {
+      val driving = s.phase == PickupPhase.DRIVING
+      val car = s.carLocation
+      WayMap(
+        center = if (driving && car != null) car else pickup,
+        metersPerDp = if (driving) 1.6f else 0.3f,
+        modifier = Modifier.fillMaxSize(),
+        // 탄 뒤엔 정차 금지 구간·픽업 핀 없이 지금 차 자리만(D-10)
+        zones = if (s.isBoarded) emptyList() else zones,
+        lines =
+          buildList {
+            if (driving && car != null) add(MapLine(remainingPath(s), WayColors.Blue, 7f))
+            val passenger = s.passenger.location
+            if (!s.isBoarded && passenger != null) add(MapLine(listOf(passenger, pickup), WayColors.Passenger, 3f, dashed = true))
+          },
+        pins =
+          buildList {
+            if (s.isBoarded) {
+              // 탄 자리 = 픽업 위치(정차 중 차 위치는 늦게 올 수 있어 픽업 위치에 둔다)
+              add(MapPin(pickup, PinKind.CAR, "현재 위치"))
+              return@buildList
+            }
+            add(MapPin(pickup, PinKind.PICKUP, "픽업 위치"))
             s.passenger.location?.let { add(MapPin(it, PinKind.PASSENGER, "$name 님" + (s.passengerDistanceMeters?.let { d -> " · ${Format.distance(d)}" } ?: ""))) }
-          }
-          car?.let { add(MapPin(if (driving) it else pickup, PinKind.CAR)) }
-        },
-    )
+            car?.let { add(MapPin(if (driving) it else pickup, PinKind.CAR)) }
+          },
+      )
 
-    // 왼쪽 위: 픽업 상태
-    Column(Modifier.align(Alignment.TopStart).padding(32.dp).width(440.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-      when (s.phase) {
-        PickupPhase.DRIVING -> DrivingCard(s)
-        PickupPhase.WAITING -> {
-          StoppedCard(s)
-          PassengerRouteCard(s)
+      // 왼쪽 위: 픽업 상태
+      Column(Modifier.align(Alignment.TopStart).padding(32.dp).width(440.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        when (s.phase) {
+          PickupPhase.DRIVING -> DrivingCard(s)
+          PickupPhase.WAITING -> {
+            StoppedCard(s)
+            PassengerRouteCard(s)
+          }
+          PickupPhase.BOARDED -> BoardedCard(s)
         }
-        PickupPhase.BOARDED -> BoardedCard(s)
+      }
+
+      // 오른쪽 위: 지도 설명 · 회전 안내 / 대기 타이머 / 탑승 완료
+      MapAnnotation(
+        if (driving) "지도 · 네비 경로 (목적지 = 픽업 위치)" else "지도 · 픽업 위치 주변 확대",
+        Modifier.align(Alignment.TopEnd).padding(top = 32.dp, end = 32.dp),
+      )
+      Column(Modifier.align(Alignment.TopEnd).padding(top = 86.dp, end = 32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        when (s.phase) {
+          PickupPhase.DRIVING -> s.nextTurn?.let { TurnCard(it) }
+          PickupPhase.WAITING -> {
+            val left = s.waitRemainingMillis(now) ?: 0L
+            val urgent = left <= PickupPolicy.CALL_OFFER_REMAINING_SECONDS * 1000L
+            WaitTimerCard(left, urgent)
+            if (urgent) {
+              ActionButton(
+                "전화하기",
+                { runCatching { context.startActivity(PassengerCall.dialIntent(s.plan.passenger.phone)) } },
+                Modifier.width(260.dp),
+                kind = ActionKind.DANGER,
+                icon = R.drawable.ic_phone,
+              )
+            }
+          }
+          PickupPhase.BOARDED -> BoardedBadge(s)
+        }
+      }
+
+      if (!connecting) VoiceBanner(s, now, Modifier.align(Alignment.BottomStart).padding(32.dp).width(720.dp))
+
+      // 오른쪽 아래
+      if (s.isBoarded) {
+        if (!connecting) ActionButton("탑승 완료", ::done, Modifier.align(Alignment.BottomEnd).padding(32.dp).width(180.dp))
+      } else if (doorAvailable == false) {
+        Column(Modifier.align(Alignment.BottomEnd).padding(32.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          MapAnnotation("도어 정보를 쓸 수 없어 손으로 알려 주세요")
+          ActionButton("탑승 완료", vm::confirmBoarded, Modifier.width(180.dp))
+        }
       }
     }
 
-    // 오른쪽 위: 지도 설명 · 회전 안내 / 대기 타이머 / 탑승 완료
-    MapAnnotation(
-      if (driving) "지도 · 네비 경로 (목적지 = 픽업 위치)" else "지도 · 픽업 위치 주변 확대",
-      Modifier.align(Alignment.TopEnd).padding(top = 32.dp, end = 32.dp),
-    )
-    Column(Modifier.align(Alignment.TopEnd).padding(top = 86.dp, end = 32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-      when (s.phase) {
-        PickupPhase.DRIVING -> s.nextTurn?.let { TurnCard(it) }
-        PickupPhase.WAITING -> {
-          val left = s.waitRemainingMillis(now) ?: 0L
-          val urgent = left <= PickupPolicy.CALL_OFFER_REMAINING_SECONDS * 1000L
-          WaitTimerCard(left, urgent)
-          if (urgent) {
-            ActionButton(
-              "전화하기",
-              { runCatching { context.startActivity(PassengerCall.dialIntent(s.plan.passenger.phone)) } },
-              Modifier.width(260.dp),
-              kind = ActionKind.DANGER,
-              icon = R.drawable.ic_phone,
-            )
-          }
-        }
-        PickupPhase.BOARDED -> BoardedBadge(s)
-      }
-    }
-
-    VoiceBanner(s, now, Modifier.align(Alignment.BottomStart).padding(32.dp).width(720.dp))
-
-    // 오른쪽 아래
-    if (s.isBoarded) {
-      BoardedActions(s, onDone = ::done, Modifier.align(Alignment.BottomEnd).padding(32.dp))
-    } else if (doorAvailable == false) {
-      Column(Modifier.align(Alignment.BottomEnd).padding(32.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        MapAnnotation("도어 정보를 쓸 수 없어 손으로 알려 주세요")
-        ActionButton("탑승 완료", vm::confirmBoarded, Modifier.width(180.dp))
-      }
+    // D-11 다음 목적지 연결
+    if (connecting) {
+      // 뒤를 가리고 누름도 막는다
+      Box(Modifier.fillMaxSize().background(WayColors.Dim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {})
+      NextStepDialog(s, onCancel = vm::cancelNext, onConnect = ::connect, Modifier.align(Alignment.Center))
+      VoiceBanner(s, now, Modifier.align(Alignment.BottomCenter).padding(32.dp).fillMaxWidth())
     }
   }
 }
@@ -225,6 +262,7 @@ private fun remainingPath(s: PickupState): List<LatLng> {
   return listOf(car) + path.drop(segment + 1)
 }
 
+private val R12 = RoundedCornerShape(12.dp)
 private val R14 = RoundedCornerShape(14.dp)
 private val R16 = RoundedCornerShape(16.dp)
 private val R20 = RoundedCornerShape(20.dp)
@@ -438,39 +476,99 @@ private fun BoardedBadge(s: PickupState) {
 private fun waitedText(seconds: Int): String = if (seconds < 60) "${seconds}초" else "${seconds / 60}분 ${seconds % 60}초"
 
 /**
- * D-10 오른쪽 아래 '탑승 완료'. 목적지를 정해 뒀으면 옆에 10초 카운트다운 — 누르거나 10초가 지나면
- * Pleos 내비가 목적지 안내를 시작하고 Way 는 홈으로. 목적지가 없으면 버튼은 닫기만.
- *
- * 10초는 PickupCoordinator 가 탑승 시각부터 센다(Way 가 뒤에 있어도 넘어가게). 여기선 남은 시간을 보여 주기만 한다.
+ * D-11 다음 목적지 연결(와이어프레임 v2) — 탑승하면 5초를 세고, 정해 둔 목적지가 있으면 그곳 안내를 Pleos 내비에 넘기고
+ * 없으면 기본 내비를 띄운다. 5초는 PickupCoordinator 가 탑승 시각부터 센다(Way 가 뒤에 있어도 넘어가게) — 여기선 보여 주기만.
  */
 @Composable
-private fun BoardedActions(s: PickupState, onDone: () -> Unit, modifier: Modifier) {
+private fun NextStepDialog(s: PickupState, onCancel: () -> Unit, onConnect: () -> Unit, modifier: Modifier) {
+  // 고리가 매끄럽게 줄도록 프레임마다
+  var t by remember { mutableLongStateOf(System.currentTimeMillis()) }
+  LaunchedEffect(Unit) {
+    while (true) withFrameMillis { t = System.currentTimeMillis() }
+  }
+  val total = PickupPolicy.CONNECT_AFTER_BOARDING_SECONDS * 1000L
+  val left = s.connectRemainingMillis(t) ?: 0L
+  val seconds = ceil(left / 1000.0).toInt()
   val destination = s.plan.destination
-  Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-    if (destination != null) {
-      val handOverAt = (s.boardedAtMillis ?: System.currentTimeMillis()) + DESTINATION_COUNTDOWN_MILLIS
-      var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-      LaunchedEffect(handOverAt) {
-        while (now < handOverAt) {
-          delay(100)
-          now = System.currentTimeMillis()
+  Column(
+    modifier
+      .width(640.dp)
+      .shadow(10.dp, R24, ambientColor = WayColors.Grey900.copy(alpha = 0.3f), spotColor = WayColors.Grey900.copy(alpha = 0.3f))
+      .clip(R24)
+      .background(Color.White)
+      .border(1.dp, WayColors.Grey200, R24)
+      .padding(32.dp),
+    verticalArrangement = Arrangement.spacedBy(24.dp),
+  ) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+      ProgressRing(left / total.toFloat(), track = WayColors.Grey200, color = WayColors.Primary500, size = 96.dp) {
+        Text("$seconds", style = WayType.HeadingL, color = WayColors.Countdown)
+      }
+      Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+          Icon(painterResource(R.drawable.ic_check_small), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(24.dp))
+          Text(if (destination != null) "탑승 확인 완료" else "픽업 안내 종료", style = WayType.LRegular, color = WayColors.Grey500)
         }
-      }
-      val left = (handOverAt - now).coerceIn(0, DESTINATION_COUNTDOWN_MILLIS)
-      val seconds = ceil(left / 1000.0).toInt()
-      Column(Modifier.widthIn(max = 200.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text("${seconds}초 뒤 목적지 안내", style = WayType.LMedium, color = WayColors.Primary500, maxLines = 1)
-        Text(destination.name, style = WayType.MRegular, color = WayColors.Grey500, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      }
-      ProgressRing(left / DESTINATION_COUNTDOWN_MILLIS.toFloat(), track = WayColors.Primary100, color = WayColors.Primary500, size = 72.dp) {
-        Text("$seconds", style = WayType.TitleXL, color = WayColors.Primary500)
+        Text(
+          if (destination != null) "${seconds}초 뒤 안내가 시작돼요" else "${seconds}초 뒤 기본 내비로 연결해요",
+          style = WayType.HeadingM,
+          color = WayColors.DialogTitle,
+        )
       }
     }
-    ActionButton("탑승 완료", onDone, Modifier.width(180.dp))
+    if (destination != null) {
+      Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(
+          Modifier.fillMaxWidth().clip(R20).border(1.dp, WayColors.Grey300, R20).padding(horizontal = 20.dp, vertical = 16.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+          DialogIcon(R.drawable.ic_nav_fill, WayColors.Primary500)
+          Column {
+            Text("픽업 후 목적지", style = WayType.LMedium, color = WayColors.Grey500)
+            Text(destination.name, style = WayType.TitleXL, color = WayColors.Grey900, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          }
+        }
+        // 내비가 답하기 전(보통 1초 안)이나 답하지 않으면 이 줄은 뺀다
+        val arrivalAt = s.destinationArrivalAtMillis
+        val trip = s.destinationTripSeconds
+        if (arrivalAt != null && trip != null) {
+          Text(
+            "${Format.clock(arrivalAt)} 도착 예정 (약 ${Format.minutes(trip)})",
+            style = WayType.TitleXL,
+            color = WayColors.Primary500,
+            modifier =
+              Modifier.fillMaxWidth().clip(R20).background(WayColors.Primary50).border(1.dp, WayColors.Primary100, R20).padding(horizontal = 20.dp, vertical = 16.dp),
+          )
+        }
+      }
+    } else {
+      Row(
+        Modifier.fillMaxWidth().clip(R20).background(WayColors.Grey100).border(1.dp, WayColors.Grey200, R20).padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+      ) {
+        DialogIcon(R.drawable.ic_mic, WayColors.Grey500)
+        Column {
+          Text("입력한 목적지가 없어요", style = WayType.TitleXL, color = WayColors.Grey900)
+          Text("내비에서 음성으로 목적지를 설정할 수 있어요.", style = WayType.LMedium, color = WayColors.Grey500)
+        }
+      }
+    }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+      ActionButton("취소", onCancel, Modifier.weight(1f), kind = ActionKind.OUTLINE)
+      ActionButton(if (destination != null) "안내 시작" else "지금 연결", onConnect, Modifier.weight(1f))
+    }
   }
 }
 
-private const val DESTINATION_COUNTDOWN_MILLIS = PickupPolicy.DESTINATION_HANDOVER_SECONDS * 1000L
+/** D-11 상자 왼쪽 아이콘(48 · 라운드 12 · 흰 아이콘 24). */
+@Composable
+private fun DialogIcon(@DrawableRes icon: Int, background: Color) {
+  Box(Modifier.size(48.dp).clip(R12).background(background), contentAlignment = Alignment.Center) {
+    Icon(painterResource(icon), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(24.dp))
+  }
+}
 
 // ── 공통
 

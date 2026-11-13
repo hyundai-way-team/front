@@ -25,4 +25,7 @@ interface Navigator {
    * 픽업 구간의 위치 묻기를 멈추고, 이 안내는 이후 [stopGuidance] 로 끄지 않는다(운전자의 안내).
    */
   suspend fun handOver(destination: LatLng, name: String, address: String)
+
+  /** 목적지 없이 탑승을 마쳤을 때(D-11): 기본 내비 화면을 띄운다 — 운전자가 음성으로 목적지를 정하게. */
+  fun openNavi() {}
 }

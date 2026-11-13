@@ -21,7 +21,8 @@ object PickupPrompts {
         is Announcement.ArrivingSoonSent -> "arriving_soon_sent"
         is Announcement.PassengerLate -> "passenger_late"
         is Announcement.CallOffer -> "call_offer"
-        is Announcement.Boarded -> if (announcement.toDestination) "boarded_to_destination" else "boarded"
+        is Announcement.Boarded -> if (announcement.destinationName != null) "boarded_to_destination" else "boarded_to_navi"
+        Announcement.GuidanceEnded -> "guidance_ended"
       },
       announcement.text,
     )

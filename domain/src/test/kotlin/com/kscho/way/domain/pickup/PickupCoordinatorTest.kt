@@ -7,6 +7,7 @@ import com.kscho.way.domain.model.LocationSharing
 import com.kscho.way.domain.model.NavEvent
 import com.kscho.way.domain.model.PassengerStatus
 import com.kscho.way.domain.model.Place
+import com.kscho.way.domain.model.RoutePreview
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
@@ -126,7 +127,8 @@ class PickupCoordinatorTest {
     assertEquals(PickupPhase.BOARDED, state.phase)
     assertEquals(BoardingSource.DOOR, state.boardingSource)
     assertEquals(1, repo.completed.size)
-    assertEquals(1, nav.stopped)
+    // 픽업 안내는 D-11 의 5초가 지나 잇는 순간에 거둔다 — 탑승하자마자 거두면 Pleos 내비가 앞으로 나와 D-11 을 가린다
+    assertEquals(0, nav.stopped)
     assertFalse(coordinator.hasActivePickup)
   }
 
@@ -152,8 +154,8 @@ class PickupCoordinatorTest {
   }
 
   @Test
-  fun boarding_withDestination_handsOverByItselfTenSecondsLater() = runTest {
-    // 실차에선 Pleos 내비가 앞에 있어 D-10 화면이 안 보인다 — 화면 없이도 10초 뒤 넘기고 픽업을 닫는다
+  fun boarding_withDestination_handsOverByItselfFiveSecondsLater() = runTest {
+    // D-11. 실차에선 Pleos 내비가 앞에 있어 Way 화면이 안 보인다 — 화면 없이도 5초 뒤 넘기고 픽업을 닫는다
     val coordinator = coordinator()
     val dest = Place("p-dest", "연남동 00 식당", "서울 마포구 연남동", LatLng(37.5620, 126.9250))
     coordinator.start(Fixtures.plan().copy(destination = dest))
@@ -161,7 +163,7 @@ class PickupCoordinatorTest {
     door.boardings.emit(testScheduler.currentTime)
     runCurrent()
 
-    advanceTimeBy(9_999)
+    advanceTimeBy(4_999)
     runCurrent()
     assertNull(nav.handedOverTo)
 
@@ -170,6 +172,132 @@ class PickupCoordinatorTest {
     assertEquals(dest.location, nav.handedOverTo)
     assertEquals(1, nav.handOvers)
     assertNull(coordinator.state.value)
+  }
+
+  @Test
+  fun boarding_withoutDestination_opensDefaultNaviFiveSecondsLater() = runTest {
+    // D-11 목적지 없음: 픽업 안내를 끝내고 5초 뒤 기본 내비로(운전자가 음성으로 목적지를 정하게)
+    val coordinator = coordinator()
+    coordinator.start(Fixtures.plan())
+    runCurrent()
+    door.boardings.emit(testScheduler.currentTime)
+    runCurrent()
+    assertEquals(0, nav.stopped) // 거두면 내비가 앞으로 나와 D-11 을 가린다
+
+    advanceTimeBy(4_999)
+    runCurrent()
+    assertEquals(0, nav.naviOpened)
+    assertEquals(0, nav.stopped)
+    assertEquals(PickupPhase.BOARDED, coordinator.state.value?.phase)
+
+    advanceTimeBy(2)
+    runCurrent()
+    assertEquals(1, nav.stopped) // 픽업 위치 안내를 거두고
+    assertEquals(1, nav.naviOpened) // 기본 내비로
+    assertEquals(0, nav.handOvers)
+    assertNull(coordinator.state.value)
+  }
+
+  @Test
+  fun connectNow_handsOverAtOnce_andOnlyOnce() = runTest {
+    // D-11 '안내 시작'
+    val coordinator = coordinator()
+    val dest = Place("p-dest", "연남동 00 식당", "서울 마포구 연남동", LatLng(37.5620, 126.9250))
+    coordinator.start(Fixtures.plan().copy(destination = dest))
+    runCurrent()
+    door.boardings.emit(testScheduler.currentTime)
+    runCurrent()
+    advanceTimeBy(1_000)
+
+    coordinator.connectNext()
+    runCurrent()
+    assertEquals(dest.location, nav.handedOverTo)
+    assertNull(coordinator.state.value)
+    advanceTimeBy(10_000)
+    runCurrent()
+    assertEquals(1, nav.handOvers)
+  }
+
+  @Test
+  fun connectNow_withoutDestination_opensNaviAtOnce() = runTest {
+    // D-11 '지금 연결'
+    val coordinator = coordinator()
+    coordinator.start(Fixtures.plan())
+    runCurrent()
+    door.boardings.emit(testScheduler.currentTime)
+    runCurrent()
+
+    coordinator.connectNext()
+    runCurrent()
+    assertEquals(1, nav.naviOpened)
+    assertNull(coordinator.state.value)
+    advanceTimeBy(10_000)
+    runCurrent()
+    assertEquals(1, nav.naviOpened)
+  }
+
+  @Test
+  fun cancel_staysOnBoardedScreen_andClosingThenConnectsNothing() = runTest {
+    // D-11 '취소' → D-10 에 남고, '탑승 완료'로 닫아도 목적지 안내·내비 연결을 하지 않는다
+    val coordinator = coordinator()
+    val dest = Place("p-dest", "연남동 00 식당", "서울 마포구 연남동", LatLng(37.5620, 126.9250))
+    coordinator.start(Fixtures.plan().copy(destination = dest))
+    runCurrent()
+    door.boardings.emit(testScheduler.currentTime)
+    runCurrent()
+    advanceTimeBy(2_000)
+
+    coordinator.cancelNext()
+    runCurrent()
+    assertTrue(coordinator.state.value?.nextCanceled == true)
+    // D-10 처럼 픽업 안내를 끝낸다고 알린다. 안내 자체는 D-10 을 닫을 때 거둔다 — 지금 거두면 Pleos 내비가 앞으로 나와 D-10 을 가린다
+    assertEquals("탑승을 확인했어요. 안내를 종료할게요.", coordinator.state.value?.lastAnnouncement?.announcement?.text)
+    assertEquals(0, nav.stopped)
+    advanceTimeBy(10_000)
+    runCurrent()
+    assertEquals(0, nav.handOvers)
+    assertEquals(PickupPhase.BOARDED, coordinator.state.value?.phase)
+
+    coordinator.finish()
+    runCurrent()
+    assertEquals(1, nav.stopped) // 닫으며 픽업 위치 안내를 거둔다(정차 전에 탔다면 아직 켜져 있다)
+    assertEquals(0, nav.handOvers)
+    assertEquals(0, nav.naviOpened)
+    assertNull(coordinator.state.value)
+  }
+
+  @Test
+  fun connectAfterCancel_doesNothing() = runTest {
+    // 5초 경계에서 '취소'와 타이머가 겹쳐 취소가 먼저 잡혀도, 뒤이은 연결은 하지 않는다
+    val coordinator = coordinator()
+    val dest = Place("p-dest", "연남동 00 식당", "서울 마포구 연남동", LatLng(37.5620, 126.9250))
+    coordinator.start(Fixtures.plan().copy(destination = dest))
+    runCurrent()
+    door.boardings.emit(testScheduler.currentTime)
+    runCurrent()
+
+    coordinator.cancelNext()
+    coordinator.connectNext()
+    runCurrent()
+    assertEquals(0, nav.handOvers)
+    assertEquals(PickupPhase.BOARDED, coordinator.state.value?.phase)
+  }
+
+  @Test
+  fun boarding_withDestination_estimatesArrivalThere() = runTest {
+    // D-11 '10:05 도착 예정 (약 15분)' — 탑승한 자리에서 목적지까지 내비에 물어 본다
+    val coordinator = coordinator()
+    val dest = Place("p-dest", "연남동 00 식당", "서울 마포구 연남동", LatLng(37.5620, 126.9250))
+    coordinator.start(Fixtures.plan().copy(destination = dest))
+    runCurrent()
+    nav.route = RoutePreview(5_000, 15 * 60)
+    door.boardings.emit(testScheduler.currentTime)
+    runCurrent()
+
+    val s = coordinator.state.value!!
+    assertEquals(dest.location, nav.previewed.last())
+    assertEquals(15 * 60, s.destinationTripSeconds)
+    assertEquals(testScheduler.currentTime + 15 * 60_000L, s.destinationArrivalAtMillis)
   }
 
   @Test

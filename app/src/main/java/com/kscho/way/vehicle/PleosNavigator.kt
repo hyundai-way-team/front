@@ -13,6 +13,8 @@ import ai.pleos.playground.navi.data.TripRequest
 import ai.pleos.playground.navi.helper.NaviHelper
 import ai.pleos.playground.navi.helper.listener.NaviHelperEventListener
 import android.content.Context
+import android.app.NotificationManager
+import android.content.Intent
 import android.util.Log
 import com.kscho.way.domain.model.Geo
 import com.kscho.way.domain.model.LatLng
@@ -21,6 +23,8 @@ import com.kscho.way.domain.model.RoutePreview
 import com.kscho.way.domain.model.TurnInstruction
 import com.kscho.way.domain.model.TurnKind
 import com.kscho.way.domain.vehicle.Navigator
+import com.kscho.way.pickup.PickupNotifications
+import com.kscho.way.pickup.WayScreen
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CompletableDeferred
@@ -45,6 +49,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * requestRoute 하면 Pleos 내비가 앞으로 나와 Way 는 뒤로 간다 — 픽업 서비스(포그라운드)가 Way 를 살려 둔다.
  */
 class PleosNavigator(context: Context, private val clock: () -> Long) : Navigator {
+  private val appContext = context.applicationContext
   private val navi = NaviHelper(context.applicationContext)
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
   private val initStarted = AtomicBoolean(false)
@@ -189,6 +194,21 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
         poiSubId = "0",
       )
     )
+  }
+
+  /**
+   * D-11 목적지 없음: 기본 내비(지도 앱)를 앞으로 — 운전자가 음성으로 목적지를 정한다.
+   * Pleos 내비는 CATEGORY_APP_MAPS 로 열린다(에뮬 11/14 확인) — Pleos 권한을 더 받지 않는다.
+   * Way 가 화면 뒤면(동승자와 통화 중 등) 안드로이드가 말없이 막으므로 헤드업 알림 버튼으로 대신한다(문자 보내기와 같은 방식).
+   */
+  override fun openNavi() {
+    val maps = Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MAPS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    if (WayScreen.isVisible(appContext)) {
+      val opened = runCatching { appContext.startActivity(maps) }.onFailure { Log.w(TAG, "기본 내비를 열지 못했어요 — 알림으로 남김", it) }.isSuccess
+      if (opened) return
+    }
+    PickupNotifications.createChannels(appContext)
+    appContext.getSystemService(NotificationManager::class.java).notify(PickupNotifications.NAVI_ID, PickupNotifications.naviNeeded(appContext, maps))
   }
 
   override fun stopGuidance() {

@@ -49,6 +49,12 @@ class FakeNavigator(var route: RoutePreview = RoutePreview(4_000, 12 * 60)) : Na
     handedOverTo = destination
     handOvers++
   }
+
+  var naviOpened = 0
+
+  override fun openNavi() {
+    naviOpened++
+  }
 }
 
 class FakeBoardingSensor : BoardingSensor {

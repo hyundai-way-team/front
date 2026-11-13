@@ -116,7 +116,7 @@ object PickupRules {
 
   private fun onBoarded(state: PickupState, event: PickupEvent.Boarded, now: Long): Transition {
     // 3-10 정차 전에 타도 그 시점에 끝낸다(예외 케이스)
-    val said = Announcement.Boarded(toDestination = state.plan.destination != null)
+    val said = Announcement.Boarded(destinationName = state.plan.destination?.name)
     val next =
       state.copy(
         phase = PickupPhase.BOARDED,

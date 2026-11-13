@@ -25,6 +25,11 @@ object WayColors {
   val Warning700 = Color(0xFFB45309)
   val Warning200 = Color(0xFFFDE68A)
   val Warning50 = Color(0xFFFFFBEB)
+  /** D-11 카운트다운 숫자 · 제목(Figma 에 토큰 없이 값으로 들어 있음) */
+  val Countdown = Color(0xFF2457D6)
+  val DialogTitle = Color(0xFF1F2328)
+  /** D-11 뒤를 가리는 막(Grey-900 40%) */
+  val Dim = Color(0x660F172A)
   /** 로고·사진 자리(디자인 임시 회색) */
   val Placeholder = Color(0xFFD9D9D9)
   /** 카드 그림자(Shadow Grey-Medium · Grey-Weak) */

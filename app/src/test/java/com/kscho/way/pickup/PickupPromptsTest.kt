@@ -27,6 +27,7 @@ class PickupPromptsTest {
   fun announcements_readTheSameTextAsTheScreen() {
     assertEquals("서연 님이 픽업 위치를 확인했어요", PickupPrompts.announcement(Announcement.LinkChecked(seoyeon)).text)
     assertEquals("arriving_soon_sent", PickupPrompts.announcement(Announcement.ArrivingSoonSent(seoyeon)).assetName)
-    assertEquals("탑승을 확인했어요. 안내를 종료할게요", PickupPrompts.announcement(Announcement.Boarded()).text)
+    assertEquals("탑승을 확인했어요. 5초 뒤 기본 내비로 연결할게요.", PickupPrompts.announcement(Announcement.Boarded(destinationName = null)).text)
+    assertEquals("boarded_to_destination", PickupPrompts.announcement(Announcement.Boarded(destinationName = "연남동 00 식당")).assetName)
   }
 }

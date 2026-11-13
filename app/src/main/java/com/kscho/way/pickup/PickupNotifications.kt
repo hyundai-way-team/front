@@ -22,6 +22,7 @@ import com.kscho.way.domain.model.Contact
 object PickupNotifications {
   const val ONGOING_ID = 1001
   const val CALL_OFFER_ID = 1002
+  const val NAVI_ID = 1003
   private const val TEXT_ID_BASE = 1010
 
   /** 문자마다 다른 알림(출발·도착 시간 변경·곧 도착이 서로 덮지 않게). */
@@ -114,6 +115,22 @@ object PickupNotifications {
       .setAutoCancel(true)
       .build()
   }
+
+  /**
+   * D-11 목적지 없음 · Way 가 화면 뒤(예: 동승자와 통화 중)라 기본 내비를 직접 못 띄울 때 — 누르면 내비가 열린다.
+   * 헤드업으로 뜨는 category 중 navigation 을 쓴다. 1분 뒤엔 지운다(지난 픽업 일).
+   */
+  fun naviNeeded(context: Context, open: Intent): Notification =
+    NotificationCompat.Builder(context, CHANNEL_ASK)
+      .setSmallIcon(android.R.drawable.ic_dialog_map)
+      .setContentTitle("기본 내비로 연결하기")
+      .setContentText("누르면 내비가 열려요. 음성으로 목적지를 설정할 수 있어요.")
+      .setPriority(NotificationCompat.PRIORITY_HIGH)
+      .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
+      .setContentIntent(PendingIntent.getActivity(context, NAVI_ID, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+      .setAutoCancel(true)
+      .setTimeoutAfter(60_000)
+      .build()
 
   /** 알림을 누르는 건 사용자 동작이라, Way 가 뒤에 있어도 전화 화면이 열린다. */
   private fun dial(context: Context, passenger: Contact): PendingIntent =

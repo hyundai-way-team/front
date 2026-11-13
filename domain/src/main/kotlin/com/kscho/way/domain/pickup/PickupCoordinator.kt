@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -56,9 +57,9 @@ class PickupCoordinator(
   private var events = Channel<PickupEvent>(Channel.UNLIMITED)
   private var job: Job? = null
   private var lastDriverReportAt: Long? = null
-  /** 탑승 뒤 목적지 안내를 내비에 넘겼는지(한 번만). */
+  /** 탑승 뒤 다음으로 이었는지 — 목적지 안내를 넘겼거나 기본 내비를 띄웠다(한 번만). */
   private var handedOver = false
-  /** 탑승 [PickupPolicy.DESTINATION_HANDOVER_SECONDS] 초 뒤 목적지 안내를 넘기고 픽업을 닫는 일. */
+  /** 탑승 [PickupPolicy.CONNECT_AFTER_BOARDING_SECONDS] 초 뒤 다음으로 잇고 픽업을 닫는 일(D-11). */
   private var autoHandOver: Job? = null
 
   /** 탑승 전인 픽업이 있는지. */
@@ -114,10 +115,10 @@ class PickupCoordinator(
   }
 
   /**
-   * D-10: 정해 둔 목적지 안내를 Pleos 내비에 넘긴다('탑승 완료' 버튼 · 10초 카운트다운). 넘겼으면 true.
-   * 탑승 전이거나 목적지가 없거나 이미 넘겼으면 아무것도 하지 않는다.
+   * 정해 둔 목적지 안내를 Pleos 내비에 넘긴다. 넘겼으면 true.
+   * 탑승 전이거나 목적지가 없거나 이미 넘겼으면 아무것도 하지 않는다. 픽업은 닫지 않는다 — 닫으며 넘기려면 [connectNext].
    */
-  @Synchronized // 화면('탑승 완료')과 10초 타이머가 다른 스레드에서 겹쳐도 한 번만
+  @Synchronized // 화면 버튼과 5초 타이머가 다른 스레드에서 겹쳐도 한 번만
   fun continueToDestination(): Boolean {
     val s = _state.value ?: return false
     val destination = s.plan.destination ?: return false
@@ -127,13 +128,57 @@ class PickupCoordinator(
     return true
   }
 
-  /** 안내 종료 화면을 닫는다(또는 픽업을 접는다). 목적지를 정해 두고 아직 넘기지 않았으면 넘긴다. */
+  /**
+   * D-11 '안내 시작' · '지금 연결' · 5초가 지났을 때: 탑승 뒤 다음으로 잇고 픽업을 닫는다.
+   * 목적지가 있으면 그곳 안내를 Pleos 내비에 넘기고, 없으면 기본 내비를 띄운다. 탑승 전이면 아무것도 하지 않는다.
+   */
+  @Synchronized
+  fun connectNext() {
+    val s = _state.value ?: return
+    // '취소'한 뒤엔 잇지 않는다 — 5초 타이머가 '취소'와 겹쳐 늦게 들어와도
+    if (!s.isBoarded || s.nextCanceled) return
+    autoHandOver?.cancel()
+    autoHandOver = null
+    if (s.plan.destination != null) {
+      continueToDestination()
+    } else if (!handedOver) {
+      handedOver = true
+      // 픽업 위치 안내를 거두고(이때 내비가 앞으로 나온다) 기본 내비로
+      navigator.stopGuidance()
+      try {
+        navigator.openNavi()
+      } catch (e: Exception) {
+        onError("기본 내비 연결", e)
+      }
+    }
+    stopListening()
+    _state.value = null
+  }
+
+  /**
+   * D-11 '취소': 5초 뒤 잇지 않고 D-10 에 남는다. 이후 [finish] 로 닫아도 목적지 안내·내비 연결은 하지 않는다.
+   * 정차 전에 탔다면 아직 켜진 픽업 위치 안내는 D-10 을 닫을 때 거둔다 — 지금 거두면 Pleos 내비가 앞으로 나와 D-10 을 가린다.
+   */
+  @Synchronized
+  fun cancelNext() {
+    val s = _state.value ?: return
+    if (!s.isBoarded || s.nextCanceled || handedOver) return
+    autoHandOver?.cancel()
+    autoHandOver = null
+    val said = Announcement.GuidanceEnded
+    _state.update { it?.copy(nextCanceled = true, lastAnnouncement = SpokenAnnouncement(said, clock())) }
+    _effects.tryEmit(PickupEffect.Announce(said))
+  }
+
+  /** 안내 종료 화면을 닫는다(또는 픽업을 접는다). 탑승 뒤 '취소'하지 않았으면 다음으로 이으며 닫는다([connectNext]). */
   @Synchronized
   fun finish() {
     autoHandOver?.cancel()
     autoHandOver = null
-    continueToDestination()
-    val wasActive = hasActivePickup
+    val s = _state.value
+    if (s != null && s.isBoarded && !s.nextCanceled) return connectNext()
+    // 탑승 전(픽업 접기) · D-11 '취소' 뒤 D-10 닫기 — 남은 픽업 위치 안내를 거둔다(이미 도착해 끝났으면 내비가 알아서 넘긴다)
+    val wasActive = hasActivePickup || s?.nextCanceled == true
     stopListening()
     if (wasActive) navigator.stopGuidance()
     _state.value = null
@@ -173,20 +218,38 @@ class PickupCoordinator(
     todo.forEach { run(next, it) }
     if (next.isBoarded && !current.isBoarded) {
       stopListening()
-      // 목적지가 없으면 픽업 안내를 끝낸다. 있으면 D-10 에서 운전자('탑승 완료')를 기다리되, 10초가 지나면 스스로 넘긴다.
-      // 화면이 아니라 여기서 센다 — 실차에선 Pleos 내비가 앞에 있어 Way 화면(D-10)이 멈춰 있다.
-      if (next.plan.destination == null) navigator.stopGuidance() else scheduleHandOver(next.boardedAtMillis ?: now)
+      // D-11: 5초 뒤 다음으로 잇는다 — 목적지가 있으면 그곳 안내를 넘기고(걸리는 시간은 지금 내비에 묻는다), 없으면 기본 내비로.
+      // 픽업 위치 안내는 그때 거둔다: 거두면 Pleos 내비가 앞으로 나와 D-11(5초·취소)을 가린다.
+      // 5초는 화면이 아니라 여기서 센다 — 실차에선 Pleos 내비가 앞에 있어 Way 화면이 멈춰 있기도 하다.
+      next.plan.destination?.let { estimateDestination(next.id, it) }
+      scheduleConnect(next.boardedAtMillis ?: now)
     }
   }
 
-  private fun scheduleHandOver(boardedAt: Long) {
+  private fun scheduleConnect(boardedAt: Long) {
     autoHandOver?.cancel()
     autoHandOver =
       scope.launch {
-        delay((boardedAt + PickupPolicy.DESTINATION_HANDOVER_SECONDS * 1000L - clock()).coerceAtLeast(0))
+        delay((boardedAt + PickupPolicy.CONNECT_AFTER_BOARDING_SECONDS * 1000L - clock()).coerceAtLeast(0))
         autoHandOver = null
-        finish()
+        connectNext()
       }
+  }
+
+  /** D-11 '10:05 도착 예정 (약 15분)' — 탑승한 자리에서 목적지까지. 내비가 답하지 않으면 비워 둔다(화면은 그 줄을 빼고 보여 준다). */
+  private fun estimateDestination(pickupId: String, destination: Place) {
+    scope.launch {
+      val trip =
+        try {
+          navigator.preview(destination.location, destination.name)
+        } catch (e: Exception) {
+          if (e is CancellationException) throw e
+          onError("목적지 도착 예정", e)
+          return@launch
+        }
+      val arrivalAt = clock() + trip.durationSeconds * 1000L
+      _state.update { s -> if (s?.id == pickupId) s.copy(destinationTripSeconds = trip.durationSeconds, destinationArrivalAtMillis = arrivalAt) else s }
+    }
   }
 
   private fun reportDriver(state: PickupState, now: Long) {

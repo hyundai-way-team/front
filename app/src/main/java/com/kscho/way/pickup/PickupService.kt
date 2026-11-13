@@ -17,7 +17,6 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.kscho.way.WayApp
 import com.kscho.way.domain.model.Contact
-import com.kscho.way.domain.pickup.Announcement
 import com.kscho.way.domain.pickup.PickupEffect
 import com.kscho.way.domain.pickup.PickupState
 import com.kscho.way.voice.AskOutcome
@@ -26,6 +25,7 @@ import com.kscho.way.voice.PleosAnswerListener
 import com.kscho.way.voice.SpokenPrompt
 import com.kscho.way.voice.VoiceQuestion
 import kotlin.coroutines.resume
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
@@ -55,6 +55,9 @@ class PickupService : Service() {
   /** '픽업 중' 알림에 지금 보이는 내용 — 바뀔 때만 다시 올린다. */
   private var shownOngoing: Pair<String, String>? = null
   private var stopAfterSpeech = false
+  /** 지금 말하고 있는 안내. */
+  private var speaking: Job? = null
+  private val stopAnyway = Runnable { stopSelf() }
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -74,12 +77,20 @@ class PickupService : Service() {
     question = VoiceQuestion(player, listener)
     scope.launch { coordinator.state.collect(::onState) }
     scope.launch { coordinator.effects.collect(::onEffect) }
-    scope.launch { for (prompt in speech) speak(prompt) }
+    scope.launch {
+      for (prompt in speech) {
+        // 따로 띄워 두면 '취소' 때 하던 말만 끊을 수 있다(SpeechPlan.INTERRUPT)
+        val job = launch { speak(prompt) }
+        speaking = job
+        job.join()
+      }
+    }
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY
 
   override fun onDestroy() {
+    main.removeCallbacks(stopAnyway)
     question.cancel()
     abandonFocus()
     player.release()
@@ -92,17 +103,21 @@ class PickupService : Service() {
 
   private fun onState(state: PickupState?) {
     if (state == null) {
-      Log.i(TAG, "픽업 끝 — 서비스 멈춤")
-      stopSelf()
+      // 5초 뒤 넘기며 닫혀도 하던 탑승 안내는 마저 말하고 멈춘다
+      Log.i(TAG, "픽업 끝 — 하던 안내를 마치고 서비스 멈춤")
+      question.cancel()
+      run(SpeechPlan.onPickupClosed(), prompt = null)
+      main.removeCallbacks(stopAnyway)
+      main.postDelayed(stopAnyway, 15_000) // 안내가 끝 신호를 못 받아도
       return
     }
     if (state.isBoarded) {
       question.cancel()
       notifications().cancel(PickupNotifications.CALL_OFFER_ID)
       PickupNotifications.TEXT_IDS.forEach(notifications()::cancel)
-      // 탑승 안내를 마저 말하고 멈춘다(onEffect 의 Boarded)
-      stopAfterSpeech = true
-      main.postDelayed({ stopSelf() }, 15_000) // 안내가 끝 신호를 못 받아도
+      // D-11 5초의 결과(닫힘 · '취소')를 기다렸다 멈춘다 — SpeechPlan
+      main.removeCallbacks(stopAnyway)
+      main.postDelayed(stopAnyway, 20_000) // 끝 신호를 못 받아도
       return
     }
     val ongoing = state.plan.passenger.callName to state.plan.pickupPoint.description.title
@@ -116,11 +131,27 @@ class PickupService : Service() {
     when (effect) {
       is PickupEffect.Announce -> {
         Log.i(TAG, "음성 안내: ${effect.announcement.text}")
-        speech.trySend(PickupPrompts.announcement(effect.announcement))
-        if (effect.announcement is Announcement.Boarded) speech.trySend(STOP)
+        run(SpeechPlan.onAnnounce(effect.announcement), PickupPrompts.announcement(effect.announcement))
       }
       is PickupEffect.OfferCall -> offerCall(effect.announcement.passenger)
       else -> Unit
+    }
+  }
+
+  private fun run(steps: List<SpeechPlan.Step>, prompt: SpokenPrompt?) {
+    for (step in steps) {
+      when (step) {
+        SpeechPlan.Step.INTERRUPT -> {
+          // 아직 말하지 않은 줄(낡은 탑승 안내 등)도 버린다
+          while (speech.tryReceive().isSuccess) Unit
+          if (!question.isAsking) speaking?.cancel()
+        }
+        SpeechPlan.Step.SAY -> prompt?.let { speech.trySend(it) }
+        SpeechPlan.Step.STOP_AFTER -> {
+          stopAfterSpeech = true
+          speech.trySend(STOP)
+        }
+      }
     }
   }
 

@@ -165,16 +165,17 @@ class PickupRulesTest {
     assertEquals(38, outcome.waitedSeconds)
     assertEquals(0, outcome.pickupLocationChanges)
     assertEquals(BoardingSource.DOOR, outcome.boardingSource)
-    assertEquals("탑승을 확인했어요. 안내를 종료할게요", effects.filterIsInstance<PickupEffect.Announce>().single().announcement.text)
+    // D-11: 목적지가 없으면 5초 뒤 기본 내비로 잇는다
+    assertEquals("탑승을 확인했어요. 5초 뒤 기본 내비로 연결할게요.", effects.filterIsInstance<PickupEffect.Announce>().single().announcement.text)
   }
 
   @Test
   fun boarding_withDestination_saysDestinationGuidanceFollows() {
-    // D-10: 목적지를 정해 뒀으면 '안내 종료'가 아니라 곧 목적지 안내로 넘어간다고 말한다
+    // D-11: 목적지를 정해 뒀으면 5초 뒤 그곳으로 안내를 시작한다고 말한다(이름에 맞는 조사)
     val dest = Place("p-dest", "연남동 00 식당", "서울 마포구 연남동", LatLng(37.5620, 126.9250))
     val withDestination = start.copy(plan = start.plan.copy(destination = dest))
     val (state, effects) = reduceAll(withDestination, PickupEvent.Boarded(60_000L, BoardingSource.DOOR) to 60_000L)
-    val said = "탑승을 확인했어요. 10초 뒤 목적지 안내를 시작할게요"
+    val said = "탑승을 확인했어요. 5초 뒤 연남동 00 식당으로 안내를 시작할게요."
     assertEquals(said, effects.filterIsInstance<PickupEffect.Announce>().single().announcement.text)
     assertEquals(said, state.lastAnnouncement?.announcement?.text) // 화면 음성 배너도 같은 말
   }
