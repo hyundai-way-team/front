@@ -12,6 +12,7 @@ import com.kscho.way.domain.model.LocationSharing
 import com.kscho.way.domain.model.PassengerStatus
 import com.kscho.way.domain.model.Place
 import com.kscho.way.domain.model.RestrictedZone
+import com.kscho.way.domain.model.WalkRoute
 import com.kscho.way.domain.model.ZoneSchedule
 import java.time.DayOfWeek
 
@@ -44,4 +45,5 @@ internal fun PassengerStatusDto.toDomain() =
       },
     location = location?.toDomain(),
     late = late,
+    walk = walk?.let { w -> WalkRoute(w.path.map { it.toDomain() }, w.meters, w.seconds) },
   )

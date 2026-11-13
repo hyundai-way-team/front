@@ -176,7 +176,10 @@ fun DriveScreen(onClosed: () -> Unit) {
           buildList {
             if (driving && car != null) add(MapLine(remainingPath(s), WayColors.Blue, 7f))
             val passenger = s.passenger.location
-            if (!s.isBoarded && passenger != null) add(MapLine(listOf(passenger, pickup), WayColors.Passenger, 3f, dashed = true))
+            // 동승자 걷는 길 — 서버가 지도 도로선으로 찾은 것(동승자 웹 P-05 와 같은 경로). 아직 없으면 곧은 점선
+            val walk = s.passenger.walk
+            if (!s.isBoarded && walk != null) add(MapLine(walk.path, WayColors.Passenger, 5f))
+            else if (!s.isBoarded && passenger != null) add(MapLine(listOf(passenger, pickup), WayColors.Passenger, 3f, dashed = true))
           },
         pins =
           buildList {
@@ -391,11 +394,13 @@ private fun StoppedCard(s: PickupState) {
 private fun PassengerRouteCard(s: PickupState) {
   val name = s.plan.passenger.callName
   val meters = s.passengerDistanceMeters ?: return
+  // 걷는 길을 찾았으면 그 시간(동승자 화면의 '도보 N분'과 같다)
+  val minutes = s.passenger.walk?.let { ceil(it.seconds / 60.0).toInt().coerceAtLeast(1) } ?: walkMinutes(meters)
   Row(Modifier.fillMaxWidth().glass().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
     Icon(painterResource(R.drawable.ic_check_small), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(24.dp))
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
       Text(if (s.passenger.late) "$name 님이 조금 늦는다고 알렸어요" else "$name 님이 경로를 확인했어요", style = WayType.LMedium, color = WayColors.Primary500)
-      Text(if (meters <= 10) "픽업 위치에 도착했어요" else "도보 ${walkMinutes(meters)}분 거리", style = WayType.TitleL, color = WayColors.Grey900)
+      Text(if (meters <= 10) "픽업 위치에 도착했어요" else "도보 ${minutes}분 거리", style = WayType.TitleL, color = WayColors.Grey900)
     }
   }
 }

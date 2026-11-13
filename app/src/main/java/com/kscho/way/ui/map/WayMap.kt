@@ -46,14 +46,16 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.Geo
+import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.RestrictedZone
 import com.kscho.way.theme.WayColors
 import kotlin.math.cos
 import kotlin.math.ln
+import kotlin.math.roundToInt
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraUpdateFactory
+import org.maplibre.android.geometry.LatLng as MapLatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
@@ -70,7 +72,6 @@ import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
 import org.maplibre.geojson.Polygon
-import org.maplibre.android.geometry.LatLng as MapLatLng
 
 enum class PinKind {
   CAR,
@@ -121,6 +122,8 @@ fun WayMap(
   centerPin: MapPin? = null,
   onCenterSettled: ((LatLng) -> Unit)? = null,
   showZoomButtons: Boolean = false,
+  /** 지도가 멈출 때마다 화면 가운데와 보이는 반지름(m, 가운데 → 가장 먼 모서리) — 보이는 곳의 정차 금지 구간을 다시 받게. */
+  onVisibleAreaSettled: ((LatLng, Int) -> Unit)? = null,
 ) {
   val context = LocalContext.current
   val composeDensity = LocalDensity.current.density
@@ -167,9 +170,23 @@ fun WayMap(
   LaunchedEffect(style, pins) { style?.getSourceAs<GeoJsonSource>(SRC_PINS)?.setGeoJson(pinsGeoJson(pins)) }
 
   val settled by rememberUpdatedState(onCenterSettled)
+  val areaSettled by rememberUpdatedState(onVisibleAreaSettled)
   DisposableEffect(map) {
     val m = map ?: return@DisposableEffect onDispose {}
-    val listener = MapLibreMap.OnCameraIdleListener { m.cameraPosition.target?.let { settled?.invoke(LatLng(it.latitude, it.longitude)) } }
+    val listener =
+      MapLibreMap.OnCameraIdleListener {
+        val target = m.cameraPosition.target ?: return@OnCameraIdleListener
+        val here = LatLng(target.latitude, target.longitude)
+        settled?.invoke(here)
+        // 처음 자리를 잡기 전(바다 한가운데 0,0) 멈춤은 알리지 않는다
+        if (!cameraPlaced) return@OnCameraIdleListener
+        areaSettled?.let { report ->
+          val r = m.projection.visibleRegion
+          val corners = listOf(r.farLeft, r.farRight, r.nearLeft, r.nearRight).mapNotNull { it }
+          val radius = corners.maxOfOrNull { Geo.distanceMeters(here, LatLng(it.latitude, it.longitude)) } ?: return@let
+          report(here, radius.roundToInt())
+        }
+      }
     m.addOnCameraIdleListener(listener)
     onDispose { m.removeOnCameraIdleListener(listener) }
   }
@@ -192,7 +209,7 @@ fun WayMap(
         ) {
           Box(Modifier.size(width = 22.dp, height = 6.dp).clip(RoundedCornerShape(3.dp)).background(WayColors.Red))
           Spacer(Modifier.width(8.dp))
-          Text("정차 금지 구간", fontSize = 14.sp, color = WayColors.Ink)
+          Text("주정차 금지 구간", fontSize = 14.sp, color = WayColors.Ink)
         }
         Spacer(Modifier.size(6.dp))
       }
@@ -348,6 +365,25 @@ private fun addWayLayers(style: Style, context: Context) {
       .withFilter(Expression.eq(Expression.geometryType(), Expression.literal("Polygon")))
       .withProperties(PropertyFactory.lineColor(WayColors.Red.toArgb()), PropertyFactory.lineWidth(2f), PropertyFactory.lineOpacity(0.9f))
   )
+  // 선 구간: 판정 띠(선 둘레 구간마다의 반폭 radius — StopRestrictionRules 와 같다)를 실제 축척으로 옅게 칠하고 그 위에 빨간 선.
+  // 둥근 끝이라 양 끝도 판정처럼 반폭만큼 더 나간다. 화면에서 띠에 닿지 않은 핀은 정차 금지가 아니다.
+  style.addLayer(
+    LineLayer("way-zone-bands", SRC_ZONES)
+      .withFilter(Expression.eq(Expression.geometryType(), Expression.literal("LineString")))
+      .withProperties(
+        PropertyFactory.lineColor(WayColors.Red.toArgb()),
+        PropertyFactory.lineOpacity(0.18f),
+        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+        PropertyFactory.lineWidth(
+          Expression.interpolate(
+            Expression.exponential(2f),
+            Expression.zoom(),
+            Expression.stop(10, Expression.product(Expression.get("radius"), Expression.literal(metersToDp(2.0, 10.0)))),
+            Expression.stop(22, Expression.product(Expression.get("radius"), Expression.literal(metersToDp(2.0, 22.0)))),
+          )
+        ),
+      )
+  )
   style.addLayer(
     LineLayer("way-zones", SRC_ZONES)
       .withFilter(Expression.eq(Expression.geometryType(), Expression.literal("LineString")))
@@ -470,11 +506,15 @@ private fun iconBitmap(kind: PinKind, density: Float): Bitmap {
 }
 
 /** 길가 구간은 선, 점 구간(정류장 등)은 반지름만큼의 원(지도 축척과 같이 커진다). */
+/** 줌 [zoom] 에서 [meters] 가 지도 위 몇 dp 인지(MapLibre 타일 512 · 서울 위도). */
+private fun metersToDp(meters: Double, zoom: Double): Float =
+  (meters / (40_075_016.686 * cos(Math.toRadians(37.55)) / (512.0 * Math.pow(2.0, zoom)))).toFloat()
+
 private fun zonesGeoJson(zones: List<RestrictedZone>): FeatureCollection =
   FeatureCollection.fromFeatures(
     zones.mapNotNull { z ->
       when {
-        z.path.size >= 2 -> Feature.fromGeometry(LineString.fromLngLats(z.path.map { p -> p.point() }))
+        z.path.size >= 2 -> Feature.fromGeometry(LineString.fromLngLats(z.path.map { p -> p.point() })).apply { addNumberProperty("radius", z.radiusMeters) }
         z.path.size == 1 -> Feature.fromGeometry(Polygon.fromLngLats(listOf(Geo.circle(z.path.single(), z.radiusMeters).map { p -> p.point() })))
         else -> null
       }

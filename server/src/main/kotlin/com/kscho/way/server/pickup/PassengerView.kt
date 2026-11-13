@@ -1,6 +1,7 @@
 package com.kscho.way.server.pickup
 
 import com.kscho.way.data.remote.LatLngDto
+import com.kscho.way.data.remote.WalkRouteDto
 import kotlinx.serialization.Serializable
 
 // 동승자 웹이 받는 화면 상태(JSON). 시간은 epoch ms, 타이머는 서버 시계 기준(serverNow 로 웹 시계를 맞춘다).
@@ -39,6 +40,10 @@ data class PassengerViewDto(
   val me: LatLngDto? = null,
   /** '늦어요'를 이미 보냈는지 */
   val late: Boolean = false,
+  /** 내 위치 → 픽업 위치 걷는 길(P-04a·P-05). 위치를 공유하지 않거나 아직 못 찾았으면 null */
+  val walk: WalkRouteDto? = null,
+  /** 지금 자리에선 걷는 길을 못 찾았다(공개 경로 서버가 못 찾음·3 km 넘게 멂) — '경로 안내'를 거두고 '찾고 있어요'를 띄우지 않는다 */
+  val walkFailed: Boolean = false,
 )
 
 @Serializable data class SharingRequest(val allow: Boolean)

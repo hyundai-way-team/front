@@ -63,10 +63,9 @@ class HttpWayApiContractTest {
     assertEquals("신촌 XX 빌라", api.searchPlaces("xx").first().name)
     val here = LatLngDto(MockWorld.VILLA_ALLEY_ENTRANCE.latitude, MockWorld.VILLA_ALLEY_ENTRANCE.longitude)
     assertEquals("신촌 XX 빌라 골목 입구 앞", api.describeLocation(here).title)
-    // 정차 금지 구간은 데이터로만(반경·시간) — 지도에 그리기·판단은 앱
+    // 정차 금지 구간은 데이터로만 — 실제 버스정류장 좌표(국토교통부 공공데이터) 둘레 10 m. 그리기·판단은 앱
     val zones = api.stopZones(here, 300)
-    assertEquals(12.0, zones.first { it.id == "bus-stop" }.radiusMeters, 0.0)
-    assertEquals(7 * 60, zones.first { it.id == "south-curb" }.startMinute)
+    assertTrue(zones.isNotEmpty() && zones.all { it.id.startsWith("bus-") && it.path.size == 1 && it.radiusMeters == 10.0 })
   }
 
   @Test

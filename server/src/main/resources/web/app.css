@@ -1,4 +1,4 @@
-/* WAY 동승자 웹 — 와이어프레임 v2(P-01·P-02 디자인 토큰)를 기준으로 P-03~P-06 도 같은 토큰으로 맞춘다. */
+/* WAY 동승자 웹 — 피그마 와이어프레임 v2(P-01~P-06) 토큰·간격 그대로. 화면 위 여백만 브라우저에 맞춰 24px(피그마 56px 은 상태 표시줄 포함). */
 
 @font-face {
   font-family: "Pretendard Variable";
@@ -11,6 +11,7 @@
 :root {
   --primary-500: #3b67f6;
   --primary-200: #bfcefe;
+  --primary-100: #dbe3fe;
   --primary-50: #f5f7ff;
   --grey-100: #f4f8fc;
   --grey-200: #e2e8f0;
@@ -18,6 +19,9 @@
   --grey-400: #94a3b8;
   --grey-500: #64748b;
   --grey-700: #334155;
+  --grey-900: #0f172a;
+  --warning-50: #fffbeb;
+  --warning-700: #b45309;
   --black: #000;
   --ink: #1f2328;
   --white: #fff;
@@ -25,17 +29,17 @@
   --warn-bg: #fcefe3;
   --warn-line: #e3b98c;
   --warn-ink: #8a4b12;
-  --ring: #d6deec;
-  --tile: #e6e8ec;
-  --grey-900: #0f172a;
-  --warning-700: #b45309;
-  --warn-bg-v2: #fffbeb;
+  --placeholder: #d9d9d9;
   --map-bg: #eef0f2;
   color-scheme: light;
 }
 
 * {
   box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 html,
@@ -89,11 +93,6 @@ body:has(.screen.soft) {
   background: var(--grey-100);
 }
 
-.screen.wide {
-  padding-left: 20px;
-  padding-right: 20px;
-}
-
 .stack {
   display: flex;
   flex-direction: column;
@@ -103,31 +102,47 @@ body:has(.screen.soft) {
   flex: 1 0 24px;
 }
 
+.grow-x {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* 로고(임시) — 피그마 높이 22 · 아래 20 */
 .logo {
   font-weight: 700;
   font-size: 15px;
+  line-height: 22px;
   color: var(--primary-500);
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
-/* ── 글자 */
+/* ── 글자(피그마 텍스트 스타일) */
 
 .title-xl {
   font-size: 24px;
   font-weight: 700;
   line-height: 1.4;
   letter-spacing: -0.02em;
+  color: var(--black);
 }
 
-.title-l {
-  font-size: 22px;
+.title-m {
+  font-size: 20px;
   font-weight: 600;
   line-height: 1.4;
   letter-spacing: -0.02em;
+  color: var(--black);
 }
 
 .m-regular {
   font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+}
+
+.m-semibold {
+  font-size: 16px;
+  font-weight: 600;
   line-height: 1.5;
   letter-spacing: -0.02em;
 }
@@ -150,11 +165,23 @@ body:has(.screen.soft) {
   color: var(--grey-500);
 }
 
+.ink {
+  color: var(--grey-900);
+}
+
 .center {
   text-align: center;
 }
 
-/* ── 버튼 */
+.note {
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+  color: var(--grey-400);
+  text-align: center;
+}
+
+/* ── 버튼(Action Button) */
 
 .btn {
   width: 100%;
@@ -167,6 +194,7 @@ body:has(.screen.soft) {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   padding: 12px 16px;
 }
 
@@ -175,12 +203,23 @@ body:has(.screen.soft) {
   color: var(--white);
 }
 
-.btn.primary:active {
-  filter: brightness(0.94);
+.btn.ghost {
+  background: var(--white);
+  color: var(--grey-500);
 }
 
-.btn.ghost {
-  color: var(--grey-500);
+.btn.outline-primary {
+  background: var(--white);
+  border: 1px solid var(--primary-500);
+  color: var(--primary-500);
+}
+
+.btn img {
+  flex: none;
+}
+
+.btn:active {
+  filter: brightness(0.94);
 }
 
 .btn[disabled] {
@@ -188,41 +227,12 @@ body:has(.screen.soft) {
   cursor: default;
 }
 
-/* ── 카드(P-01) */
-
-.eta-box {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--primary-50);
-  border: 1px solid var(--primary-200);
-  border-radius: 12px;
-  padding: 12px 16px;
-}
-
-.eta-box .label {
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.5;
-  letter-spacing: -0.02em;
-  color: var(--grey-700);
-}
-
-.eta-box .value {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 22px;
-  font-weight: 600;
-  line-height: 1.4;
-  letter-spacing: -0.02em;
-  color: var(--primary-500);
-}
+/* ── 카드 */
 
 .card {
   background: var(--white);
   border: 1px solid var(--grey-200);
-  border-radius: 14px;
+  border-radius: 20px;
 }
 
 .card-head {
@@ -237,10 +247,40 @@ body:has(.screen.soft) {
 }
 
 .card-head img {
+  flex: none;
   width: 20px;
   height: 20px;
 }
 
+/* P-01 도착 예정 시간 */
+.eta-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--primary-50);
+  border-radius: 16px;
+  padding: 12px 16px;
+}
+
+.eta-box .label {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  color: var(--grey-700);
+}
+
+.eta-box .value {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+  color: var(--primary-500);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 탑승 차량 카드 */
 .vehicle-card {
   padding: 16px;
   display: flex;
@@ -274,18 +314,12 @@ body:has(.screen.soft) {
   mask: url("/web/icons/car.svg") center / contain no-repeat;
 }
 
-.car-tile.big {
-  width: 56px;
-  height: 56px;
-  border-radius: 10px;
-  background: var(--tile);
-}
-
 .plate {
   font-size: 22px;
   font-weight: 600;
   line-height: 1.4;
   letter-spacing: -0.02em;
+  color: var(--grey-900);
 }
 
 .vehicle-desc {
@@ -296,8 +330,13 @@ body:has(.screen.soft) {
   color: var(--grey-500);
 }
 
+/* 지도 카드 */
 .map-card {
   overflow: hidden;
+}
+
+.map-card.r14 {
+  border-radius: 14px;
 }
 
 .map-card .place {
@@ -313,6 +352,7 @@ body:has(.screen.soft) {
   font-weight: 600;
   line-height: 1.5;
   letter-spacing: -0.02em;
+  color: var(--grey-900);
 }
 
 /* ── 지도 */
@@ -327,16 +367,8 @@ body:has(.screen.soft) {
   height: 180px;
 }
 
-.map.h220 {
-  height: 220px;
-  border-radius: 14px;
-  overflow: hidden;
-}
-
-.map.h240 {
-  height: 240px;
-  border-radius: 14px;
-  overflow: hidden;
+.map.h270 {
+  height: 270px;
 }
 
 .map-chip {
@@ -347,8 +379,10 @@ body:has(.screen.soft) {
   background: var(--white);
   border-radius: 8px;
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.6;
   color: var(--grey-500);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
   pointer-events: none;
 }
 
@@ -429,7 +463,12 @@ body:has(.screen.soft) {
   font-size: 9px;
 }
 
-/* ── P-02 */
+/* ── P-02 위치 공유 허용 */
+
+/* 피그마: 로고 아래 57px 에서 시작 */
+.consent-body {
+  margin-top: 37px;
+}
 
 .status-icon {
   width: 80px;
@@ -442,6 +481,10 @@ body:has(.screen.soft) {
   margin: 0 auto;
 }
 
+.status-icon.solid {
+  background: var(--primary-500);
+}
+
 .status-icon img {
   width: 40px;
   height: 40px;
@@ -449,11 +492,15 @@ body:has(.screen.soft) {
 
 .checklist {
   background: var(--grey-100);
-  border-radius: 12px;
+  border-radius: 20px;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.checklist ul {
+  display: contents;
 }
 
 .checklist li {
@@ -467,22 +514,10 @@ body:has(.screen.soft) {
   list-style: none;
 }
 
-.checklist ul {
-  display: contents;
-}
-
 .checklist img {
   width: 24px;
   height: 24px;
   flex: none;
-}
-
-.note {
-  font-size: 14px;
-  line-height: 1.6;
-  letter-spacing: -0.01em;
-  color: var(--grey-400);
-  text-align: center;
 }
 
 .toast {
@@ -496,276 +531,12 @@ body:has(.screen.soft) {
   padding: 10px 14px;
 }
 
-/* ── P-03 대기 */
+/* ── P-03 대기 · P-04 곧 도착 */
 
-.banner-warn {
-  background: var(--warn-bg);
-  border: 1px solid var(--warn-line);
-  border-radius: 12px;
-  padding: 10px 14px;
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--warn-ink);
-}
-
-.banner-warn b {
-  font-weight: 700;
-}
-
-.eta-hero {
-  background: var(--primary-50);
-  border-radius: 16px;
-  padding: 20px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.eta-hero .who {
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--ink);
-}
-
-.eta-hero .time {
-  font-size: 56px;
-  font-weight: 700;
-  line-height: 68px;
-  color: var(--primary-500);
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-}
-
-.eta-hero .left {
-  font-size: 15px;
-  line-height: 22px;
-  color: var(--grey-500);
-}
-
-.rows {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.row {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 15px;
-  line-height: 22px;
-}
-
-.row .k {
-  color: var(--grey-500);
-  flex: none;
-}
-
-.row .v {
-  font-weight: 700;
-  color: var(--ink);
-  text-align: right;
-}
-
-.hint-box {
-  background: var(--grey-100);
-  border-radius: 10px;
-  padding: 10px;
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--grey-500);
-  text-align: center;
-}
-
-/* ── P-04 곧 도착 */
-
-.banner-blue {
-  background: var(--primary-500);
-  color: var(--white);
-  border-radius: 16px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.banner-blue .big {
-  font-size: 26px;
-  font-weight: 700;
-  line-height: 36px;
-}
-
-.banner-blue .small {
-  font-size: 15px;
-  line-height: 22px;
-}
-
-.label-13 {
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--grey-500);
-}
-
-.spot-18 {
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 26px;
-  color: var(--ink);
-}
-
-.find-car {
-  border: 2px solid var(--ink);
-  border-radius: 14px;
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.find-car .plate-big {
-  font-size: 30px;
-  font-weight: 700;
-  line-height: 38px;
-  letter-spacing: 2px;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.find-car .desc {
-  font-size: 15px;
-  line-height: 22px;
-  color: var(--grey-500);
-}
-
-/* ── P-05 타이머 */
-
-.timer-card {
-  background: var(--primary-50);
-  border-radius: 16px;
-  padding: 24px 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-.ring {
-  position: relative;
-  width: 168px;
-  height: 168px;
-}
-
-.ring svg {
-  position: absolute;
-  inset: 0;
-  transform: rotate(-90deg);
-}
-
-.ring .center {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.ring .sec {
-  font-size: 48px;
-  font-weight: 700;
-  line-height: 56px;
-  color: var(--primary-500);
-  font-variant-numeric: tabular-nums;
-}
-
-.ring .sub {
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--grey-500);
-}
-
-.timer-card.over .sec {
-  color: var(--warn-ink);
-}
-
-.timer-text {
-  text-align: center;
-}
-
-.timer-text .main {
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--ink);
-}
-
-.timer-text .sub {
-  font-size: 14px;
-  line-height: 24px;
-  color: var(--grey-500);
-}
-
-/* ── P-06 종료 */
-
-.done {
-  justify-content: center;
-  align-items: center;
-  gap: 16px;
-  text-align: center;
-}
-
-.done-icon {
-  width: 80px;
-  height: 80px;
-  border-radius: 40px;
-  background: var(--primary-500);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.done-icon img {
-  width: 40px;
-  height: 40px;
-}
-
-.done-title {
-  font-size: 26px;
-  font-weight: 700;
-  line-height: 36px;
-  color: var(--ink);
-}
-
-.done-box {
-  background: var(--grey-100);
-  border-radius: 14px;
-  padding: 16px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--ink);
-}
-
-.demo-badge {
-  position: fixed;
-  right: 8px;
-  bottom: 8px;
-  z-index: 10;
-  font-size: 11px;
-  background: var(--ink);
-  color: var(--white);
-  border-radius: 8px;
-  padding: 2px 8px;
-  opacity: 0.7;
-}
-
-/* ── v2 P-03 대기 */
-
+/* 도착 시간이 변경되었어요 — 화면 가로 끝까지 */
 .banner-changed {
-  margin: -4px -16px 20px;
-  background: var(--warn-bg-v2);
+  margin: 0 -16px 20px;
+  background: var(--warning-50);
   color: var(--warning-700);
   display: flex;
   align-items: center;
@@ -777,11 +548,8 @@ body:has(.screen.soft) {
   letter-spacing: -0.02em;
 }
 
-.banner-changed[hidden] {
-  display: none;
-}
-
 .banner-changed img {
+  flex: none;
   width: 20px;
   height: 20px;
 }
@@ -791,17 +559,31 @@ body:has(.screen.soft) {
   align-items: center;
   gap: 8px;
   background: var(--primary-50);
-  border: 1px solid var(--primary-200);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: 20px;
+  padding: 16px 20px;
 }
 
-.eta-card .who {
+.eta-card.accent {
+  border: 1px solid var(--primary-500);
+}
+
+.eta-card .who,
+.eta-head {
   font-size: 18px;
   font-weight: 600;
   line-height: 1.5;
   letter-spacing: -0.02em;
   color: var(--grey-700);
+}
+
+.eta-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.eta-head img {
+  flex: none;
 }
 
 .eta-card .time {
@@ -820,19 +602,16 @@ body:has(.screen.soft) {
   color: var(--grey-500);
 }
 
-.car-tile.hero {
+/* 그래픽 자리(디자인 그대로 회색 원) */
+.eta-graphic {
+  flex: none;
   width: 100px;
   height: 100px;
-  border-radius: 8px;
-  background: var(--grey-100);
+  border-radius: 50%;
+  background: var(--placeholder);
 }
 
-.car-tile.hero::after {
-  width: 48px;
-  height: 48px;
-}
-
-.rows-v2 {
+.rows {
   background: var(--white);
   padding: 16px;
   display: flex;
@@ -840,39 +619,204 @@ body:has(.screen.soft) {
   gap: 8px;
 }
 
-.rows-v2 .row {
+.row {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.rows-v2 .k {
+.row .k {
+  flex: none;
   font-size: 16px;
   font-weight: 500;
   line-height: 1.5;
+  letter-spacing: -0.02em;
   color: var(--grey-500);
 }
 
-.rows-v2 .v {
+.row .v {
   font-size: 18px;
   font-weight: 600;
   line-height: 1.5;
   letter-spacing: -0.02em;
   color: var(--grey-900);
+  text-align: right;
 }
 
-.note.quiet {
-  color: var(--grey-400);
+/* ── P-04a 경로 안내 */
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
 }
 
-.btn.outline {
-  height: 56px;
-  border: 1px solid var(--grey-300);
+.back {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: flex;
+}
+
+.walk-row {
   background: var(--white);
-  color: var(--grey-700);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.btn.outline[disabled] {
-  opacity: 1;
+.walk-tile {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--primary-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.walk-main {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+  color: var(--primary-500);
+}
+
+.walk-pending {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  color: var(--grey-500);
+}
+
+.guide-card {
+  background: var(--primary-50);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.guide-card > img {
+  flex: none;
+}
+
+/* ── P-05 대기 타이머 */
+
+.timer-card {
+  background: var(--primary-50);
+  border-radius: 20px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ring {
+  position: relative;
+  flex: none;
+  width: 90px;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ring svg {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+
+.ring circle {
+  fill: none;
+  stroke-width: 6.75;
+}
+
+.ring .track {
+  stroke: var(--grey-200);
+}
+
+.ring .arc {
+  stroke: var(--primary-500);
+  stroke-linecap: round;
+}
+
+.ring .sec {
+  position: relative;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+  color: var(--primary-500);
+  font-variant-numeric: tabular-nums;
+}
+
+.timer-card .main {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  color: var(--primary-500);
+}
+
+.timer-card.over .sec,
+.timer-card.over .main {
+  color: var(--warning-700);
+}
+
+.follow-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  color: var(--primary-500);
+}
+
+.follow-head img {
+  flex: none;
+}
+
+/* ── P-06 종료 — 가운데보다 조금 위(피그마: 위 138 : 아래 250) */
+
+.done-top {
+  flex: 138 0 0;
+}
+
+.done-bottom {
+  flex: 250 0 0;
+}
+
+.done-box {
   background: var(--grey-100);
-  border-color: var(--grey-100);
-  color: var(--grey-400);
+  border-radius: 20px;
+  padding: 16px;
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  color: var(--grey-700);
+  text-align: center;
+}
+
+.demo-badge {
+  position: fixed;
+  right: 8px;
+  bottom: 8px;
+  z-index: 10;
+  font-size: 11px;
+  background: var(--ink);
+  color: var(--white);
+  border-radius: 8px;
+  padding: 2px 8px;
+  opacity: 0.7;
 }

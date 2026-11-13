@@ -17,4 +17,9 @@ data class PassengerStatus(
   val location: LatLng? = null,
   /** 동승자 웹 '늦어요'를 눌렀다(와이어프레임 v2 P-03) */
   val late: Boolean = false,
+  /** 동승자 위치 → 픽업 위치 걷는 길(서버가 지도 도로선으로 찾음) — 동승자 웹 P-05 와 같은 경로. 아직 없으면 null */
+  val walk: WalkRoute? = null,
 )
+
+/** 걷는 길 — 지도에 그릴 점들과 거리·걸리는 시간. */
+data class WalkRoute(val path: List<LatLng>, val meters: Int, val seconds: Int)

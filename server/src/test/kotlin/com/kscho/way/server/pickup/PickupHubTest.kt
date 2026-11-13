@@ -9,9 +9,13 @@ import com.kscho.way.data.remote.LatLngDto
 import com.kscho.way.data.remote.NotificationRequest
 import com.kscho.way.data.remote.NotificationType
 import com.kscho.way.data.remote.SharingWire
+import com.kscho.way.data.remote.WalkRouteDto
 import com.kscho.way.data.sms.PickupTexts
 import com.kscho.way.server.sms.OutboxTextLog
+import com.kscho.way.server.walk.WalkAnswer
 import java.time.LocalDateTime
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -80,6 +84,121 @@ class PickupHubTest {
     assertTrue(status.linkOpened)
     assertEquals(SharingWire.SHARING, status.sharing)
     assertEquals(LatLngDto(37.5571, 126.942), status.location)
+  }
+
+  /** 걷는 길은 뒤에서 묻는다 — 시험에선 바로 돌게(Unconfined). */
+  private fun routed(walkRoute: suspend (LatLngDto, LatLngDto) -> WalkAnswer) =
+    PickupHub(
+      clock = { now },
+      texts = outbox,
+      linkBase = "http://x",
+      newId = { "id${nextId++}" },
+      walkRoute = walkRoute,
+      scope = CoroutineScope(Dispatchers.Unconfined),
+    )
+
+  @Test
+  fun sharingPassenger_getsAWalkingRoute_sameForDriverAndWeb() {
+    // P-04a · P-05 '이 경로를 따라 이동해 주세요' — 운전자 화면(D-08)에도 같은 경로
+    val asked = mutableListOf<Pair<LatLngDto, LatLngDto>>()
+    val hub = routed { from, to ->
+      asked += from to to
+      WalkAnswer.Found(WalkRouteDto(listOf(from, to), meters = 120, seconds = 107))
+    }
+    val response = hub.create(request)
+    val token = tokenOf(response.shareUrl)
+    hub.setSharing(token, allow = true)
+    val here = LatLngDto(37.5577, 126.942)
+    hub.updateLocation(token, here)
+
+    assertEquals(listOf(here to pickupPoint), asked)
+    val walk = hub.view(token).walk!!
+    assertEquals(120, walk.meters)
+    assertEquals(walk, hub.passengerStatus(response.pickupId).walk)
+
+    // 몇 m 안 움직이면 다시 묻지 않는다(위치는 1초마다 온다) — 경로 시작만 지금 자리로
+    val step = LatLngDto(37.55772, 126.942)
+    hub.updateLocation(token, step)
+    assertEquals(1, asked.size)
+    assertEquals(step, hub.view(token).walk!!.path.first())
+    hub.updateLocation(token, LatLngDto(37.5575, 126.942)) // 약 22 m
+    assertEquals(2, asked.size)
+
+    // 탑승하면 경로도 끝
+    hub.complete(response.pickupId, CompletePickupRequest(boarded = true, boardedAtEpochMillis = now, waitedSeconds = 10, pickupLocationChanges = 0, boardingSource = "DOOR"))
+    assertNull(hub.view(token).walk)
+  }
+
+  @Test
+  fun noRoute_isRemembered_soTheFreeServiceIsNotAskedEverySecond() {
+    var asked = 0
+    val hub = routed { _, _ ->
+      asked++
+      WalkAnswer.NoRoute
+    }
+    val token = tokenOf(hub.create(request).shareUrl)
+    hub.setSharing(token, allow = true)
+    hub.updateLocation(token, LatLngDto(37.5577, 126.942))
+    hub.updateLocation(token, LatLngDto(37.55772, 126.942))
+    assertEquals(1, asked)
+    // 웹은 '경로 안내'·'경로를 찾고 있어요'를 거둔다
+    assertTrue(hub.view(token).walkFailed)
+    assertNull(hub.view(token).walk)
+  }
+
+  @Test
+  fun farAway_isNotAsked() {
+    // 3 km 넘게 떨어진 동승자(아직 집·지하철)는 걷는 안내가 아니라 묻지 않는다
+    var asked = 0
+    val hub = routed { _, _ ->
+      asked++
+      WalkAnswer.NoRoute
+    }
+    val token = tokenOf(hub.create(request).shareUrl)
+    hub.setSharing(token, allow = true)
+    hub.updateLocation(token, LatLngDto(37.60, 126.942))
+    assertEquals(0, asked)
+    assertTrue(hub.view(token).walkFailed)
+  }
+
+  @Test
+  fun serviceBusy_keepsTheLastRoute_andAsksAgainLater() {
+    // 공개 경로 서버가 잠깐 바쁘거나 늦으면(429·5xx·시간 초과) '길 없음'으로 굳히지 않는다 — 찾아 둔 길은 그대로, 20초 뒤 다시
+    var answer: WalkAnswer = WalkAnswer.Found(WalkRouteDto(listOf(pickupPoint, pickupPoint), 120, 107))
+    var asked = 0
+    val hub = routed { _, _ ->
+      asked++
+      answer
+    }
+    val token = tokenOf(hub.create(request).shareUrl)
+    hub.setSharing(token, allow = true)
+    hub.updateLocation(token, LatLngDto(37.5577, 126.942))
+    answer = WalkAnswer.Unavailable
+    hub.updateLocation(token, LatLngDto(37.5575, 126.942)) // 22 m — 다시 묻지만 바쁨
+    assertEquals(2, asked)
+    assertEquals(120, hub.view(token).walk!!.meters)
+    assertFalse(hub.view(token).walkFailed)
+
+    // 움직이지 않아도 잠시 뒤 다시 묻는다(가만히 기다리는 동승자)
+    hub.updateLocation(token, LatLngDto(37.55751, 126.942))
+    assertEquals(2, asked) // 아직 20초 안
+    now += PickupHub.WALK_RETRY_MILLIS
+    answer = WalkAnswer.Found(WalkRouteDto(listOf(pickupPoint, pickupPoint), 100, 90))
+    hub.updateLocation(token, LatLngDto(37.55751, 126.942))
+    assertEquals(3, asked)
+    assertEquals(100, hub.view(token).walk!!.meters)
+  }
+
+  @Test
+  fun stoppingSharing_dropsTheRoute() {
+    val hub = routed { from, to -> WalkAnswer.Found(WalkRouteDto(listOf(from, to), 50, 45)) }
+    val response = hub.create(request)
+    val token = tokenOf(response.shareUrl)
+    hub.setSharing(token, allow = true)
+    hub.updateLocation(token, LatLngDto(37.5571, 126.942))
+    hub.setSharing(token, allow = false)
+    assertNull(hub.view(token).walk)
+    assertNull(hub.passengerStatus(response.pickupId).walk)
   }
 
   @Test

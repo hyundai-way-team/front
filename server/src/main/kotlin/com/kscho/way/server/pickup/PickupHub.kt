@@ -11,19 +11,24 @@ import com.kscho.way.data.remote.NotificationRequest
 import com.kscho.way.data.remote.NotificationType
 import com.kscho.way.data.remote.PassengerStatusDto
 import com.kscho.way.data.remote.SharingWire
+import com.kscho.way.data.remote.WalkRouteDto
 import com.kscho.way.data.sms.PickupTexts
 import com.kscho.way.server.sms.TextLog
+import com.kscho.way.server.walk.OsmWalkRoutes
+import com.kscho.way.server.walk.WalkAnswer
 import java.security.SecureRandom
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 enum class Phase {
   /** 오는 중 — P-03 대기 */
@@ -68,6 +73,12 @@ data class PickupState(
   val etaChange: EtaChangeDto? = null,
   val timer: TimerDto? = null,
   val passenger: PassengerStatusDto = PassengerStatusDto(),
+  /** 걷는 길을 마지막으로 물은 자리(찾는 중·못 찾음 포함) — 여기서 [PickupHub.WALK_RESTEP_METERS] 넘게 멀어져야 다시 묻는다 */
+  val walkFrom: LatLngDto? = null,
+  /** 지금 자리에선 걷는 길을 못 찾았다(공개 경로 서버가 못 찾음·너무 멂) — 웹은 '경로 안내'를 거둔다 */
+  val walkFailed: Boolean = false,
+  /** 경로 서버가 바빴다 — 이 시각이 지나면 움직이지 않아도 다시 묻는다 */
+  val walkRetryAt: Long? = null,
 )
 
 /**
@@ -88,6 +99,10 @@ class PickupHub(
   private val retentionMillis: Long = 12 * 60 * 60 * 1000L,
   /** 한꺼번에 둘 수 있는 픽업 수. 넘으면 새로 만들지 않는다 */
   private val maxPickups: Int = 2_000,
+  /** 동승자 위치 → 픽업 위치 걷는 길(walk.OsmWalkRoutes — 무료 공개 보행 경로 서버). 없으면 경로 없이 돈다 */
+  private val walkRoute: (suspend (from: LatLngDto, to: LatLngDto) -> WalkAnswer)? = null,
+  /** 걷는 길을 뒤에서 물을 곳 — 위치 보고 요청을 붙잡지 않게 */
+  private val scope: CoroutineScope? = null,
 ) {
   private val created = ConcurrentHashMap<String, Long>()
   private val byId = ConcurrentHashMap<String, MutableStateFlow<PickupState>>()
@@ -170,7 +185,8 @@ class PickupHub(
       else
         it.copy(
           phase = if (request.boarded) Phase.BOARDED else Phase.CLOSED,
-          passenger = it.passenger.copy(sharing = SharingWire.ENDED, location = null),
+          passenger = it.passenger.copy(sharing = SharingWire.ENDED, location = null, walk = null),
+          walkFrom = null,
         )
     }
   }
@@ -192,7 +208,17 @@ class PickupHub(
     if (state.value.phase.ended) throw PickupError.LinkExpired()
     state.update {
       val sharing = if (allow) SharingWire.SHARING else SharingWire.DECLINED
-      it.copy(passenger = it.passenger.copy(linkOpened = true, sharing = sharing, location = if (allow) it.passenger.location else null))
+      it.copy(
+        passenger =
+          it.passenger.copy(
+            linkOpened = true,
+            sharing = sharing,
+            location = if (allow) it.passenger.location else null,
+            walk = if (allow) it.passenger.walk else null,
+          ),
+        walkFrom = if (allow) it.walkFrom else null,
+        walkFailed = if (allow) it.walkFailed else false,
+      )
     }
   }
 
@@ -208,8 +234,50 @@ class PickupHub(
     val now = state.value
     if (now.phase.ended) throw PickupError.LinkExpired()
     if (now.passenger.sharing != SharingWire.SHARING) throw PickupError.NotSharing()
-    state.update { if (it.passenger.sharing == SharingWire.SHARING) it.copy(passenger = it.passenger.copy(location = location)) else it }
+    state.update {
+      if (it.passenger.sharing != SharingWire.SHARING) it
+      // 지난 경로의 출발점만 지금 자리로(그림이 동승자를 따라오게) — 새로 묻는 건 아래 askWalk
+      else it.copy(passenger = it.passenger.copy(location = location, walk = it.passenger.walk?.startingAt(location)))
+    }
+    askWalk(state, location)
   }
+
+  /**
+   * 픽업 위치까지 걷는 길을 뒤에서 묻는다. 위치는 1~2초마다 오니 마지막으로 물은 자리에서 [WALK_RESTEP_METERS] 넘게
+   * 움직였을 때만 묻는다(못 찾은 자리도 기억 — 공개 경로 서버에 1초마다 묻지 않게). 직선 [WALK_MAX_METERS] 넘게 떨어지면
+   * 걷는 안내가 아니라서 묻지 않는다(아직 집·지하철에 있는 동승자).
+   */
+  private fun askWalk(state: MutableStateFlow<PickupState>, here: LatLngDto) {
+    val route = walkRoute ?: return
+    val scope = scope ?: return
+    val now = state.value
+    if (now.phase.ended || now.passenger.sharing != SharingWire.SHARING) return
+    val from = now.walkFrom
+    val retryDue = now.walkRetryAt?.let { clock() >= it } ?: false
+    if (from != null && !retryDue && OsmWalkRoutes.distanceMeters(from, here) < WALK_RESTEP_METERS) return
+    val pickup = now.request.pickupPoint
+    if (OsmWalkRoutes.distanceMeters(here, pickup) > WALK_MAX_METERS) {
+      state.update { it.copy(walkFrom = here, walkFailed = true, passenger = it.passenger.copy(walk = null)) }
+      return
+    }
+    state.update { it.copy(walkFrom = here, walkRetryAt = null) }
+    scope.launch {
+      val answer = runCatching { route(here, pickup) }.getOrElse { WalkAnswer.Unavailable }
+      state.update {
+        // 그새 다른 자리에서 다시 물었거나 공유가 끝났으면 버린다
+        if (it.walkFrom != here || it.phase.ended || it.passenger.sharing != SharingWire.SHARING) return@update it
+        val at = it.passenger.location ?: here
+        when (answer) {
+          is WalkAnswer.Found -> it.copy(walkFailed = false, passenger = it.passenger.copy(walk = answer.route.startingAt(at)))
+          WalkAnswer.NoRoute -> it.copy(walkFailed = true, passenger = it.passenger.copy(walk = null))
+          // 바쁨·오류는 답이 아니다 — 찾아 둔 길을 그대로 두고 잠시 뒤 다시 묻는다
+          WalkAnswer.Unavailable -> it.copy(walkRetryAt = clock() + WALK_RETRY_MILLIS)
+        }
+      }
+    }
+  }
+
+  private fun WalkRouteDto.startingAt(here: LatLngDto) = copy(path = listOf(here) + path.drop(1))
 
   private fun PickupState.toView(): PassengerViewDto {
     val r = request
@@ -229,6 +297,8 @@ class PickupHub(
       sharing = passenger.sharing,
       me = passenger.location,
       late = passenger.late,
+      walk = passenger.walk,
+      walkFailed = walkFailed,
     )
   }
 
@@ -250,6 +320,13 @@ class PickupHub(
 
   companion object {
     private val random = SecureRandom()
+
+    /** 걷는 길을 다시 묻는 거리 — 위치가 1초마다 와도 이만큼 움직여야 다시 묻는다(무료 공개 경로 서버 사용 정책). */
+    const val WALK_RESTEP_METERS = 15.0
+    /** 이보다 멀면 걷는 길을 묻지 않는다. */
+    const val WALK_MAX_METERS = 3_000.0
+    /** 경로 서버가 바쁘면 이만큼 뒤 다시 묻는다. */
+    const val WALK_RETRY_MILLIS = 20_000L
 
     /** 링크에 쓰는 추측하기 어려운 값(16바이트, URL 에 안전한 글자). */
     fun randomToken(): String {

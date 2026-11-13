@@ -6,6 +6,9 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class LatLngDto(val lat: Double, val lng: Double)
 
+/** 동승자 위치 → 픽업 위치 걷는 길(서버가 지도 도로선으로 찾은 가장 빠른 길). 동승자 웹 P-04a·P-05 와 운전자 D-08 이 같은 것을 그린다. */
+@Serializable data class WalkRouteDto(val path: List<LatLngDto>, val meters: Int, val seconds: Int)
+
 @Serializable data class PlaceDto(val id: String, val name: String, val address: String, val location: LatLngDto)
 
 @Serializable data class LocationDescriptionDto(val title: String, val detail: String)
@@ -65,6 +68,8 @@ data class PassengerStatusDto(
   val location: LatLngDto? = null,
   /** 동승자 웹 '늦어요'(와이어프레임 v2 P-03) */
   val late: Boolean = false,
+  /** 위치를 공유 중일 때 픽업 위치까지 걷는 길 — 아직 못 찾았으면 null */
+  val walk: WalkRouteDto? = null,
 )
 
 @Serializable

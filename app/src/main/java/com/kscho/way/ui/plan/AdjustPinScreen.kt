@@ -1,5 +1,6 @@
 package com.kscho.way.ui.plan
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kscho.way.R
 import com.kscho.way.domain.model.Geo
 import com.kscho.way.domain.model.LatLng
+import com.kscho.way.domain.model.MapArea
 import com.kscho.way.domain.model.Place
 import com.kscho.way.domain.model.StopRestriction
 import com.kscho.way.domain.model.RestrictedZone
@@ -57,8 +59,10 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -79,9 +83,20 @@ class AdjustPinViewModel(private val check: CheckPickupPoint, private val restri
   private val _state = MutableStateFlow(AdjustPinUiState(pin = draft.check.value?.point?.location ?: origin))
   val state = _state.asStateFlow()
   val zones = MutableStateFlow<List<RestrictedZone>>(emptyList())
+  /** 지도에 그린 구간을 받아 둔 곳 — 핀을 옮겨 화면이 이 밖으로 나가면 보이는 곳을 다시 받는다. */
+  private var loadedArea: MapArea? = null
+  private val visibleArea = MutableStateFlow<Pair<LatLng, Int>?>(null)
 
   init {
-    viewModelScope.launch { zones.value = runCatching { restrictions.zonesNear(origin, 500) }.getOrDefault(emptyList()) }
+    // 처음 자리(둘레 500 m)도 같은 줄로 받는다 — 따로 받으면 늦게 끝난 쪽이 지금 화면 구간을 덮는다
+    visibleArea.value = origin to 333
+    viewModelScope.launch {
+      // 받는 중인 요청은 끊지 않는다(지도가 연달아 멈춰도) — 그새 쌓인 낡은 자리만 건너뛴다
+      visibleArea.filterNotNull().conflate().collect { (center, radius) ->
+        if (loadedArea?.covers(center, radius) == true) return@collect
+        load(MapArea.around(center, radius))
+      }
+    }
     viewModelScope.launch {
       // 핀이 멈추면 확인(진행 표시가 바뀌어도 다시 묻지 않게 좌표만 본다)
       _state.map { it.pin }.distinctUntilChanged().debounce(350).collectLatest { pin ->
@@ -100,6 +115,20 @@ class AdjustPinViewModel(private val check: CheckPickupPoint, private val restri
         }
       }
     }
+  }
+
+  private suspend fun load(area: MapArea) {
+    runCatching { restrictions.zonesNear(area.center, area.radiusMeters) }
+      .onSuccess {
+        zones.value = it
+        loadedArea = area
+      }
+      .onFailure { Log.w("WayZones", "구간을 못 받았어요", it) }
+  }
+
+  /** 지도가 멈춘 곳과 보이는 반지름 — 받아 둔 곳 밖이면 보이는 곳의 정차 금지 구간을 다시 받는다. */
+  fun onVisibleArea(center: LatLng, radiusMeters: Int) {
+    visibleArea.value = center to radiusMeters
   }
 
   /** 지도를 움직여 멈춘 곳(= 화면 가운데 핀). */
@@ -187,6 +216,7 @@ fun AdjustPinScreen(onBack: () -> Unit, onSearchAgain: () -> Unit, onConfirmed: 
           else MapPin(state.pin, PinKind.PICKUP, "픽업 위치"),
         onCenterSettled = vm::setPin,
         showZoomButtons = true,
+        onVisibleAreaSettled = vm::onVisibleArea,
       )
       val hint =
         when {

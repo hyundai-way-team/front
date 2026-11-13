@@ -138,17 +138,32 @@ class HttpWayApi(
     return execute(Request.Builder().url(url).post(body.toRequestBody(JSON)).build())
   }
 
-  private suspend fun execute(request: Request): String =
-    client.newCall(request).await().use { res ->
-      val text = res.body?.string().orEmpty()
-      if (!res.isSuccessful) throw WayApiException(res.code, text.ifBlank { res.message })
-      text
-    }
+  private suspend fun execute(request: Request): String {
+    val res = client.newCall(request).await()
+    if (!res.ok) throw WayApiException(res.code, res.text.ifBlank { res.message })
+    return res.text
+  }
 
-  private suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
+  /** 다 읽은 응답. */
+  private class Answer(val code: Int, val ok: Boolean, val message: String, val text: String)
+
+  /**
+   * 본문은 OkHttp 일꾼 스레드에서 다 읽어 넘긴다 — 이어 받는 코루틴이 메인 스레드여도 네트워크를 읽지 않게.
+   * (본문이 크면 아직 다 안 온 채로 넘어와 메인 스레드에서 읽다가 NetworkOnMainThreadException — 정차 금지 구간 선이 안 그려지던 원인)
+   */
+  private suspend fun Call.await(): Answer = suspendCancellableCoroutine { cont ->
     enqueue(
       object : Callback {
-        override fun onResponse(call: Call, response: Response) = cont.resume(response)
+        override fun onResponse(call: Call, response: Response) {
+          val answer =
+            try {
+              response.use { Answer(it.code, it.isSuccessful, it.message, it.body?.string().orEmpty()) }
+            } catch (e: IOException) {
+              if (!cont.isCancelled) cont.resumeWithException(e)
+              return
+            }
+          cont.resume(answer)
+        }
 
         override fun onFailure(call: Call, e: IOException) {
           if (!cont.isCancelled) cont.resumeWithException(e)

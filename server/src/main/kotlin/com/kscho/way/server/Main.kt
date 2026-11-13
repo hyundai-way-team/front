@@ -1,11 +1,14 @@
 package com.kscho.way.server
 
 import com.kscho.way.data.mock.MockWayApi
+import com.kscho.way.data.remote.LatLngDto
 import com.kscho.way.server.pickup.PickupHub
 import com.kscho.way.server.sms.MacBrowserOpener
 import com.kscho.way.server.sms.MacMessagesRelay
 import com.kscho.way.server.sms.OutboxTextLog
 import com.kscho.way.server.tls.LocalTls
+import com.kscho.way.server.walk.OsmWalkRoutes
+import com.kscho.way.server.walk.WalkAnswer
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.connector
 import io.ktor.server.engine.embeddedServer
@@ -50,7 +53,18 @@ fun main() {
     }
 
   val devRoutes = setting("way.devRoutes", "WAY_DEV_ROUTES")?.trim() != "0"
-  val deps = createDeps(publicUrl, mapDir, webDir = webDir, log = ::println, relay = relay, opener = opener, caCert = tls?.caCert, devRoutes = devRoutes)
+  val deps =
+    createDeps(
+      publicUrl,
+      mapDir,
+      webDir = webDir,
+      log = ::println,
+      relay = relay,
+      opener = opener,
+      caCert = tls?.caCert,
+      devRoutes = devRoutes,
+      walkRoute = OsmWalkRoutes()::route,
+    )
   println(
     """
     |
@@ -103,6 +117,8 @@ fun createDeps(
   caCert: File? = null,
   /** 개발용 경로(/dev/sms 등). 운영에선 false */
   devRoutes: Boolean = true,
+  /** 동승자 → 픽업 위치 걷는 길(walk.OsmWalkRoutes — 무료 공개 보행 경로 서버) */
+  walkRoute: (suspend (LatLngDto, LatLngDto) -> WalkAnswer)? = null,
 ): ServerDeps {
   // 시연 동네 데이터(장소 검색·역지오코딩·정차 금지 구간)는 앱 mock 과 같은 것을 쓴다. 지난 픽업 기록은 앱에 있다
   val places = MockWayApi(scope, clock)
@@ -110,7 +126,7 @@ fun createDeps(
       relay?.send(it.text)
       opener?.onText(it)
     })
-  val hub = PickupHub(clock, outbox, publicUrl)
+  val hub = PickupHub(clock, outbox, publicUrl, walkRoute = walkRoute, scope = scope)
   return ServerDeps(hub, places, outbox, mapDir, webDir, caCert, devRoutes = devRoutes)
 }
 

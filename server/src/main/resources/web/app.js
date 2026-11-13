@@ -1,5 +1,6 @@
 // WAY 동승자 웹 — Pleos 문자의 참여 링크로 연다. 앱 설치·로그인 없이 이 페이지에서 끝난다(기획 3-4).
 // 흐름: P-01 링크 첫 화면 → P-02 위치 공유 허용 → (차 상태에 따라) P-03 대기 · P-04 곧 도착 · P-05 대기 타이머 → P-06 종료
+// 위치를 공유 중이면 P-03·P-04 의 '경로 안내'로 P-04a(내 위치 → 픽업 위치 걷는 길)를 연다. 길은 서버가 계산해 view.walk 로 보낸다.
 import { createMap, distanceMeters, offsetMeters } from "/web/map.js";
 
 const root = document.getElementById("app");
@@ -11,6 +12,7 @@ const introKey = `way:${token}:intro`;
 let view = null; // 서버가 보낸 최신 화면 상태
 let clockOffset = 0; // 서버 시계 - 내 시계(대기 타이머를 차 화면과 맞춘다)
 let step = "intro"; // intro → consent → live
+let routeOpen = history.state?.wayRoute === true; // P-04a 경로 안내를 열었는지(뒤로 가기로 닫힌다)
 let current = null; // 지금 화면 { key, el, update, destroy }
 let failure = null; // 링크를 못 열었을 때 문구
 
@@ -156,6 +158,21 @@ function minutesText(sec) {
   return `약 ${Math.max(1, Math.round(sec / 60))}분`;
 }
 
+/** 걷는 길 — '도보 3분 | 180m' (1000m 부터 km 소수 한 자리) */
+function walkText(w) {
+  const min = Math.max(1, Math.ceil(w.seconds / 60));
+  const dist = w.meters >= 1000 ? `${(w.meters / 1000).toFixed(1)}km` : `${w.meters}m`;
+  return `도보 ${min}분 | ${dist}`;
+}
+
+/** 대기 시간 — 60 → '1분', 90 → '1분 30초' */
+function waitText(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m === 0) return `${s}초`;
+  return s === 0 ? `${m}분` : `${m}분 ${s}초`;
+}
+
 // ── DOM
 
 function h(tag, attrs = {}, ...children) {
@@ -170,15 +187,101 @@ function h(tag, attrs = {}, ...children) {
   return e;
 }
 
-const icon = (name) => h("img", { src: `/web/icons/${name}.svg`, alt: "", width: 20, height: 20 });
+const icon = (name, size = 20) => h("img", { src: `/web/icons/${name}.svg`, alt: "", width: size, height: size });
 const cardHead = (name, text) => h("div", { class: "card-head" }, icon(name), h("span", {}, text));
 const logo = () => h("p", { class: "logo" }, "WAY");
 const set = (node, text) => {
   if (node.textContent !== text) node.textContent = text;
 };
+const show = (node, on) => {
+  node.hidden = !on;
+};
 
-function mapView(v, meLabel) {
-  return { pickup: v.pickup.location, car: v.car?.location ?? null, me: v.me ?? null, meLabel };
+/** 지도에 넘길 점들. route: 걷는 길을 그릴지 · car: 차를 보일지 */
+function mapView(v, { route = false, car = true } = {}) {
+  return {
+    pickup: v.pickup.location,
+    car: car ? (v.car?.location ?? null) : null,
+    me: v.me ?? null,
+    route: route ? (v.walk?.path ?? null) : null,
+  };
+}
+
+// 위치를 공유 중이고, 지금 자리에서 길을 못 찾은 게 아닐 때(서버 walkFailed — 공개 경로 서버가 못 찾음·3 km 넘게 멂)
+const canRoute = (v) => v.sharing === "SHARING" && !v.walkFailed && (v.phase === "EN_ROUTE" || v.phase === "ARRIVING_SOON");
+
+// P-04a 경로 안내 — 휴대폰 '뒤로'로도 닫히게 기록을 하나 쌓는다
+function openRoute() {
+  routeOpen = true;
+  history.pushState({ wayRoute: true }, "");
+  render();
+}
+
+function closeRoute() {
+  if (history.state?.wayRoute) {
+    history.back(); // popstate 가 닫는다
+    return;
+  }
+  routeOpen = false;
+  render();
+}
+
+window.addEventListener("popstate", () => {
+  routeOpen = history.state?.wayRoute === true;
+  render();
+});
+
+// ── 화면 조각
+
+/** '탑승 차량을 확인해 주세요' 카드(P-01·P-04·P-04a·P-05) */
+function vehicleCard() {
+  const plate = h("p", { class: "plate" });
+  const desc = h("p", { class: "vehicle-desc" });
+  const el = h("div", { class: "card vehicle-card" }, cardHead("car", "탑승 차량을 확인해 주세요"), h("div", { class: "vehicle-row" }, h("div", { class: "car-tile" }), h("div", { class: "stack grow-x" }, plate, desc)));
+  return {
+    el,
+    update(v) {
+      set(plate, v.vehicle.plateNumber);
+      set(desc, v.vehicle.description);
+    },
+  };
+}
+
+/** 지도 카드 아래 '픽업 위치를 확인해 주세요'(P-01·P-04·P-05 길 없을 때) */
+function pickupPlace() {
+  const title = h("p", { class: "place-title" });
+  const detail = h("p", { class: "s-regular muted" });
+  const el = h("div", { class: "place" }, cardHead("navigate", "픽업 위치를 확인해 주세요"), h("div", { class: "stack", style: "gap:2px" }, title, detail));
+  return {
+    el,
+    update(v) {
+      set(title, v.pickup.title);
+      set(detail, v.pickup.detail);
+    },
+  };
+}
+
+/** '경로 안내' 버튼 — 위치를 공유 중일 때만(내 위치가 있어야 길을 낸다) */
+function routeButton() {
+  return h("button", { class: "btn outline-primary", type: "button", onclick: openRoute, hidden: "" }, icon("arrow", 24), "경로 안내");
+}
+
+/** '이 경로를 따라 이동해 주세요' 설명 두 줄 */
+const followLines = (name) => [`${name} 님의 차량 화면에도 동일한 경로가 표시돼요.`, "약속 장소까지 같은 경로를 확인하며 이동할 수 있어요."];
+
+function setLines(node, lines) {
+  const key = lines.join("\n");
+  if (node.dataset.text === key) return;
+  node.dataset.text = key;
+  node.replaceChildren(...lines.flatMap((l, i) => (i ? [h("br"), l] : [l])));
+}
+
+/** 도착 예정 카드(P-03 · P-04) — 오른쪽 100×100 원은 디자인 그대로(그래픽 자리) */
+function etaCard({ head, accent = false }) {
+  const time = h("p", { class: "time" });
+  const left = h("p", { class: "left" });
+  const el = h("div", { class: `eta-card${accent ? " accent" : ""}` }, h("div", { class: "stack grow-x", style: "gap:8px" }, head, h("div", { class: "stack", style: "gap:2px" }, time, left)), h("div", { class: "eta-graphic", "aria-hidden": "true" }));
+  return { el, time, left };
 }
 
 // ── 화면
@@ -193,12 +296,10 @@ const screens = {
   intro() {
     const title = h("p", { class: "title-xl" });
     const sub = h("p", { class: "m-regular muted" });
-    const eta = h("span");
-    const plate = h("p", { class: "plate" });
-    const desc = h("p", { class: "vehicle-desc" });
+    const eta = h("span", { class: "value" });
+    const vehicle = vehicleCard();
+    const place = pickupPlace();
     const mapBox = h("div", { class: "map h180" });
-    const spotTitle = h("p", { class: "place-title" });
-    const spotDetail = h("p", { class: "s-regular muted" });
     const next = h("button", { class: "btn primary", type: "button" }, "다음");
     next.addEventListener("click", () => {
       sessionStorage.setItem(introKey, "1");
@@ -214,23 +315,8 @@ const screens = {
       h(
         "div",
         { class: "stack", style: "gap:20px" },
-        h(
-          "div",
-          { class: "stack", style: "gap:16px" },
-          h("div", { class: "stack", style: "gap:4px" }, title, sub),
-          h("div", { class: "eta-box" }, h("span", { class: "label" }, "도착 예정 시간"), h("span", { class: "value" }, eta)),
-        ),
-        h(
-          "div",
-          { class: "stack", style: "gap:16px" },
-          h("div", { class: "card vehicle-card" }, cardHead("car", "탑승 차량을 확인해 주세요"), h("div", { class: "vehicle-row" }, h("div", { class: "car-tile" }), h("div", { class: "stack" }, plate, desc))),
-          h(
-            "div",
-            { class: "card map-card" },
-            mapBox,
-            h("div", { class: "place" }, cardHead("navigate", "픽업 위치를 확인해 주세요"), h("div", { class: "stack", style: "gap:2px" }, spotTitle, spotDetail)),
-          ),
-        ),
+        h("div", { class: "stack", style: "gap:16px" }, h("div", { class: "stack", style: "gap:4px" }, title, sub), h("div", { class: "eta-box" }, h("span", { class: "label" }, "도착 예정 시간"), eta)),
+        h("div", { class: "stack", style: "gap:16px" }, vehicle.el, h("div", { class: "card map-card" }, mapBox, place.el)),
       ),
       h("div", { class: "grow" }),
       h("div", { class: "stack", style: "gap:12px" }, h("p", { class: "caption" }, "앱 설치, 로그인 없이 이 페이지에서 끝나요"), next),
@@ -242,10 +328,8 @@ const screens = {
         set(title, `${v.driverCallName} 님이 데리러 가고 있어요`);
         set(sub, `현재 위치에서 ${minutesText(secondsLeft(v))} 소요돼요.`);
         set(eta, hhmm(v.arrivalAt));
-        set(plate, v.vehicle.plateNumber);
-        set(desc, v.vehicle.description);
-        set(spotTitle, v.pickup.title);
-        set(spotDetail, v.pickup.detail);
+        vehicle.update(v);
+        place.update(v);
         map.update(mapView(v));
       },
       destroy: () => map.destroy(),
@@ -297,7 +381,7 @@ const screens = {
       logo(),
       h(
         "div",
-        { class: "stack", style: "gap:40px" },
+        { class: "stack consent-body", style: "gap:40px" },
         h(
           "div",
           { class: "stack", style: "gap:16px" },
@@ -326,24 +410,15 @@ const screens = {
     };
   },
 
-  // P-03 대기(와이어프레임 v2) — 도착 예정 시간을 크게, 바뀌면 위에 배너. '늦어요'로 운전자에게 알린다
+  // P-03 대기 — 도착 예정 시간을 크게, 바뀌었으면 위에 노란 배너. 위치 공유 중이면 '경로 안내'
   wait() {
-    const banner = h("div", { class: "banner-changed", hidden: "" }, h("img", { src: "/web/icons/info-warning.svg", alt: "" }), h("span", {}, "도착 시간이 변경되었어요"));
+    const banner = h("div", { class: "banner-changed", hidden: "" }, icon("info-warning"), h("span", {}, "도착 시간이 변경되었어요"));
     const who = h("p", { class: "who" });
-    const time = h("p", { class: "time" });
-    const left = h("p", { class: "left" });
+    const card = etaCard({ head: who });
     const mapBox = h("div", { class: "map h180" });
     const car = h("span", { class: "v" });
     const spot = h("span", { class: "v" });
-    const late = h("button", { class: "btn outline", type: "button" }, "늦어요");
-    late.addEventListener("click", async () => {
-      late.disabled = true;
-      try {
-        await api("/late", {});
-      } catch {
-        late.disabled = false; // 다시 누를 수 있게
-      }
-    });
+    const route = routeButton();
     let map = null;
 
     const el = h(
@@ -354,115 +429,148 @@ const screens = {
       h(
         "div",
         { class: "stack", style: "gap:20px" },
-        h("div", { class: "eta-card" }, h("div", { class: "stack", style: "gap:8px;flex:1" }, who, h("div", { class: "stack", style: "gap:2px" }, time, left)), h("div", { class: "car-tile hero" })),
-        h(
-          "div",
-          { class: "card map-card" },
-          mapBox,
-          h("div", { class: "rows-v2" }, h("div", { class: "row" }, h("span", { class: "k" }, "차량"), car), h("div", { class: "row" }, h("span", { class: "k" }, "픽업 위치"), spot)),
-        ),
-        h("p", { class: "note quiet" }, "도착 5분 전에 픽업 안내 문자를 보내드려요.", h("br"), "문자를 받으면 픽업 장소로 이동해 주세요."),
+        card.el,
+        h("div", { class: "card map-card r14" }, mapBox, h("div", { class: "rows" }, h("div", { class: "row" }, h("span", { class: "k" }, "차량"), car), h("div", { class: "row" }, h("span", { class: "k" }, "픽업 위치"), spot))),
+        route,
       ),
       h("div", { class: "grow" }),
-      late,
+      h("p", { class: "note" }, "도착 5분 전에 픽업 안내 문자를 보내드려요.", h("br"), "문자를 받으면 픽업 장소로 이동해 주세요."),
     );
 
     return {
       el,
       update(v) {
         map ??= createMap(mapBox, { carLabel: `${v.driverCallName} 님 차` });
-        banner.hidden = !v.etaChange;
+        show(banner, !!v.etaChange);
         set(who, `${v.driverCallName} 님의 도착 예정`);
-        set(time, hhmm(v.arrivalAt));
+        set(card.time, hhmm(v.arrivalAt));
         const sec = secondsLeft(v);
-        set(left, sec < 60 ? "곧 도착해요" : `${minutesText(sec)} 남았어요`);
+        set(card.left, sec < 60 ? "곧 도착해요" : `${minutesText(sec)} 남았어요`);
         set(car, `${v.vehicle.plateNumber} | ${v.vehicle.description}`);
         set(spot, v.pickup.title);
-        late.disabled = v.late;
-        set(late, v.late ? `${v.driverCallName} 님에게 늦는다고 알렸어요` : "늦어요");
+        show(route, canRoute(v));
         map.update(mapView(v));
       },
       destroy: () => map?.destroy(),
     };
   },
 
-  // P-04 곧 도착해요 — 차량 번호를 크게(비슷한 차들 사이에서 바로 찾게)
+  // P-04 곧 도착해요 — 탑승 차량 · 픽업 위치 확인, 위치 공유 중이면 '경로 안내'
   soon() {
-    const small = h("p", { class: "small" });
-    const mapBox = h("div", { class: "map h240" });
-    const spotTitle = h("p", { class: "spot-18" });
-    const spotDetail = h("p", { class: "s-regular muted" });
-    const plate = h("p", { class: "plate-big" });
-    const desc = h("p", { class: "desc" });
+    const card = etaCard({ head: h("div", { class: "eta-head" }, icon("dot", 24), h("span", {}, "곧 도착해요")), accent: true });
+    const vehicle = vehicleCard();
+    const place = pickupPlace();
+    const mapBox = h("div", { class: "map h180" });
+    const route = routeButton();
     let map = null;
 
     const el = h(
       "section",
-      { class: "screen wide" },
+      { class: "screen" },
       logo(),
+      h("div", { class: "stack", style: "gap:20px" }, card.el, h("div", { class: "stack", style: "gap:16px" }, vehicle.el, h("div", { class: "card map-card" }, mapBox, place.el)), route),
+    );
+
+    return {
+      el,
+      update(v) {
+        map ??= createMap(mapBox, { carLabel: `${v.driverCallName} 님 차` });
+        set(card.time, hhmm(v.arrivalAt));
+        const sec = secondsLeft(v);
+        set(card.left, sec < 60 ? "곧 픽업 위치에 도착해요" : `${minutesText(sec)} 뒤 픽업 위치에 도착해요`);
+        vehicle.update(v);
+        place.update(v);
+        show(route, canRoute(v));
+        map.update(mapView(v));
+      },
+      destroy: () => map?.destroy(),
+    };
+  },
+
+  // P-04a 경로 안내 — 내 위치에서 픽업 위치까지 가장 빠른 걷는 길(서버 계산). '<'·뒤로 가기로 돌아간다
+  route() {
+    const back = h("button", { class: "back", type: "button", "aria-label": "뒤로", onclick: closeRoute }, icon("back", 32));
+    const vehicle = vehicleCard();
+    const mapBox = h("div", { class: "map h270" });
+    const walkLabel = h("p", { class: "s-regular muted" }, "현재 위치에서 가는 가장 빠른 길이에요");
+    const walkMain = h("p", { class: "walk-main" });
+    const pending = h("p", { class: "walk-pending" }, "경로를 찾고 있어요");
+    const lines = h("p", { class: "s-regular muted" });
+    const guide = h("div", { class: "guide-card" }, icon("info", 24), h("div", { class: "stack grow-x", style: "gap:4px" }, h("p", { class: "m-semibold ink" }, "이 경로를 따라 이동해 주세요"), lines));
+    let map = null;
+
+    const el = h(
+      "section",
+      { class: "screen" },
+      h("div", { class: "top-bar" }, back, h("p", { class: "title-m" }, "경로 안내")),
       h(
         "div",
-        { class: "stack", style: "gap:14px" },
-        h("div", { class: "banner-blue" }, h("p", { class: "big" }, "곧 도착해요"), small),
-        mapBox,
-        h("div", { class: "stack", style: "gap:2px" }, h("p", { class: "label-13" }, "픽업 위치"), spotTitle, spotDetail),
-        h("div", { class: "find-car" }, h("div", { class: "car-tile big" }), h("div", { class: "stack" }, h("p", { class: "label-13" }, "이 차를 찾으세요"), plate, desc)),
+        { class: "stack", style: "gap:16px" },
+        vehicle.el,
+        h("div", { class: "card map-card" }, mapBox, h("div", { class: "walk-row" }, h("div", { class: "walk-tile" }, icon("footsteps", 24)), h("div", { class: "stack grow-x" }, walkLabel, walkMain, pending))),
+        guide,
       ),
     );
 
     return {
       el,
       update(v) {
-        map ??= createMap(mapBox, { carLabel: `${v.driverCallName} 님 차`, showRoute: true });
-        const sec = secondsLeft(v);
-        set(small, sec < 60 ? "곧 픽업 위치에 도착해요. 지금 나와서 먼저 기다려 주세요." : `${minutesText(sec)} 뒤 픽업 위치에 도착해요. 지금 나와서 먼저 기다려 주세요.`);
-        set(spotTitle, v.pickup.title);
-        set(spotDetail, v.pickup.detail);
-        set(plate, v.vehicle.plateNumber);
-        set(desc, v.vehicle.description);
-        const meLabel = v.me ? `나 · ${Math.round(distanceMeters(v.me, v.pickup.location))}m` : undefined;
-        map.update(mapView(v, meLabel));
+        map ??= createMap(mapBox, { carLabel: `${v.driverCallName} 님 차` });
+        vehicle.update(v);
+        const w = v.walk;
+        show(walkLabel, !!w);
+        show(walkMain, !!w);
+        show(pending, !w);
+        show(guide, !!w);
+        if (w) set(walkMain, walkText(w));
+        setLines(lines, followLines(v.driverCallName));
+        map.update(mapView(v, { route: true, car: false }));
       },
       destroy: () => map?.destroy(),
     };
   },
 
-  // P-05 정차 · 대기 타이머 — 차 화면과 같은 1분(서버 시계 기준)
+  // P-05 정차 · 대기 타이머 — 차 화면과 같은 1분(서버 시계 기준) + 걷는 길
   timer() {
-    const title = h("h1", { class: "title-xl", style: "color:var(--ink)" });
-    const R = 78;
+    const NS = "http://www.w3.org/2000/svg";
+    const R = 41.625; // 지름 90 · 두께 6.75(피그마 고리)
     const C = 2 * Math.PI * R;
-    const arc = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", "0 0 168 168");
-    for (const [stroke, node] of [["var(--ring)", document.createElementNS("http://www.w3.org/2000/svg", "circle")], ["var(--primary-500)", arc]]) {
-      node.setAttribute("cx", "84");
-      node.setAttribute("cy", "84");
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 90 90");
+    const arc = document.createElementNS(NS, "circle");
+    for (const [cls, node] of [["track", document.createElementNS(NS, "circle")], ["arc", arc]]) {
+      node.setAttribute("cx", "45");
+      node.setAttribute("cy", "45");
       node.setAttribute("r", String(R));
-      node.setAttribute("fill", "none");
-      node.setAttribute("stroke-width", "12");
-      node.setAttribute("stroke-linecap", "round");
-      node.style.stroke = stroke;
+      node.setAttribute("class", cls);
       svg.append(node);
     }
     arc.setAttribute("stroke-dasharray", String(C));
     const sec = h("p", { class: "sec" });
-    const unit = h("p", { class: "sub" }, "남음");
-    const card = h("div", { class: "timer-card" });
-    const subLine = h("p", { class: "sub" });
-    const standing = h("p", { class: "label-13" });
-    const plate = h("p", { class: "plate-big" });
-    const desc = h("p", { class: "desc" });
-    const footer = h("p", { class: "caption" });
-    card.append(h("div", { class: "ring", role: "timer", "aria-live": "off" }, svg, h("div", { class: "center" }, sec, unit)), h("div", { class: "timer-text" }, h("p", { class: "main" }, "1분 안에 타 주세요"), subLine));
+    const main = h("p", { class: "main" });
+    const sub = h("p", { class: "s-regular muted" });
+    const card = h("div", { class: "timer-card" }, h("div", { class: "ring", role: "timer", "aria-live": "off" }, svg, sec), h("div", { class: "stack grow-x", style: "gap:2px" }, main, sub));
+
+    const mapBox = h("div", { class: "map h180" });
+    const chip = h("p", { class: "map-chip", hidden: "" }, "경로를 찾고 있어요");
+    mapBox.append(chip);
+    const lines = h("p", { class: "s-regular muted" });
+    const follow = h("div", { class: "place" }, h("div", { class: "follow-head" }, icon("navigate-24", 24), h("span", {}, "이 경로를 따라 이동해 주세요")), lines);
+    const place = pickupPlace(); // 길이 아직 없으면(계산 전 · 위치 미공유) 픽업 위치를 대신 보인다
+    const vehicle = vehicleCard();
+    let map = null;
 
     const el = h(
       "section",
-      { class: "screen wide" },
+      { class: "screen" },
       logo(),
-      h("div", { class: "stack", style: "gap:16px" }, title, card, h("div", { class: "find-car" }, h("div", { class: "car-tile big" }), h("div", { class: "stack" }, standing, plate, desc))),
-      h("div", { class: "grow" }),
-      footer,
+      h(
+        "div",
+        { class: "stack", style: "gap:20px" },
+        h("h1", { class: "title-xl" }, "차량이 픽업 위치에 도착했어요"),
+        card,
+        h("div", { class: "stack", style: "gap:16px" }, h("div", { class: "card map-card" }, mapBox, follow, place.el), vehicle.el),
+      ),
     );
 
     let tick = null;
@@ -473,40 +581,57 @@ const screens = {
       const s = Math.ceil(remaining / 1000);
       set(sec, `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
       arc.setAttribute("stroke-dashoffset", String(C * (1 - remaining / (t.waitSeconds * 1000))));
+      arc.style.visibility = remaining === 0 ? "hidden" : "";
       card.classList.toggle("over", remaining === 0);
-      set(unit, remaining === 0 ? "시간이 지났어요" : "남음");
+      set(main, remaining === 0 ? "대기 시간이 지났어요" : `${waitText(t.waitSeconds)} 안에 탑승해 주세요`);
     }
 
     return {
       el,
       update(v) {
-        set(title, `${v.driverCallName} 님 차가 픽업 위치에 도착했어요`);
-        set(subLine, `${v.driverCallName} 님 차 화면에도 같은 타이머가 떠요`);
-        set(standing, `${v.pickup.title}에 서 있어요`);
-        set(plate, v.vehicle.plateNumber);
-        set(desc, v.vehicle.description);
-        set(footer, `15초 남았는데 아직 타지 않았으면 ${v.driverCallName} 님이 전화를 걸 수 있어요`);
+        map ??= createMap(mapBox, { carLabel: `${v.driverCallName} 님 차` });
+        set(sub, `${v.driverCallName} 님 차 화면에도 같은 타이머가 떠요`);
+        const w = v.walk;
+        show(follow, !!w);
+        show(place.el, !w);
+        show(chip, !w && v.sharing === "SHARING" && !v.walkFailed);
+        setLines(lines, followLines(v.driverCallName));
+        place.update(v);
+        vehicle.update(v);
+        map.update(mapView(v, { route: true }));
         draw();
         tick ??= setInterval(draw, 200);
       },
-      destroy: () => clearInterval(tick),
+      destroy() {
+        clearInterval(tick);
+        map?.destroy();
+      },
     };
   },
 
   // P-06 종료 — 위치 공유 종료 · 링크 만료
   done() {
-    const title = h("p", { class: "done-title" });
+    const title = h("p", { class: "title-xl center" });
+    const door = h("p", { class: "note" }, "차량의 도어 상태를 통해 탑승을 확인하면", h("br"), "화면이 자동으로 전환돼요.");
     const el = h(
       "section",
       { class: "screen done" },
-      h("div", { class: "done-icon" }, h("img", { src: "/web/icons/check-white.svg", alt: "" })),
-      title,
-      h("div", { class: "done-box" }, h("p", {}, "위치 공유가 종료됐어요"), h("p", {}, "이 링크는 만료됐어요")),
+      logo(),
+      h("div", { class: "done-top" }),
+      h(
+        "div",
+        { class: "stack", style: "gap:32px" },
+        h("div", { class: "stack", style: "gap:16px;align-items:center" }, h("div", { class: "status-icon solid" }, h("img", { src: "/web/icons/check-white.svg", alt: "" })), title),
+        h("div", { class: "stack", style: "gap:16px" }, h("div", { class: "done-box" }, "위치 공유가 종료되었어요.", h("br"), "이 링크는 더 이상 사용할 수 없어요."), door),
+      ),
+      h("div", { class: "done-bottom" }),
     );
     return {
       el,
       update(v) {
-        set(title, v.phase === "BOARDED" ? "탑승했어요" : "픽업이 끝났어요");
+        const boarded = v.phase === "BOARDED";
+        set(title, boarded ? "탑승이 완료되었어요" : "픽업이 끝났어요");
+        show(door, boarded);
       },
     };
   },
@@ -516,11 +641,18 @@ function screenKey() {
   if (!view) return "loading";
   if (isEnded()) return "done";
   if (step !== "live") return step;
-  return { ARRIVING_SOON: "soon", ARRIVED: "timer" }[view.phase] ?? "wait";
+  if (view.phase === "ARRIVED") return "timer";
+  if (routeOpen && canRoute(view)) return "route";
+  return view.phase === "ARRIVING_SOON" ? "soon" : "wait";
 }
 
 function render() {
   const key = screenKey();
+  // P-04a 를 연 채 정차·종료·길 없음으로 화면이 바뀌면 쌓아 둔 기록도 걷는다 — 안 그러면 '뒤로'가 한 번 헛돈다
+  if (current?.key === "route" && key !== "route" && history.state?.wayRoute) {
+    routeOpen = false;
+    history.back();
+  }
   if (current?.key !== key) {
     current?.destroy?.();
     current = { key, ...screens[key]() };

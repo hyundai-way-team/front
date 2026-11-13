@@ -40,10 +40,11 @@ function el(className, label) {
 const toLngLat = (p) => [p.lng, p.lat];
 
 /**
- * 작은 지도 하나. update({ pickup, car, me, meLabel, route }) 로 점을 옮긴다.
- * 손으로 움직이지 않게(카드 속 지도) 하고, 점들이 다 보이게 자동으로 맞춘다.
+ * 작은 지도 하나. update({ pickup, car, me, meLabel, route }) 로 점·걷는 길을 옮긴다.
+ * route 는 서버가 계산한 보행 경로 [{lat,lng}…] — 없으면 선을 그리지 않는다(가짜 직선 금지).
+ * 손으로 움직이지 않게(카드 속 지도) 하고, 점들과 길이 다 보이게 자동으로 맞춘다.
  */
-export function createMap(container, { carLabel = "차", showRoute = false } = {}) {
+export function createMap(container, { carLabel = "차" } = {}) {
   let map = null;
   let latest = null;
   const markers = {};
@@ -69,15 +70,11 @@ export function createMap(container, { carLabel = "차", showRoute = false } = {
       map.addControl(new AttributionControl({ compact: true }), "bottom-right");
       map.on("load", () => {
         empty.remove();
-        if (showRoute) {
-          map.addSource("walk", { type: "geojson", data: line([]) });
-          map.addLayer({
-            id: "walk",
-            type: "line",
-            source: "walk",
-            paint: { "line-color": "#d9822b", "line-width": 3, "line-dasharray": [1.5, 1.5] },
-          });
-        }
+        // 걷는 길(P-04a·P-05) — 흰 테두리 위에 파란 선
+        map.addSource("walk", { type: "geojson", data: line([]) });
+        const round = { "line-cap": "round", "line-join": "round" };
+        map.addLayer({ id: "walk-casing", type: "line", source: "walk", layout: round, paint: { "line-color": "#ffffff", "line-width": 9 } });
+        map.addLayer({ id: "walk", type: "line", source: "walk", layout: round, paint: { "line-color": "#3b67f6", "line-width": 5 } });
         if (latest) apply(latest, true);
       });
     })
@@ -100,6 +97,8 @@ export function createMap(container, { carLabel = "차", showRoute = false } = {
       const { wrap, labelEl } = el(className, label);
       m = { marker: new Marker({ element: wrap, anchor }).setLngLat(toLngLat(at)).addTo(map), labelEl };
       markers[key] = m;
+    } else if (key !== "car") {
+      m.marker.setLngLat(toLngLat(at));
     }
     if (m.labelEl && label !== undefined && m.labelEl.textContent !== label) m.labelEl.textContent = label;
     return m;
@@ -125,17 +124,18 @@ export function createMap(container, { carLabel = "차", showRoute = false } = {
     const hadCar = !!markers.car;
     const car = marker("car", "car", carLabel, v.car, "center");
     if (car && hadCar) moveCar(car, v.car);
-    marker("me", "me", v.meLabel ?? "나", v.me, "center");
-    if (showRoute && map.getSource("walk")) {
-      map.getSource("walk").setData(line(v.me ? [toLngLat(v.me), toLngLat(v.pickup)] : []));
-    }
+    marker("me", "me", v.meLabel ?? "현재 위치", v.me, "center");
+    map.getSource("walk")?.setData(line((v.route ?? []).map(toLngLat)));
     fit(v, first);
   }
 
   function fit(v, first) {
-    const points = [v.pickup, v.car, v.me].filter(Boolean);
+    const route = v.route ?? [];
+    const points = [v.pickup, v.car, v.me, ...route].filter(Boolean);
     // 점이 크게 움직였을 때만 다시 맞춘다(작은 흔들림에 화면이 계속 움직이지 않게)
-    const key = points.map((p) => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`).join("|");
+    const key = [v.pickup, v.car, v.me, route[0], route[route.length - 1]]
+      .map((p) => (p ? `${p.lat.toFixed(4)},${p.lng.toFixed(4)}` : "-"))
+      .join("|") + `|${route.length}`;
     if (!first && key === lastFitKey) return;
     lastFitKey = key;
     if (points.length === 1) {
@@ -144,7 +144,7 @@ export function createMap(container, { carLabel = "차", showRoute = false } = {
     }
     const bounds = new LngLatBounds();
     points.forEach((p) => bounds.extend(toLngLat(p)));
-    map.fitBounds(bounds, { padding: { top: 40, bottom: 40, left: 40, right: 70 }, maxZoom: 17.5, duration: first ? 0 : 600 });
+    map.fitBounds(bounds, { padding: { top: 36, bottom: 70, left: 40, right: 70 }, maxZoom: 17.5, duration: first ? 0 : 600 });
   }
 
   return {
