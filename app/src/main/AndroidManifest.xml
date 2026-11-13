@@ -29,6 +29,8 @@
 
     <!-- Way 서버(픽업 세션·동승자 위치) -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 동승자 고르기: 차에 연결된 휴대폰 연락처(기기 연락처) -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <!-- Gleo '동승자에게 전화' 때 차량 전화 화면이 있는지 확인 -->
     <queries>

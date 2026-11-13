@@ -10,6 +10,7 @@ import com.kscho.way.data.remote.WayApi
 import com.kscho.way.server.pickup.PassengerLocationRequest
 import com.kscho.way.server.pickup.PickupError
 import com.kscho.way.server.pickup.PickupHub
+import com.kscho.way.server.zones.BusStopZones
 import com.kscho.way.server.pickup.SharingRequest
 import com.kscho.way.server.sms.OutboxTextLog
 import com.kscho.way.server.tls.RootCaProfile
@@ -53,7 +54,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.slf4j.event.Level
 
-/** 서버가 쓰는 것들. [places] 는 시연 동네(신촌) 장소·정차 금지 구간 데이터 — 실제 데이터 출처를 정하면 바뀐다. */
+/** 서버가 쓰는 것들. [places] 는 시연 동네(신촌) 장소 목데이터(앱은 이제 오프라인 지도 데이터로 직접 찾는다), [zones] 는 실제 버스정류장 정차 금지 구간. */
 class ServerDeps(
   val hub: PickupHub,
   val places: WayApi,
@@ -64,9 +65,15 @@ class ServerDeps(
   val webDir: File? = null,
   /** 시연용 로컬 https 의 인증 기관(CA) 인증서 — 아이폰이 /dev/ca.cer 로 받아 신뢰 등록한다(공개 인증서만, 개인 키 아님). */
   val caCert: File? = null,
+  /** 정차 금지 구간 = 실제 버스정류장(공공데이터) 둘레 10m */
+  val zones: BusStopZones = BusStopZones.bundled(),
+  /** 개발용 경로(/dev/sms 문자 사본 · /api/dev/sms · /dev/ca*). 운영(WAY_DEV_ROUTES=0)에선 끈다 — 문자 사본에 동승자 이름·링크가 있다. */
+  val devRoutes: Boolean = true,
 )
 
 @Serializable data class ErrorDto(val error: String)
+
+@Serializable data class HealthDto(val ok: Boolean)
 
 val WayJson = Json {
   ignoreUnknownKeys = true
@@ -94,15 +101,17 @@ fun Application.wayModule(deps: ServerDeps) {
     exception<PickupError.NotFound> { call, e -> call.respond(HttpStatusCode.NotFound, ErrorDto(e.message ?: "")) }
     exception<PickupError.LinkExpired> { call, e -> call.respond(HttpStatusCode.Gone, ErrorDto(e.message ?: "")) }
     exception<PickupError.NotSharing> { call, e -> call.respond(HttpStatusCode.Conflict, ErrorDto(e.message ?: "")) }
+    exception<PickupError.Busy> { call, e -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto(e.message ?: "")) }
     exception<BadRequestException> { call, e -> call.respond(HttpStatusCode.BadRequest, ErrorDto(e.message ?: "잘못된 요청")) }
     exception<IllegalArgumentException> { call, e -> call.respond(HttpStatusCode.BadRequest, ErrorDto(e.message ?: "잘못된 요청")) }
   }
 
   routing {
     route("/api") {
+      get("/health") { call.respond(HealthDto(ok = true)) }
       driverRoutes(deps)
       passengerRoutes(deps.hub)
-      get("/dev/sms") { call.respond(deps.outbox.messages.value) }
+      if (deps.devRoutes) get("/dev/sms") { call.respond(deps.outbox.messages.value) }
     }
 
     // 동승자 웹 — 링크마다 같은 페이지, 토큰은 주소에서 읽는다
@@ -110,18 +119,20 @@ fun Application.wayModule(deps: ServerDeps) {
     if (deps.webDir != null) staticFiles("/web", deps.webDir) else staticResources("/web", "web")
     deps.mapDir?.let { staticFiles("/map", it) }
 
-    // 개발용: 차가 보낸 문자 사본 보기(동승자 휴대폰 문자 앱 흉내)
-    get("/dev/sms") { call.respondPage(deps.webDir, "outbox.html") }
-    // 개발용: 로컬 https 인증서(CA) 받기 — 아이폰 사파리로 .mobileconfig 를 열면 '프로파일 다운로드됨 → 설정에서 설치'
-    get("/dev/ca.mobileconfig") {
-      val ca = deps.caCert?.takeIf { it.isFile } ?: return@get call.respond(HttpStatusCode.NotFound)
-      call.respondText(RootCaProfile.mobileConfig(ca.readBytes()), ContentType.parse(RootCaProfile.CONTENT_TYPE))
+    if (deps.devRoutes) {
+      // 개발용: 차가 보낸 문자 사본 보기(동승자 휴대폰 문자 앱 흉내)
+      get("/dev/sms") { call.respondPage(deps.webDir, "outbox.html") }
+      // 개발용: 로컬 https 인증서(CA) 받기 — 아이폰 사파리로 .mobileconfig 를 열면 '프로파일 다운로드됨 → 설정에서 설치'
+      get("/dev/ca.mobileconfig") {
+        val ca = deps.caCert?.takeIf { it.isFile } ?: return@get call.respond(HttpStatusCode.NotFound)
+        call.respondText(RootCaProfile.mobileConfig(ca.readBytes()), ContentType.parse(RootCaProfile.CONTENT_TYPE))
+      }
+      get("/dev/ca.cer") {
+        val ca = deps.caCert?.takeIf { it.isFile } ?: return@get call.respond(HttpStatusCode.NotFound)
+        call.respondBytes(ca.readBytes(), ContentType("application", "x-x509-ca-cert"))
+      }
+      get("/") { call.respondRedirect("/dev/sms") }
     }
-    get("/dev/ca.cer") {
-      val ca = deps.caCert?.takeIf { it.isFile } ?: return@get call.respond(HttpStatusCode.NotFound)
-      call.respondBytes(ca.readBytes(), ContentType("application", "x-x509-ca-cert"))
-    }
-    get("/") { call.respondRedirect("/dev/sms") }
   }
 }
 
@@ -132,7 +143,10 @@ private fun Route.driverRoutes(deps: ServerDeps) {
   get("/places") { call.respond(places.searchPlaces(call.query("query"))) }
   get("/places/reverse") { call.respond(places.describeLocation(call.latLng())) }
   // 주변 정차 금지 구간 데이터만 — 지도에 그리기·정차 금지 판단은 앱이 한다(도로·장소는 앱 속 오프라인 지도)
-  get("/stop-zones") { call.respond(places.stopZones(call.latLng(), call.query("radius").toIntOrNull() ?: 300)) }
+  get("/stop-zones") {
+    val at = call.latLng()
+    call.respond(deps.zones.near(at.lat, at.lng, (call.query("radius").toIntOrNull() ?: 300).coerceIn(1, 5_000)))
+  }
 
   route("/pickups") {
     post { call.respond(hub.create(call.receive<CreatePickupRequest>())) }

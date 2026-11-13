@@ -3,7 +3,7 @@
 Way 오프라인 지도 만들기 — 앱 실행 중에는 외부 지도 API 를 부르지 않도록, 지도 그림을 앱 안에 넣는다.
 
 한 번 돌리면 app/src/main/assets/map/ 에 다음을 만든다.
-  way.pmtiles   벡터 타일(OpenMapTiles 스키마, OpenStreetMap 데이터) — 시연 지역만
+  way.pmtiles   벡터 타일(OpenMapTiles 스키마, OpenStreetMap 데이터) — 서울 전체(상세 z12–14) + 성남 시흥동
   style.json    밝은 지도 스타일(OpenFreeMap Positron 을 고침, 한글 지명 우선)
   fonts/        라틴 글자 글리프(한글은 기기 글꼴로 그린다 — MapLibre localIdeographFontFamily)
   sprites/      아이콘
@@ -12,7 +12,10 @@ Way 오프라인 지도 만들기 — 앱 실행 중에는 외부 지도 API 를
 → 앱 지도 화면에 출처를 표기해야 한다.
 
 필요: python3, `pip install pmtiles certifi`
-실행: python3 tools/map/build_offline_map.py
+실행: python3 tools/map/build_offline_map.py              (타일·스타일·글꼴·아이콘 전부)
+      python3 tools/map/build_offline_map.py --tiles-only (way.pmtiles 만 — 손본 style.json 등은 그대로)
+
+way.pmtiles 를 다시 만들면 장소 색인도 다시 만든다: python3 tools/map/build_places_index.py
 """
 
 import gzip
@@ -40,9 +43,10 @@ except ImportError:
     SSL = None
 
 # (이름, 남, 서, 북, 동, 최소 줌, 최대 줌)
+# 상세(z12–14)는 서울 전체 — 오프라인 장소 검색·핀 설명(build_places_index.py)이 z14 타일에서 장소·도로를 뽑는다.
 AREAS = [
     ("서울 전체(축소)", 37.40, 126.75, 37.70, 127.20, 0, 11),
-    ("시연: 마포·신촌", 37.540, 126.895, 37.575, 126.965, 12, 14),
+    ("서울 전체(상세)", 37.42, 126.76, 37.71, 127.19, 12, 14),
     ("에뮬 기본 위치: 성남 시흥동", 37.395, 127.070, 37.425, 127.110, 12, 14),
 ]
 FONT_RANGES = ["0-255", "256-511", "8192-8447"]
@@ -191,6 +195,8 @@ def main():
     tilejson = json.loads(get("https://tiles.openfreemap.org/planet"))
     print(f"OpenFreeMap {tilejson.get('version')} · {tilejson['tiles'][0]}")
     build_tiles(tilejson["tiles"][0])
+    if "--tiles-only" in sys.argv[1:]:
+        return
     fonts = build_style()
     build_fonts(fonts)
     build_sprites()

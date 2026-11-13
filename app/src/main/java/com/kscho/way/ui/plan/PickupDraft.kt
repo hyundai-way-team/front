@@ -7,7 +7,7 @@ import com.kscho.way.domain.model.Place
 import com.kscho.way.domain.usecase.PickupPointCheck
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/** 출발 전 화면들(D-02 동승자 → D-03 장소 → D-04 핀 → D-05 확인)이 채우는 계획. 출발하면 비운다. */
+/** 출발 전 화면들(D-02 동승자 → D-03 장소 → D-04 핀 → D-05 목적지 · 확인)이 채우는 계획. 출발하면 비운다. */
 class PickupDraft {
   val passenger = MutableStateFlow<Contact?>(null)
   val place = MutableStateFlow<Place?>(null)
@@ -15,12 +15,15 @@ class PickupDraft {
   val pinStart = MutableStateFlow<LatLng?>(null)
   /** 확정한 핀 확인 결과. */
   val check = MutableStateFlow<PickupPointCheck?>(null)
+  /** 픽업 뒤 갈 곳(D-05 목적지 설정). 정하지 않아도 출발할 수 있다. */
+  val destination = MutableStateFlow<Place?>(null)
 
   fun reset() {
     passenger.value = null
     place.value = null
     pinStart.value = null
     check.value = null
+    destination.value = null
   }
 
   /** 같은 사람을 같은 곳에서 다시 태울 때(기획 12 · 홈 '최근 픽업'). */
@@ -29,5 +32,6 @@ class PickupDraft {
     place.value = record.place
     pinStart.value = record.pickupPoint.location
     check.value = null
+    destination.value = null
   }
 }

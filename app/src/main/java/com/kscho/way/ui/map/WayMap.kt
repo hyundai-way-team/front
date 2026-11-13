@@ -47,6 +47,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.kscho.way.domain.model.LatLng
+import com.kscho.way.domain.model.Geo
 import com.kscho.way.domain.model.RestrictedZone
 import com.kscho.way.theme.WayColors
 import kotlin.math.cos
@@ -58,6 +59,7 @@ import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
+import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
@@ -67,6 +69,7 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
+import org.maplibre.geojson.Polygon
 import org.maplibre.android.geometry.LatLng as MapLatLng
 
 enum class PinKind {
@@ -334,13 +337,26 @@ private fun addWayLayers(style: Style, context: Context) {
   style.addSource(GeoJsonSource(SRC_ZONES))
   style.addSource(GeoJsonSource(SRC_LINES))
   style.addSource(GeoJsonSource(SRC_PINS))
+  // 점 하나인 구간(버스정류장 둘레 10m)은 원으로 칠한다
   style.addLayer(
-    LineLayer("way-zones", SRC_ZONES).withProperties(
-      PropertyFactory.lineColor(WayColors.Red.toArgb()),
-      PropertyFactory.lineWidth(7f),
-      PropertyFactory.lineOpacity(0.85f),
-      PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
-    )
+    FillLayer("way-zone-areas", SRC_ZONES)
+      .withFilter(Expression.eq(Expression.geometryType(), Expression.literal("Polygon")))
+      .withProperties(PropertyFactory.fillColor(WayColors.Red.toArgb()), PropertyFactory.fillOpacity(0.45f))
+  )
+  style.addLayer(
+    LineLayer("way-zone-outlines", SRC_ZONES)
+      .withFilter(Expression.eq(Expression.geometryType(), Expression.literal("Polygon")))
+      .withProperties(PropertyFactory.lineColor(WayColors.Red.toArgb()), PropertyFactory.lineWidth(2f), PropertyFactory.lineOpacity(0.9f))
+  )
+  style.addLayer(
+    LineLayer("way-zones", SRC_ZONES)
+      .withFilter(Expression.eq(Expression.geometryType(), Expression.literal("LineString")))
+      .withProperties(
+        PropertyFactory.lineColor(WayColors.Red.toArgb()),
+        PropertyFactory.lineWidth(7f),
+        PropertyFactory.lineOpacity(0.85f),
+        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+      )
   )
   val color = Expression.toColor(Expression.get("color"))
   val width = Expression.get("width")
@@ -453,9 +469,16 @@ private fun iconBitmap(kind: PinKind, density: Float): Bitmap {
   }
 }
 
+/** 길가 구간은 선, 점 구간(정류장 등)은 반지름만큼의 원(지도 축척과 같이 커진다). */
 private fun zonesGeoJson(zones: List<RestrictedZone>): FeatureCollection =
   FeatureCollection.fromFeatures(
-    zones.filter { it.path.size >= 2 }.map { Feature.fromGeometry(LineString.fromLngLats(it.path.map { p -> p.point() })) }
+    zones.mapNotNull { z ->
+      when {
+        z.path.size >= 2 -> Feature.fromGeometry(LineString.fromLngLats(z.path.map { p -> p.point() }))
+        z.path.size == 1 -> Feature.fromGeometry(Polygon.fromLngLats(listOf(Geo.circle(z.path.single(), z.radiusMeters).map { p -> p.point() })))
+        else -> null
+      }
+    }
   )
 
 private fun linesGeoJson(lines: List<MapLine>): FeatureCollection =

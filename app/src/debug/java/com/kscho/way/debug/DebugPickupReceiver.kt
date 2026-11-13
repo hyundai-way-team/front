@@ -8,6 +8,8 @@ import com.kscho.way.WayApp
 import com.kscho.way.data.mock.MockWorld
 import com.kscho.way.domain.model.BoardingSource
 import com.kscho.way.domain.model.PickupPlan
+import com.kscho.way.domain.model.Place
+import com.kscho.way.domain.model.Contact
 import com.kscho.way.pickup.PickupService
 import kotlinx.coroutines.launch
 
@@ -31,8 +33,9 @@ class DebugPickupReceiver : BroadcastReceiver() {
         val pending = goAsync()
         c.scope.launch {
           try {
-            val passenger = c.contacts.search("이서연").first()
-            val place = c.places.search("신촌 XX 빌라").first()
+            // 연락처·장소가 실제 데이터라 시연용 이름이 없을 수 있다 — 첫 연락처(없으면 시험용 사람)와 신촌 골목 입구 좌표로
+            val passenger = c.contacts.search("").firstOrNull() ?: Contact("debug-1", "이서연", "01000001234")
+            val place: Place? = null
             val check = c.checkPickupPoint(MockWorld.VILLA_ALLEY_ENTRANCE, place)
             val vehicle = c.vehicleProfile.myVehicle()
             if (c.coordinator.hasActivePickup) c.coordinator.finish()

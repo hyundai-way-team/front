@@ -1,0 +1,27 @@
+# Way 임시 서버. 포스크탑 Caddy 와 같은 도커 망에 붙어, Caddy 가 HTTPS 를 붙여 앞에서 받아 준다.
+#   WAY_DOMAIN     동승자 링크·앱이 쓰는 주소(예: way-pickup.duckdns.org) — .env
+#   CADDY_NETWORK  포스크탑 Caddy 가 있는 망 이름 — deploy.sh 가 찾아서 .env 에 넣는다
+services:
+  way-server:
+    build: .
+    image: way-server:latest
+    container_name: way-server
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      WAY_PUBLIC_URL: https://${WAY_DOMAIN:?WAY_DOMAIN 을 .env 에 넣어 주세요}
+    # 포스크탑과 같은 기계라 넘치지 않게 막는다
+    mem_limit: 420m
+    networks:
+      - caddy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  caddy:
+    external: true
+    name: ${CADDY_NETWORK:?CADDY_NETWORK 를 .env 에 넣어 주세요}

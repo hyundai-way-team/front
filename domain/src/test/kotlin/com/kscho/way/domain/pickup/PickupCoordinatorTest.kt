@@ -6,6 +6,7 @@ import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.LocationSharing
 import com.kscho.way.domain.model.NavEvent
 import com.kscho.way.domain.model.PassengerStatus
+import com.kscho.way.domain.model.Place
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
@@ -127,6 +128,23 @@ class PickupCoordinatorTest {
     assertEquals(1, repo.completed.size)
     assertEquals(1, nav.stopped)
     assertFalse(coordinator.hasActivePickup)
+  }
+
+  @Test
+  fun boarding_withDestination_guidesToDestinationInsteadOfStopping() = runTest {
+    val coordinator = coordinator()
+    val dest = Place("p-dest", "연남동 00 식당", "서울 마포구 연남동", LatLng(37.5620, 126.9250))
+    coordinator.start(Fixtures.plan().copy(destination = dest))
+    runCurrent()
+    assertEquals(Fixtures.pickupLocation, nav.guidedTo)
+
+    door.boardings.emit(testScheduler.currentTime)
+    runCurrent()
+
+    assertEquals(PickupPhase.BOARDED, coordinator.state.value?.phase)
+    // 픽업 뒤 목적지 안내는 내비에 넘기고 Way 는 더 따라가지 않는다(위치 묻기 멈춤)
+    assertEquals(dest.location, nav.handedOverTo)
+    assertEquals(0, nav.stopped)
   }
 
   @Test

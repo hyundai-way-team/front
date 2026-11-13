@@ -41,6 +41,12 @@ class FakeNavigator(var route: RoutePreview = RoutePreview(4_000, 12 * 60)) : Na
   override fun stopGuidance() {
     stopped++
   }
+
+  var handedOverTo: LatLng? = null
+
+  override suspend fun handOver(destination: LatLng, name: String, address: String) {
+    handedOverTo = destination
+  }
 }
 
 class FakeBoardingSensor : BoardingSensor {

@@ -49,6 +49,9 @@ sealed class PickupError(message: String) : RuntimeException(message) {
 
   /** 위치 공유를 허용하지 않았는데 위치가 옴 */
   class NotSharing : PickupError("위치 공유를 허용하지 않았어요")
+
+  /** 열린 픽업이 너무 많음(인증 없는 공개 서버를 메모리로 채우지 못하게) */
+  class Busy : PickupError("지금은 픽업을 더 만들 수 없어요. 잠시 뒤 다시 해 주세요")
 }
 
 /** 한 픽업의 지금 상태(바뀔 때마다 새로 만든다). */
@@ -81,7 +84,12 @@ class PickupHub(
   private val linkBase: String,
   private val newId: () -> String = ::randomToken,
   private val zone: ZoneId = MockWorld.ZONE,
+  /** 만든 지 이만큼 지난 픽업은 지운다(링크도 그때 끝) — 지우지 않으면 공개 서버 메모리가 끝없이 찬다 */
+  private val retentionMillis: Long = 12 * 60 * 60 * 1000L,
+  /** 한꺼번에 둘 수 있는 픽업 수. 넘으면 새로 만들지 않는다 */
+  private val maxPickups: Int = 2_000,
 ) {
+  private val created = ConcurrentHashMap<String, Long>()
   private val byId = ConcurrentHashMap<String, MutableStateFlow<PickupState>>()
   private val byToken = ConcurrentHashMap<String, MutableStateFlow<PickupState>>()
   private val hhmm = DateTimeFormatter.ofPattern("HH:mm").withZone(zone)
@@ -90,12 +98,15 @@ class PickupHub(
 
   /** 세션을 만들고 참여 링크를 돌려준다(기획 3-4). 차가 보낼 출발 문자는 사본으로 남긴다. */
   fun create(request: CreatePickupRequest): CreatePickupResponse {
+    prune()
+    if (byId.size >= maxPickups) throw PickupError.Busy()
     val id = "pk_" + newId()
     val token = newId()
     val url = "${linkBase.trimEnd('/')}/p/$token"
     val state = MutableStateFlow(PickupState(id, token, request, url))
     byId[id] = state
     byToken[token] = state
+    created[id] = clock()
     texts.record(
       id,
       request.passengerName,
@@ -219,6 +230,16 @@ class PickupHub(
       me = passenger.location,
       late = passenger.late,
     )
+  }
+
+  /** 오래된 픽업을 지운다(만든 뒤 [retentionMillis]). 만들 때마다 한 번 — 따로 도는 일꾼이 없다. */
+  private fun prune() {
+    val cutoff = clock() - retentionMillis
+    for ((id, at) in created) {
+      if (at >= cutoff) continue
+      created.remove(id)
+      byId.remove(id)?.let { byToken.remove(it.value.token) }
+    }
   }
 
   private fun pickup(id: String) = byId[id] ?: throw PickupError.NotFound()

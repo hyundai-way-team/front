@@ -1,6 +1,9 @@
 package com.kscho.way.data.repository
 
+import com.kscho.way.data.contact.ContactDataSource
 import com.kscho.way.data.mock.MockPleosContacts
+import com.kscho.way.data.remote.ContactDto
+import com.kscho.way.domain.model.Contact
 import com.kscho.way.data.mock.MockWayApi
 import com.kscho.way.data.mock.MockWorld
 import com.kscho.way.domain.model.StopRestriction
@@ -22,6 +25,21 @@ class RepositoriesTest {
     assertEquals("이서연", repo.search("서연").single().name)
     assertEquals("이서연", repo.search("1234").single().name)
     assertTrue(repo.search("없는사람").isEmpty())
+  }
+
+  @Test
+  fun contacts_recentPassengersComeFirstWithoutDuplicates() = runTest {
+    val device = object : ContactDataSource {
+      override suspend fun all() =
+        listOf(ContactDto("d1", "김민준", "010-0000-5678"), ContactDto("d2", "이서연", "010-0000-1234"), ContactDto("d3", "박지호", "01000009012"))
+    }
+    // 지난 픽업 동승자: 이서연(연락처에도 있음 — 번호 모양이 달라도 같은 사람) · 정하준(연락처에서 지워짐)
+    val repo = ContactRepositoryImpl(device, recent = { listOf(Contact("h1", "이서연", "01000001234"), Contact("h2", "정하준", "01000007890")) })
+
+    val all = repo.search("")
+    assertEquals(listOf("이서연", "정하준", "김민준", "박지호"), all.map { it.name })
+    assertEquals("d2", all.first().id) // 연락처에 있으면 연락처 쪽 항목을 쓴다
+    assertEquals(listOf("정하준"), repo.search("하준").map { it.name })
   }
 
   @Test

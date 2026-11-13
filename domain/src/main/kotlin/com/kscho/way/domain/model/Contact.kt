@@ -12,6 +12,10 @@ data class Contact(val id: String, val name: String, val phone: String) {
   /** 차 화면에 보이는 번호 "010 - 0000 - 1234"(와이어프레임 v2). */
   val displayPhone: String
     get() = PhoneNumbers.display(phone)
+
+  /** 출발 확인(D-05)에 보이는 가린 번호 "010 - **** - 1234". */
+  val displayMaskedPhone: String
+    get() = PhoneNumbers.displayMasked(phone)
 }
 
 /** 부르는 이름 규칙 — 앱이 정해 서버·동승자 웹에 그대로 보낸다(서버가 한국어 이름 규칙을 따로 갖지 않게). */
@@ -29,6 +33,14 @@ object PhoneNumbers {
     if (rest !in 7..8) return d
     val mid = rest - 4
     return "${d.take(area)} - ${d.substring(area, area + mid)} - ${d.takeLast(4)}"
+  }
+
+  /** "01000001234" → "010 - **** - 1234"(가운데를 가린 화면용). 모르는 모양은 끝 4자리만. */
+  fun displayMasked(phone: String): String {
+    val d = phone.filter(Char::isDigit)
+    val area = if (d.startsWith("02")) 2 else 3
+    if (d.length - area !in 7..8) return "****" + d.takeLast(4)
+    return "${d.take(area)} - **** - ${d.takeLast(4)}"
   }
 
   /** "01012341234" · "010-1234-1234" → "010-****-1234". 짧은 번호는 끝 4자리만 남긴다. */

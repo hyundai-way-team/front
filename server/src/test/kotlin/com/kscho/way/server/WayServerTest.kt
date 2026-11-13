@@ -145,7 +145,8 @@ class WayServerTest {
     assertEquals(HttpStatusCode.NotFound, client.get("/api/pickups/recent").status)
     assertEquals(HttpStatusCode.NotFound, client.get("/api/map/features?lat=37.556783&lng=126.942649&radius=200").status)
     val zones = client.get("/api/stop-zones?lat=37.556783&lng=126.942649&radius=200").bodyAsText()
-    assertTrue(zones.startsWith("[") && zones.contains("\"startMinute\"") && !zones.contains("\"roads\""))
+    // 실제 버스정류장(공공데이터) 둘레 10m 구간 — 목데이터 구간이 아니다
+    assertTrue(zones.startsWith("[") && zones.contains("\"bus-") && zones.contains("버스정류장") && !zones.contains("\"roads\""))
   }
 
   @Test
@@ -166,6 +167,21 @@ class WayServerTest {
       assertTrue(body.contains("<string>com.apple.security.root</string>"))
       assertTrue(body.contains(java.util.Base64.getEncoder().encodeToString(ca.readBytes())))
     }
+  }
+
+  @Test
+  fun production_hidesDevRoutes_butKeepsHealth() = testApplication {
+    // 운영(WAY_DEV_ROUTES=0): 문자 사본(동승자 이름·링크)·개발 화면을 밖에 내놓지 않는다
+    val deps = createDeps("https://way.example", mapDir, devRoutes = false)
+    application { wayModule(deps) }
+    client.createPickup()
+    assertEquals(HttpStatusCode.NotFound, client.get("/api/dev/sms").status)
+    assertEquals(HttpStatusCode.NotFound, client.get("/dev/sms").status)
+    assertEquals(HttpStatusCode.NotFound, client.get("/dev/ca.cer").status)
+    assertEquals(HttpStatusCode.NotFound, client.get("/").status)
+    val health = client.get("/api/health")
+    assertEquals(HttpStatusCode.OK, health.status)
+    assertTrue(health.bodyAsText().contains("\"ok\":true"))
   }
 
 }

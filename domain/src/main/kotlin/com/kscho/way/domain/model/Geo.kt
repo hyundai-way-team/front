@@ -52,6 +52,13 @@ object Geo {
     return x to y
   }
 
+  /** [center] 둘레 [radiusMeters] 원을 [steps] 개 점으로 — 닫힌 고리(끝 점 = 첫 점). 지도에 점 구간(정류장 10m)을 그릴 때. */
+  fun circle(center: LatLng, radiusMeters: Double, steps: Int = 24): List<LatLng> =
+    (0..steps).map { i ->
+      val a = 2 * Math.PI * (i % steps) / steps
+      offset(center, east = radiusMeters * kotlin.math.cos(a), north = radiusMeters * kotlin.math.sin(a))
+    }
+
   /** [origin] 에서 동쪽 [east]m · 북쪽 [north]m 떨어진 곳. */
   fun offset(origin: LatLng, east: Double, north: Double): LatLng =
     LatLng(

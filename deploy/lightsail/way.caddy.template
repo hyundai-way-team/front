@@ -1,0 +1,10 @@
+# 포스크탑 Caddy 가 읽는 사이트 설정(저장소 밖 ~/caddy-sites/way.caddy). deploy.sh 가 주소를 채워 넣는다.
+__WAY_DOMAIN__ {
+	encode gzip
+	reverse_proxy way-server:8080
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+}

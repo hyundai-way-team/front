@@ -15,6 +15,7 @@ import java.time.LocalDateTime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -200,5 +201,31 @@ class PickupHubTest {
     assertEquals("김도윤", view.driverName)
     assertEquals("12가 3456", view.vehicle.plateNumber)
     assertEquals("신촌 XX 빌라 골목 입구 앞", view.pickup.title)
+  }
+
+  // ── 공개 서버: 인증 없는 픽업 만들기가 메모리를 끝없이 채우지 않게
+
+  @Test
+  fun create_dropsPickupsOlderThanRetention() {
+    val small = PickupHub(clock = { now }, texts = OutboxTextLog(clock = { now }), linkBase = "http://x", newId = { "id${nextId++}" }, retentionMillis = 60_000, maxPickups = 10)
+    val old = small.create(request)
+    now += 61_000
+    small.create(request)
+    assertThrows(PickupError.NotFound::class.java) { small.view(old.shareUrl.substringAfterLast("/p/")) }
+  }
+
+  @Test
+  fun create_refusesWhenFull() {
+    val small = PickupHub(clock = { now }, texts = OutboxTextLog(clock = { now }), linkBase = "http://x", newId = { "id${nextId++}" }, retentionMillis = 60_000, maxPickups = 2)
+    small.create(request)
+    small.create(request)
+    assertThrows(PickupError.Busy::class.java) { small.create(request) }
+  }
+
+  @Test
+  fun outbox_keepsOnlyRecentCopies() {
+    val log = OutboxTextLog(clock = { now }, maxMessages = 3)
+    repeat(5) { log.record("pk_$it", "이서연", "문자 $it") }
+    assertEquals(listOf("문자 2", "문자 3", "문자 4"), log.messages.value.map { it.text })
   }
 }

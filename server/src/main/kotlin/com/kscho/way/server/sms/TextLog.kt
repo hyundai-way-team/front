@@ -25,6 +25,8 @@ class OutboxTextLog(
   private val log: (String) -> Unit = {},
   /** 남긴 뒤 할 일 — 시연 때 맥 메시지 앱으로 실제 휴대폰에 보내기([MacMessagesRelay]) */
   private val onRecorded: (LoggedText) -> Unit = {},
+  /** 최근 것만 둔다 — 공개 서버에서 사본(동승자 이름·문구)이 끝없이 쌓이지 않게 */
+  private val maxMessages: Int = 200,
 ) : TextLog {
   private val seq = AtomicLong(0)
   private val _messages = MutableStateFlow<List<LoggedText>>(emptyList())
@@ -32,7 +34,7 @@ class OutboxTextLog(
 
   override fun record(pickupId: String, to: String, text: String) {
     val entry = LoggedText(seq.incrementAndGet(), pickupId, to, text, clock())
-    _messages.update { it + entry }
+    _messages.update { (it + entry).takeLast(maxMessages) }
     log("차 → $to (사본)\n$text")
     onRecorded(entry)
   }

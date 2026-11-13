@@ -166,7 +166,7 @@ fun SearchPlaceScreen(onBack: () -> Unit, onNext: () -> Unit) {
 
 /** 검색 결과 한 줄(Title/M · 주소 M/Regular). 고르면 Primary-50 바탕 · Primary-100 테두리. */
 @Composable
-private fun PlaceItem(place: Place, on: Boolean, onClick: () -> Unit) {
+internal fun PlaceItem(place: Place, on: Boolean, onClick: () -> Unit) {
   val shape = RoundedCornerShape(16.dp)
   Column(
     Modifier.fillMaxWidth()

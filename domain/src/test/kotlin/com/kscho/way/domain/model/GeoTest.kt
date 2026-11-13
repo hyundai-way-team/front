@@ -32,4 +32,13 @@ class GeoTest {
     val p = Geo.offset(origin, east = 10.0, north = 12.0)
     assertEquals(12.0, Geo.distanceToPathMeters(p, listOf(a, b)), 0.2)
   }
+
+  @Test
+  fun circle_ringAroundCenterAtRadius() {
+    // 점 하나인 정차 금지 구간(버스정류장 10m)을 지도에 원으로 그린다
+    val ring = Geo.circle(origin, radiusMeters = 10.0, steps = 24)
+    assertEquals(25, ring.size) // 닫힌 고리: 처음 점으로 돌아온다
+    assertEquals(ring.first(), ring.last())
+    ring.forEach { assertEquals(10.0, Geo.distanceMeters(origin, it), 0.05) }
+  }
 }

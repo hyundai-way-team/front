@@ -52,6 +52,9 @@ class SimulatedNavigator(
     job = scope.launch { drive(route) }
   }
 
+  /** 탑승 뒤 목적지 안내 — 시연에선 목적지까지 달리지 않고 픽업이 끝난 것으로(차를 출발 지점으로). */
+  override suspend fun handOver(destination: LatLng, name: String, address: String) = stopGuidance()
+
   /** 안내 종료(탑승·픽업 접기). 시연을 되풀이할 수 있게 차를 출발 지점으로 돌려놓는다. */
   override fun stopGuidance() {
     job?.cancel()

@@ -21,6 +21,7 @@ import com.kscho.way.ui.plan.AdjustPinScreen
 import com.kscho.way.ui.plan.ChoosePassengerScreen
 import com.kscho.way.ui.plan.ConfirmDepartureScreen
 import com.kscho.way.ui.plan.SearchPlaceScreen
+import com.kscho.way.ui.plan.SetDestinationScreen
 
 @Composable
 fun MainNavigation() {
@@ -64,9 +65,10 @@ fun MainNavigation() {
               backStack.removeLastOrNull()
               if (backStack.lastOrNull() != SearchPlace) backStack.add(SearchPlace)
             },
-            onConfirmed = { backStack.add(ConfirmDeparture) },
+            onConfirmed = { backStack.add(SetDestination) },
           )
         }
+        entry<SetDestination> { SetDestinationScreen(onBack = { backStack.removeLastOrNull() }, onNext = { backStack.add(ConfirmDeparture) }) }
         entry<ConfirmDeparture> {
           ConfirmDepartureScreen(
             onBack = { backStack.removeLastOrNull() },

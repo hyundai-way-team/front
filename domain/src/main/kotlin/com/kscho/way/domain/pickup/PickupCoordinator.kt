@@ -5,6 +5,7 @@ import com.kscho.way.domain.messaging.PassengerText
 import com.kscho.way.domain.model.BoardingSource
 import com.kscho.way.domain.model.NavEvent
 import com.kscho.way.domain.model.PickupPlan
+import com.kscho.way.domain.model.Place
 import com.kscho.way.domain.repository.PickupHistoryRepository
 import com.kscho.way.domain.repository.PickupRepository
 import com.kscho.way.domain.vehicle.BoardingSensor
@@ -146,9 +147,18 @@ class PickupCoordinator(
     if (event is PickupEvent.Nav && event.event is NavEvent.Progress) reportDriver(next, now)
     todo.forEach { run(next, it) }
     if (next.isBoarded && !current.isBoarded) {
-      navigator.stopGuidance()
       stopListening()
+      afterBoarding(next.plan.destination)
     }
+  }
+
+  /** 탑승 뒤: 목적지를 정해 뒀으면 그곳 안내를 내비에 넘기고(Way 는 손 뗌), 없으면 픽업 안내를 끝낸다. */
+  private fun afterBoarding(destination: Place?) {
+    if (destination == null) {
+      navigator.stopGuidance()
+      return
+    }
+    send("목적지 안내") { navigator.handOver(destination.location, destination.name, destination.address) }
   }
 
   private fun reportDriver(state: PickupState, now: Long) {

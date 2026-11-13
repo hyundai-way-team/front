@@ -16,6 +16,8 @@ data class PickupPlan(
   val restriction: StopRestriction,
   val route: RoutePreview,
   val vehicle: MyVehicle,
+  /** 픽업 뒤 갈 곳(D-05 목적지 설정, 없어도 출발). 탑승하면 여기로 안내를 이어 간다. */
+  val destination: Place? = null,
 )
 
 enum class BoardingSource {

@@ -6,15 +6,16 @@ object WayConfig {
    * true  = 시연용 시뮬레이션 주행. Way 화면에서 D-06~D-10 흐름이 그대로 보인다(시간 20배속).
    * false = Pleos 내비로 실제 안내(requestRoute). 내비가 앞으로 나와 Way 는 뒤에서 음성·헤드업 알림으로 동작한다.
    */
-  const val SIMULATED_DRIVE = true
+  const val SIMULATED_DRIVE = false
 
   /**
-   * Way 서버 주소. 로컬 서버(./gradlew :server:run)를 에뮬레이터에서 보면 10.0.2.2 가 이 컴퓨터다.
+   * Way 서버 주소. 지금은 임시 서버(포스크탑 Lightsail 에 함께, deploy/lightsail — 주소는 포스크탑 DuckDNS 이름의 하위 이름).
+   * 로컬 서버(./gradlew :server:run)로 시험할 땐 "http://10.0.2.2:8080"(에뮬레이터에서 본 이 컴퓨터).
    * - 서버는 참여 링크를 만들고 차↔동승자 웹을 실시간으로 잇는다. 문자는 차가 보낸다([TEXTS_VIA_PLEOS]).
    * - null 이면 서버 없이 앱 안 mock 서버(동승자 흉내 포함)로 시연한다.
    * 평문 http 는 디버그 빌드에서 10.0.2.2·localhost 만 허용(src/debug/res/xml/network_security_config.xml).
    */
-  val SERVER_URL: String? = "http://10.0.2.2:8080"
+  val SERVER_URL: String? = "https://way.posktop.duckdns.org"
 
   /**
    * 문자는 차에서 운전자 번호로 보낸다(서버는 링크·실시간 연결만).
@@ -28,5 +29,5 @@ object WayConfig {
    * 홈 '최근 픽업'은 앱 파일에 둔다(서버에 묻지 않음). true 면 처음 설치 때(기록 파일이 없을 때) 시연용 지난 픽업 두 건을 넣는다.
    * 실제 배포 땐 false.
    */
-  const val DEMO_HISTORY = true
+  const val DEMO_HISTORY = false
 }

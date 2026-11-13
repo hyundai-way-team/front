@@ -28,4 +28,12 @@ class ContactTest {
     assertEquals("02 - 1234 - 5678", PhoneNumbers.display("02-1234-5678"))
     assertEquals("1234", PhoneNumbers.display("1234"))
   }
+
+  @Test
+  fun displayMaskedPhone_hidesMiddleLikeConfirmScreen() {
+    // D-05 확인 · 출발: "이서연 (010 - **** - 0000)"
+    assertEquals("010 - **** - 1234", Contact("1", "이서연", "01000001234").displayMaskedPhone)
+    assertEquals("02 - **** - 5678", PhoneNumbers.displayMasked("02-1234-5678"))
+    assertEquals("****1234", PhoneNumbers.displayMasked("1234"))
+  }
 }

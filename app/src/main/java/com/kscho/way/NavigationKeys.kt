@@ -15,6 +15,9 @@ import kotlinx.serialization.Serializable
 /** D-04 핀을 정차 지점에 맞추기 */
 @Serializable data object AdjustPin : NavKey
 
+/** D-05 픽업 후 목적지 설정(건너뛸 수 있음) */
+@Serializable data object SetDestination : NavKey
+
 /** D-05 확인 · 출발 */
 @Serializable data object ConfirmDeparture : NavKey
 

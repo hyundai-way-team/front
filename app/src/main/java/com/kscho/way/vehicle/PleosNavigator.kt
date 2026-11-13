@@ -158,6 +158,27 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
       }
   }
 
+  /** 탑승 뒤 목적지: 내비 안내만 걸고 위치 묻기·도착 처리는 하지 않는다(이후 stopGuidance 로 이 안내를 끄지 않음). */
+  override suspend fun handOver(destination: LatLng, name: String, address: String) {
+    poll?.cancel()
+    poll = null
+    guiding = false
+    arrived = false
+    check(ensureReady()) { "내비에 연결하지 못했어요" }
+    navi.requestRoute(
+      RouteInfo(
+        latitude = destination.latitude,
+        longitude = destination.longitude,
+        displayLatitude = null,
+        displayLongitude = null,
+        poiName = name,
+        poiId = "",
+        address = address,
+        poiSubId = "0",
+      )
+    )
+  }
+
   override fun stopGuidance() {
     if (guiding && !arrived) runCatching { navi.cancelRoute() }
     guiding = false

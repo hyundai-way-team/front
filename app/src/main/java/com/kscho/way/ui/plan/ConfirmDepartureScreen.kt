@@ -2,6 +2,7 @@ package com.kscho.way.ui.plan
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -10,11 +11,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,11 +35,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kscho.way.R
 import com.kscho.way.domain.model.Geo
 import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.MyVehicle
 import com.kscho.way.domain.model.PickupPlan
-import com.kscho.way.domain.model.StopRestriction
 import com.kscho.way.domain.pickup.PickupCoordinator
 import com.kscho.way.domain.repository.VehicleProfileRepository
 import com.kscho.way.theme.WayColors
@@ -68,6 +73,8 @@ class ConfirmDepartureViewModel(
   val passenger = draft.passenger.value
   val place = draft.place.value
   val check = draft.check.value
+  /** 픽업 후 목적지(없으면 줄을 감춘다) */
+  val destination = draft.destination.asStateFlow()
   private val _state = MutableStateFlow(ConfirmUiState())
   val state = _state.asStateFlow()
 
@@ -79,6 +86,11 @@ class ConfirmDepartureViewModel(
     }
   }
 
+  /** 확인 카드에서 목적지 ×: 목적지 없이 출발 */
+  fun clearDestination() {
+    draft.destination.value = null
+  }
+
   /** 출발: 서버에 픽업을 만들어 참여 링크를 받고, 차에서 문자를 보내고, 내비 목적지를 픽업 위치로(기획 3-3). */
   fun start(onStarted: () -> Unit) {
     val passenger = passenger ?: return
@@ -88,7 +100,7 @@ class ConfirmDepartureViewModel(
     _state.value = _state.value.copy(starting = true, error = null)
     viewModelScope.launch {
       try {
-        coordinator.start(PickupPlan(passenger, place, check.point, check.restriction, check.route, vehicle))
+        coordinator.start(PickupPlan(passenger, place, check.point, check.restriction, check.route, vehicle, destination.value))
         draft.reset()
         onStarted()
       } catch (e: Exception) {
@@ -104,6 +116,7 @@ fun ConfirmDepartureScreen(onBack: () -> Unit, onStarted: () -> Unit) {
   val c = appContainer()
   val vm = viewModel { ConfirmDepartureViewModel(c.vehicleProfile, c.coordinator, c.draft) }
   val state by vm.state.collectAsStateWithLifecycle()
+  val destination by vm.destination.collectAsStateWithLifecycle()
   val passenger = vm.passenger
   val check = vm.check
   if (passenger == null || check == null) {
@@ -127,25 +140,32 @@ fun ConfirmDepartureScreen(onBack: () -> Unit, onStarted: () -> Unit) {
               Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, WayColors.Primary500, RoundedCornerShape(16.dp)).padding(20.dp),
               verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-              InfoRow("동승자") { Text("${passenger.name} (${passenger.displayPhone})", style = WayType.TitleM, color = WayColors.Grey900) }
+              InfoRow("동승자") { Text("${passenger.name} (${passenger.displayMaskedPhone})", style = WayType.TitleM, color = WayColors.Grey900) }
               HorizontalDivider(color = WayColors.Grey200)
-              InfoRow("픽업 위치") {
-                Text(check.point.description.title, style = WayType.TitleM, color = WayColors.Grey900)
-                Text(check.point.description.detail, style = WayType.MRegular, color = WayColors.Grey500)
-              }
-              HorizontalDivider(color = WayColors.Grey200)
-              InfoRow("규제 확인") {
-                val blocked = check.restriction as? StopRestriction.NoStopping
-                if (blocked == null) Text("정차 금지 구간 확인 안 됨", style = WayType.TitleM, color = WayColors.Grey900)
-                else Text("정차 금지 구간 · ${blocked.zone.name}", style = WayType.TitleM, color = WayColors.Error600)
-                Text("${Format.clock(check.arrivalAtMillis)} 도착 기준 | 현장 표지판을 확인해 주세요", style = WayType.MRegular, color = WayColors.Grey500)
-              }
+              InfoRow("픽업 위치") { Text(check.point.description.title, style = WayType.TitleM, color = WayColors.Grey900) }
               HorizontalDivider(color = WayColors.Grey200)
               InfoRow("도착 예정") {
                 Text("${Format.clock(arrival)} (${Format.duration(check.route.durationSeconds)})", style = WayType.TitleM, color = WayColors.Primary500)
               }
+              state.vehicle?.let { v ->
+                HorizontalDivider(color = WayColors.Grey200)
+                InfoRow("내 차") { Text("${v.description} | ${v.plateNumber}", style = WayType.TitleM, color = WayColors.Grey900) }
+              }
+              destination?.let { d ->
+                HorizontalDivider(color = WayColors.Grey200)
+                InfoRow("목적지") {
+                  Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(d.name, style = WayType.TitleM, color = WayColors.Grey900, modifier = Modifier.weight(1f))
+                    Icon(
+                      painterResource(R.drawable.ic_close),
+                      contentDescription = "목적지 지우기",
+                      tint = Color.Unspecified,
+                      modifier = Modifier.size(24.dp).clickable(role = Role.Button, onClick = vm::clearDestination),
+                    )
+                  }
+                }
+              }
             }
-            Text("차량 번호, 픽업 위치, 도착 예정 시간과 참여 링크가 문자로 전송돼요.", style = WayType.LMedium, color = WayColors.Grey500)
             state.error?.let { AlertBox(it, Tone.ERROR) }
           }
         }
@@ -158,7 +178,7 @@ fun ConfirmDepartureScreen(onBack: () -> Unit, onStarted: () -> Unit) {
       )
     }
     MapFrame {
-      RoutePreviewMap(check.route.path.ifEmpty { listOf(check.point.location) }, check.point.location, check.route.distanceMeters, check.route.durationSeconds, Modifier.fillMaxSize())
+      RoutePreviewMap(check.route.path.ifEmpty { listOf(check.point.location) }, check.point.location, Modifier.fillMaxSize())
     }
   }
 }
@@ -174,7 +194,7 @@ private fun InfoRow(label: String, content: @Composable () -> Unit) {
 
 /** 경로 전체가 들어오게 맞춘 미리보기 지도. */
 @Composable
-private fun RoutePreviewMap(path: List<LatLng>, pickup: LatLng, meters: Int, seconds: Int, modifier: Modifier) {
+private fun RoutePreviewMap(path: List<LatLng>, pickup: LatLng, modifier: Modifier) {
   BoxWithConstraints(modifier) {
     val lats = path.map { it.latitude } + pickup.latitude
     val lngs = path.map { it.longitude } + pickup.longitude
@@ -188,13 +208,6 @@ private fun RoutePreviewMap(path: List<LatLng>, pickup: LatLng, meters: Int, sec
       lines = listOf(MapLine(path, WayColors.Blue, 7f)),
       pins = listOfNotNull(path.firstOrNull()?.takeIf { path.size > 1 }?.let { MapPin(it, PinKind.CAR, "내 차 · 출발 지점") }, MapPin(pickup, PinKind.PICKUP, "픽업 위치")),
       caption = "지도 · 픽업 위치까지 경로 미리보기",
-    )
-    Text(
-      "${Format.distance(meters)} · ${Format.minutes(seconds)}",
-      fontSize = 18.sp,
-      fontWeight = FontWeight.Bold,
-      color = Color.White,
-      modifier = Modifier.align(Alignment.TopEnd).padding(20.dp).clip(RoundedCornerShape(16.dp)).background(WayColors.Dark).padding(horizontal = 14.dp, vertical = 6.dp),
     )
   }
 }

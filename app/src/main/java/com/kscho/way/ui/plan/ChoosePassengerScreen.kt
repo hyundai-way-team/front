@@ -1,5 +1,8 @@
 package com.kscho.way.ui.plan
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,8 +29,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -66,18 +71,23 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class ChoosePassengerViewModel(private val contacts: ContactRepository, private val draft: PickupDraft) : ViewModel() {
   val query = MutableStateFlow("")
 
-  /** '최근 및 저장된 연락처' — 전체 */
-  val all: StateFlow<List<Contact>> =
-    flow { emit(runCatching { contacts.search("") }.getOrDefault(emptyList())) }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+  /** '최근 및 저장된 연락처' — 최근에 태운 사람 먼저, 그다음 기기 연락처. 처음 한 번 불러오고, 연락처 권한을 받은 뒤 다시 부른다. */
+  private val _all = MutableStateFlow<List<Contact>?>(null)
+  val all: StateFlow<List<Contact>?> = _all.asStateFlow()
+
+  fun load() {
+    viewModelScope.launch { _all.value = runCatching { contacts.search("") }.getOrDefault(emptyList()) }
+  }
 
   /** 입력한 이름·번호로 찾은 사람(검색 칸 아래 목록) */
   val suggestions: StateFlow<List<Contact>> =
@@ -106,7 +116,18 @@ fun ChoosePassengerScreen(onBack: () -> Unit, onNext: () -> Unit) {
   val density = LocalDensity.current
   val vm = viewModel { ChoosePassengerViewModel(c.contacts, c.draft) }
   val query by vm.query.collectAsStateWithLifecycle()
-  val all by vm.all.collectAsStateWithLifecycle()
+  val loaded by vm.all.collectAsStateWithLifecycle()
+  val all = loaded.orEmpty()
+  // 연락처 = 차에 연결된 휴대폰 연락처(기기 연락처). 권한을 받으면 다시 불러온다
+  var contactsAllowed by remember { mutableStateOf(c.deviceContacts.granted) }
+  val askContacts = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+    contactsAllowed = ok
+    vm.load()
+  }
+  LaunchedEffect(Unit) {
+    vm.load()
+    if (!contactsAllowed) askContacts.launch(Manifest.permission.READ_CONTACTS)
+  }
   val suggestions by vm.suggestions.collectAsStateWithLifecycle()
   val selected by vm.selected.collectAsStateWithLifecycle()
   // 검색 칸 아래 목록 자리: 칸 아래 끝 − 틀 위 끝(둘 다 창 기준)
@@ -151,6 +172,14 @@ fun ChoosePassengerScreen(onBack: () -> Unit, onNext: () -> Unit) {
                         vm.select(contact)
                       }
                     }
+                  }
+                  if (loaded != null && all.isEmpty()) {
+                    Text(
+                      if (contactsAllowed) "연락처가 없어요. 차에 휴대폰을 연결하면 연락처를 불러와요." else "연락처를 보려면 연락처 접근을 허용해 주세요.",
+                      style = WayType.LMedium,
+                      color = WayColors.Grey500,
+                      modifier = Modifier.padding(top = 8.dp),
+                    )
                   }
                   // 아래로 더 있음을 흐리게(Scroll Fade)
                   if (grid.canScrollForward) Box(

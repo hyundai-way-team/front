@@ -26,9 +26,20 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
-class ContactRepositoryImpl(private val source: ContactDataSource) : ContactRepository {
+/**
+ * 연락처 = 차에 연결된 휴대폰 연락처([source]) + 지난 픽업 동승자([recent]).
+ * '최근 및 저장된 연락처' 순서: 최근에 태운 사람 먼저(연락처에 있으면 그 항목으로), 그다음 연락처 순서 그대로.
+ * 같은 사람은 번호 숫자로 가린다(모양이 "010-0000-1234"·"01000001234"로 달라도 하나).
+ */
+class ContactRepositoryImpl(
+  private val source: ContactDataSource,
+  private val recent: suspend () -> List<Contact> = { emptyList() },
+) : ContactRepository {
   override suspend fun search(query: String): List<Contact> {
-    val all = source.all().map { Contact(it.id, it.name, it.phone) }
+    val device = source.all().map { Contact(it.id, it.name, it.phone) }
+    val byDigits = device.associateBy { it.phone.filter(Char::isDigit) }
+    val firsts = runCatching { recent() }.getOrDefault(emptyList()).map { byDigits[it.phone.filter(Char::isDigit)] ?: it }
+    val all = (firsts + device).distinctBy { it.phone.filter(Char::isDigit) }
     val q = query.trim()
     if (q.isEmpty()) return all
     val digits = q.filter(Char::isDigit)

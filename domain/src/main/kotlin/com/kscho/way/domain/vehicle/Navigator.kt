@@ -19,4 +19,10 @@ interface Navigator {
   val events: SharedFlow<NavEvent>
 
   fun stopGuidance()
+
+  /**
+   * 탑승 뒤 목적지 안내를 내비에 넘긴다(D-05 목적지). 안내만 시작하고 Way 는 더 따라가지 않는다 —
+   * 픽업 구간의 위치 묻기를 멈추고, 이 안내는 이후 [stopGuidance] 로 끄지 않는다(운전자의 안내).
+   */
+  suspend fun handOver(destination: LatLng, name: String, address: String)
 }
