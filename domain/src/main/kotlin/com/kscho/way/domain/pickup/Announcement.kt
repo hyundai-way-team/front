@@ -26,8 +26,11 @@ sealed interface Announcement {
     override val text = "${passenger.callName} 님이 아직 도착하지 않았어요. 전화를 걸까요?"
   }
 
-  data object Boarded : Announcement {
-    override val text = "탑승을 확인했어요. 안내를 종료할게요"
+  /** 탑승 확인. 목적지를 정해 뒀으면 픽업 안내를 끝내지 않고 곧 목적지 안내로 넘어간다(D-10). */
+  data class Boarded(val toDestination: Boolean = false) : Announcement {
+    override val text =
+      if (toDestination) "탑승을 확인했어요. ${PickupPolicy.DESTINATION_HANDOVER_SECONDS}초 뒤 목적지 안내를 시작할게요"
+      else "탑승을 확인했어요. 안내를 종료할게요"
   }
 }
 

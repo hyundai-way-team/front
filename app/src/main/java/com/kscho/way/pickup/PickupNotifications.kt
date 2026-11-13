@@ -33,6 +33,9 @@ object PickupNotifications {
         is PassengerText.ArrivingSoon -> 2
       }
 
+  /** '문자 보내기' 알림 전부 — 탑승하면 아직 안 누른 것은 지운다(지난 픽업 문자를 나중에 보내지 않게). */
+  val TEXT_IDS = TEXT_ID_BASE..TEXT_ID_BASE + 2
+
   private const val EXTRA_NO_HEADS_UP = "exclude_from_heads_up_notification"
   private const val CHANNEL_ONGOING = "pickup_ongoing"
   private const val CHANNEL_ASK = "pickup_ask"

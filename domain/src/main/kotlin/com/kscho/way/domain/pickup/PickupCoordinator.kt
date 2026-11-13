@@ -56,6 +56,10 @@ class PickupCoordinator(
   private var events = Channel<PickupEvent>(Channel.UNLIMITED)
   private var job: Job? = null
   private var lastDriverReportAt: Long? = null
+  /** 탑승 뒤 목적지 안내를 내비에 넘겼는지(한 번만). */
+  private var handedOver = false
+  /** 탑승 [PickupPolicy.DESTINATION_HANDOVER_SECONDS] 초 뒤 목적지 안내를 넘기고 픽업을 닫는 일. */
+  private var autoHandOver: Job? = null
 
   /** 탑승 전인 픽업이 있는지. */
   val hasActivePickup: Boolean
@@ -67,6 +71,8 @@ class PickupCoordinator(
    */
   suspend fun start(plan: PickupPlan): PickupState {
     check(!hasActivePickup) { "이미 진행 중인 픽업이 있어요" }
+    autoHandOver?.cancel()
+    autoHandOver = null
     stopListening()
     _state.value = null
     // 구독을 먼저 걸어 둔다 — 내비 안내 시작 직후 오는 일을 놓치지 않게(세션이 생기기 전 일은 버린다)
@@ -90,6 +96,7 @@ class PickupCoordinator(
       }
     val initial = PickupState(id = created.id, shareUrl = created.shareUrl, plan = plan, startedAtMillis = now, arrivalAtMillis = arrival)
     lastDriverReportAt = null
+    handedOver = false
     _state.value = initial
     text("출발 문자", initial, PassengerText.Departure(created.shareUrl, plan.vehicle.driverName, plan.vehicle, point.description.title, arrival))
     listening.launch { pickups.passengerStatus(created.id).collect { events.send(PickupEvent.Passenger(it)) } }
@@ -106,8 +113,26 @@ class PickupCoordinator(
     events.trySend(PickupEvent.Nav(NavEvent.Arrived(clock())))
   }
 
-  /** 안내 종료 화면을 닫는다(또는 픽업을 접는다). */
+  /**
+   * D-10: 정해 둔 목적지 안내를 Pleos 내비에 넘긴다('탑승 완료' 버튼 · 10초 카운트다운). 넘겼으면 true.
+   * 탑승 전이거나 목적지가 없거나 이미 넘겼으면 아무것도 하지 않는다.
+   */
+  @Synchronized // 화면('탑승 완료')과 10초 타이머가 다른 스레드에서 겹쳐도 한 번만
+  fun continueToDestination(): Boolean {
+    val s = _state.value ?: return false
+    val destination = s.plan.destination ?: return false
+    if (!s.isBoarded || handedOver) return false
+    handedOver = true
+    send("목적지 안내") { navigator.handOver(destination.location, destination.name, destination.address) }
+    return true
+  }
+
+  /** 안내 종료 화면을 닫는다(또는 픽업을 접는다). 목적지를 정해 두고 아직 넘기지 않았으면 넘긴다. */
+  @Synchronized
   fun finish() {
+    autoHandOver?.cancel()
+    autoHandOver = null
+    continueToDestination()
     val wasActive = hasActivePickup
     stopListening()
     if (wasActive) navigator.stopGuidance()
@@ -148,17 +173,20 @@ class PickupCoordinator(
     todo.forEach { run(next, it) }
     if (next.isBoarded && !current.isBoarded) {
       stopListening()
-      afterBoarding(next.plan.destination)
+      // 목적지가 없으면 픽업 안내를 끝낸다. 있으면 D-10 에서 운전자('탑승 완료')를 기다리되, 10초가 지나면 스스로 넘긴다.
+      // 화면이 아니라 여기서 센다 — 실차에선 Pleos 내비가 앞에 있어 Way 화면(D-10)이 멈춰 있다.
+      if (next.plan.destination == null) navigator.stopGuidance() else scheduleHandOver(next.boardedAtMillis ?: now)
     }
   }
 
-  /** 탑승 뒤: 목적지를 정해 뒀으면 그곳 안내를 내비에 넘기고(Way 는 손 뗌), 없으면 픽업 안내를 끝낸다. */
-  private fun afterBoarding(destination: Place?) {
-    if (destination == null) {
-      navigator.stopGuidance()
-      return
-    }
-    send("목적지 안내") { navigator.handOver(destination.location, destination.name, destination.address) }
+  private fun scheduleHandOver(boardedAt: Long) {
+    autoHandOver?.cancel()
+    autoHandOver =
+      scope.launch {
+        delay((boardedAt + PickupPolicy.DESTINATION_HANDOVER_SECONDS * 1000L - clock()).coerceAtLeast(0))
+        autoHandOver = null
+        finish()
+      }
   }
 
   private fun reportDriver(state: PickupState, now: Long) {

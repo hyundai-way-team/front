@@ -10,4 +10,20 @@ sealed interface NavEvent {
 
   /** 픽업 위치 도착·정차. */
   data class Arrived(val atMillis: Long) : NavEvent
+
+  /** 다음 회전 안내(Pleos 내비 TBT) — 운전 화면 오른쪽 위 '300m 앞 우회전'. */
+  data class Turn(val instruction: TurnInstruction) : NavEvent
+}
+
+/** 다음 회전 안내 한 건. [road] 는 내비가 주는 설명(대개 도로·방면 이름, 없으면 빈 글자). */
+data class TurnInstruction(val kind: TurnKind, val distanceMeters: Int, val road: String)
+
+enum class TurnKind(val label: String) {
+  STRAIGHT("직진"),
+  RIGHT("우회전"),
+  LEFT("좌회전"),
+  KEEP_RIGHT("오른쪽 방향"),
+  KEEP_LEFT("왼쪽 방향"),
+  U_TURN("유턴"),
+  OTHER("안내"),
 }

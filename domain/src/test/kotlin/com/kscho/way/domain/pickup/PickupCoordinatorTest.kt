@@ -131,20 +131,80 @@ class PickupCoordinatorTest {
   }
 
   @Test
-  fun boarding_withDestination_guidesToDestinationInsteadOfStopping() = runTest {
+  fun boarding_withDestination_waitsForDriver_thenHandsOverOnce() = runTest {
     val coordinator = coordinator()
     val dest = Place("p-dest", "연남동 00 식당", "서울 마포구 연남동", LatLng(37.5620, 126.9250))
     coordinator.start(Fixtures.plan().copy(destination = dest))
     runCurrent()
-    assertEquals(Fixtures.pickupLocation, nav.guidedTo)
 
     door.boardings.emit(testScheduler.currentTime)
     runCurrent()
-
+    // D-10: 운전자가 '탑승 완료'를 누르거나 10초 카운트다운이 끝날 때까지 기다린다
     assertEquals(PickupPhase.BOARDED, coordinator.state.value?.phase)
-    // 픽업 뒤 목적지 안내는 내비에 넘기고 Way 는 더 따라가지 않는다(위치 묻기 멈춤)
-    assertEquals(dest.location, nav.handedOverTo)
+    assertNull(nav.handedOverTo)
     assertEquals(0, nav.stopped)
+
+    assertTrue(coordinator.continueToDestination())
+    runCurrent()
+    assertEquals(dest.location, nav.handedOverTo)
+    assertFalse(coordinator.continueToDestination()) // 두 번 넘기지 않는다
+    assertEquals(1, nav.handOvers)
+  }
+
+  @Test
+  fun boarding_withDestination_handsOverByItselfTenSecondsLater() = runTest {
+    // 실차에선 Pleos 내비가 앞에 있어 D-10 화면이 안 보인다 — 화면 없이도 10초 뒤 넘기고 픽업을 닫는다
+    val coordinator = coordinator()
+    val dest = Place("p-dest", "연남동 00 식당", "서울 마포구 연남동", LatLng(37.5620, 126.9250))
+    coordinator.start(Fixtures.plan().copy(destination = dest))
+    runCurrent()
+    door.boardings.emit(testScheduler.currentTime)
+    runCurrent()
+
+    advanceTimeBy(9_999)
+    runCurrent()
+    assertNull(nav.handedOverTo)
+
+    advanceTimeBy(2)
+    runCurrent()
+    assertEquals(dest.location, nav.handedOverTo)
+    assertEquals(1, nav.handOvers)
+    assertNull(coordinator.state.value)
+  }
+
+  @Test
+  fun finishBeforeCountdown_cancelsAutoHandOver_andLeavesNextPickupAlone() = runTest {
+    val coordinator = coordinator()
+    val dest = Place("p-dest", "연남동 00 식당", "서울 마포구 연남동", LatLng(37.5620, 126.9250))
+    coordinator.start(Fixtures.plan().copy(destination = dest))
+    runCurrent()
+    door.boardings.emit(testScheduler.currentTime)
+    runCurrent()
+    advanceTimeBy(3_000)
+    coordinator.finish() // '탑승 완료'를 먼저 눌렀다
+    runCurrent()
+
+    coordinator.start(Fixtures.plan()) // 곧바로 다음 픽업
+    runCurrent()
+    advanceTimeBy(20_000)
+    runCurrent()
+    assertEquals(1, nav.handOvers)
+    assertTrue(coordinator.hasActivePickup) // 앞 픽업의 10초가 다음 픽업을 닫지 않는다
+  }
+
+  @Test
+  fun finish_afterBoardingWithPendingDestination_stillHandsOver() = runTest {
+    val coordinator = coordinator()
+    val dest = Place("p-dest", "연남동 00 식당", "서울 마포구 연남동", LatLng(37.5620, 126.9250))
+    coordinator.start(Fixtures.plan().copy(destination = dest))
+    runCurrent()
+    door.boardings.emit(testScheduler.currentTime)
+    runCurrent()
+
+    coordinator.finish() // D-10 을 그냥 닫아도 정해 둔 목적지 안내는 넘긴다
+    runCurrent()
+    assertEquals(dest.location, nav.handedOverTo)
+    assertNull(coordinator.state.value)
   }
 
   @Test

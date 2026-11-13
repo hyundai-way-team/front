@@ -1,5 +1,7 @@
 package com.kscho.way.domain.pickup
 
+import com.kscho.way.domain.model.TurnInstruction
+
 import com.kscho.way.domain.model.BoardingSource
 import com.kscho.way.domain.model.Geo
 import com.kscho.way.domain.model.LatLng
@@ -38,6 +40,8 @@ data class PickupState(
   val boardedAtMillis: Long? = null,
   val boardingSource: BoardingSource? = null,
   val lastAnnouncement: SpokenAnnouncement? = null,
+  /** 다음 회전 안내(주행 중에만). */
+  val nextTurn: TurnInstruction? = null,
 ) {
   val isBoarded: Boolean
     get() = phase == PickupPhase.BOARDED

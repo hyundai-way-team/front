@@ -1,9 +1,13 @@
 package com.kscho.way.domain.pickup
 
 import com.kscho.way.domain.model.BoardingSource
+import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.LocationSharing
 import com.kscho.way.domain.model.NavEvent
 import com.kscho.way.domain.model.PassengerStatus
+import com.kscho.way.domain.model.Place
+import com.kscho.way.domain.model.TurnInstruction
+import com.kscho.way.domain.model.TurnKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -165,6 +169,17 @@ class PickupRulesTest {
   }
 
   @Test
+  fun boarding_withDestination_saysDestinationGuidanceFollows() {
+    // D-10: 목적지를 정해 뒀으면 '안내 종료'가 아니라 곧 목적지 안내로 넘어간다고 말한다
+    val dest = Place("p-dest", "연남동 00 식당", "서울 마포구 연남동", LatLng(37.5620, 126.9250))
+    val withDestination = start.copy(plan = start.plan.copy(destination = dest))
+    val (state, effects) = reduceAll(withDestination, PickupEvent.Boarded(60_000L, BoardingSource.DOOR) to 60_000L)
+    val said = "탑승을 확인했어요. 10초 뒤 목적지 안내를 시작할게요"
+    assertEquals(said, effects.filterIsInstance<PickupEffect.Announce>().single().announcement.text)
+    assertEquals(said, state.lastAnnouncement?.announcement?.text) // 화면 음성 배너도 같은 말
+  }
+
+  @Test
   fun boardingBeforeArrival_alsoCompletes() {
     val (state, effects) = reduceAll(start, PickupEvent.Boarded(60_000L, BoardingSource.DOOR) to 60_000L)
     assertEquals(PickupPhase.BOARDED, state.phase)
@@ -183,5 +198,16 @@ class PickupRulesTest {
       )
     assertEquals(boarded, state)
     assertTrue(effects.isEmpty())
+  }
+
+  @Test
+  fun turn_isKeptWhileDriving_andDroppedAfterArrival() {
+    val turn = TurnInstruction(TurnKind.RIGHT, 300, "성산로")
+    val driving = PickupRules.reduce(Fixtures.state(), PickupEvent.Nav(NavEvent.Turn(turn)), 1_000L).state
+    assertEquals(turn, driving.nextTurn)
+    val stopped = PickupRules.reduce(driving, PickupEvent.Nav(NavEvent.Arrived(2_000L)), 2_000L).state
+    assertEquals(null, stopped.nextTurn) // 정차 뒤엔 회전 안내를 지운다
+    val late = PickupRules.reduce(stopped, PickupEvent.Nav(NavEvent.Turn(turn)), 3_000L).state
+    assertEquals(null, late.nextTurn)
   }
 }

@@ -84,6 +84,7 @@ fun MainNavigation() {
 }
 
 private fun NavBackStack<NavKey>.replaceAll(key: NavKey) {
+  if (size == 1 && first() == key) return // 이미 그 화면 하나뿐 — 두 번 불려도 [Home, Home] 이 되지 않게
   add(key)
   removeAll { it != key }
 }

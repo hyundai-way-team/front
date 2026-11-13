@@ -47,6 +47,8 @@ object PickupRules {
         when (val nav = event.event) {
           is NavEvent.Progress -> onProgress(state, nav, nowMillis)
           is NavEvent.Arrived -> onArrived(state, nav.atMillis)
+          // 회전 안내는 주행 중에만 보여 준다
+          is NavEvent.Turn -> Transition(if (state.phase == PickupPhase.DRIVING) state.copy(nextTurn = nav.instruction) else state)
         }
       is PickupEvent.Passenger -> onPassenger(state, event.status, nowMillis)
       is PickupEvent.Boarded -> onBoarded(state, event, nowMillis)
@@ -84,7 +86,7 @@ object PickupRules {
 
   private fun onArrived(state: PickupState, at: Long): Transition {
     if (state.phase != PickupPhase.DRIVING) return Transition(state)
-    val next = state.copy(phase = PickupPhase.WAITING, arrivedAtMillis = at, remainingSeconds = 0, remainingMeters = 0)
+    val next = state.copy(phase = PickupPhase.WAITING, arrivedAtMillis = at, remainingSeconds = 0, remainingMeters = 0, nextTurn = null)
     return Transition(next, listOf(PickupEffect.ReportArrived(at)))
   }
 
@@ -114,12 +116,13 @@ object PickupRules {
 
   private fun onBoarded(state: PickupState, event: PickupEvent.Boarded, now: Long): Transition {
     // 3-10 정차 전에 타도 그 시점에 끝낸다(예외 케이스)
+    val said = Announcement.Boarded(toDestination = state.plan.destination != null)
     val next =
       state.copy(
         phase = PickupPhase.BOARDED,
         boardedAtMillis = event.atMillis,
         boardingSource = event.source,
-        lastAnnouncement = SpokenAnnouncement(Announcement.Boarded, now),
+        lastAnnouncement = SpokenAnnouncement(said, now),
       )
     val outcome =
       PickupOutcome(
@@ -129,6 +132,6 @@ object PickupRules {
         pickupLocationChanges = 0,
         boardingSource = event.source,
       )
-    return Transition(next, listOf(PickupEffect.Complete(outcome), PickupEffect.Announce(Announcement.Boarded)))
+    return Transition(next, listOf(PickupEffect.Complete(outcome), PickupEffect.Announce(said)))
   }
 }

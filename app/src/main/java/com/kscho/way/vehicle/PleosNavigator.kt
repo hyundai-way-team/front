@@ -1,10 +1,12 @@
 package com.kscho.way.vehicle
 
 import ai.pleos.playground.navi.constants.NaviErrorCode
+import ai.pleos.playground.navi.constants.TurnType
 import ai.pleos.playground.navi.data.CurrentLocationInfo
 import ai.pleos.playground.navi.data.DestinationArrivedInfo
 import ai.pleos.playground.navi.data.DrivingInfo
 import ai.pleos.playground.navi.data.RouteInfo
+import ai.pleos.playground.navi.data.TBTInfo
 import ai.pleos.playground.navi.data.TripInfo
 import ai.pleos.playground.navi.data.TripRequest
 import ai.pleos.playground.navi.helper.NaviHelper
@@ -15,6 +17,8 @@ import com.kscho.way.domain.model.Geo
 import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.NavEvent
 import com.kscho.way.domain.model.RoutePreview
+import com.kscho.way.domain.model.TurnInstruction
+import com.kscho.way.domain.model.TurnKind
 import com.kscho.way.domain.vehicle.Navigator
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
@@ -70,6 +74,12 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
         if (!guiding || arrived) return
         val dest = drivingInfo.destination ?: return
         _events.tryEmit(NavEvent.Progress(lastLocation, dest.duration, dest.distance, clock() + dest.duration * 1000L))
+      }
+
+      override fun onTBTInfo(tbtInfoList: List<TBTInfo>) {
+        if (!guiding || arrived) return
+        val next = tbtInfoList.firstOrNull() ?: return
+        _events.tryEmit(NavEvent.Turn(TurnInstruction(turnKind(next.type), next.distance.roundToInt(), next.description)))
       }
 
       override fun onDestinationArrived(destinationArrivedInfo: DestinationArrivedInfo) {
@@ -187,6 +197,22 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
   }
 
   private companion object {
+    /** Pleos 회전 종류 → 화면 문구·화살표(오른쪽·왼쪽 계열로 묶는다). */
+    fun turnKind(type: TurnType): TurnKind =
+      when (type) {
+        TurnType.TURN_STRAIGHT -> TurnKind.STRAIGHT
+        TurnType.TURN_RIGHT, TurnType.TURN_SHARP_R -> TurnKind.RIGHT
+        TurnType.TURN_LEFT, TurnType.TURN_SHARP_L -> TurnKind.LEFT
+        TurnType.TURN_KEEP_R, TurnType.TURN_ENTER_IC_R, TurnType.TURN_EXIT_IC_R, TurnType.TURN_ENTER_UNDER_R, TurnType.TURN_AVOID_UNDER_R,
+        TurnType.TURN_ENTER_OVER_R, TurnType.TURN_AVOID_OVER_R -> TurnKind.KEEP_RIGHT
+        TurnType.TURN_KEEP_L, TurnType.TURN_ENTER_IC_L, TurnType.TURN_EXIT_IC_L, TurnType.TURN_ENTER_UNDER_L, TurnType.TURN_AVOID_UNDER_L,
+        TurnType.TURN_ENTER_OVER_L, TurnType.TURN_AVOID_OVER_L -> TurnKind.KEEP_LEFT
+        TurnType.TURN_UTURN -> TurnKind.U_TURN
+        TurnType.TURN_ENTER_IC_C, TurnType.TURN_EXIT_IC_C, TurnType.TURN_ENTER_UNDER_C, TurnType.TURN_AVOID_UNDER_C, TurnType.TURN_ENTER_OVER_C,
+        TurnType.TURN_AVOID_OVER_C, TurnType.TURN_TUNNEL, TurnType.TURN_TOLL -> TurnKind.STRAIGHT
+        else -> TurnKind.OTHER
+      }
+
     const val TAG = "WayNavi"
   }
 }

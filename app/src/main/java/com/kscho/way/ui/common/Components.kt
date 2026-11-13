@@ -137,6 +137,8 @@ fun StepHeader(step: Int, onBack: () -> Unit, title: String? = null, lineWidth: 
 enum class ActionKind {
   PRIMARY,
   OUTLINE,
+  /** 빨강(Error-500) — D-09 '전화하기' */
+  DANGER,
 }
 
 /** 액션 버튼(높이 72 · 라운드 16 · Title/L). 꺼지면 Grey-100 바탕 · Grey-300 글자. */
@@ -153,6 +155,7 @@ fun ActionButton(
     when {
       !enabled -> WayColors.Grey100 to WayColors.Grey300
       kind == ActionKind.PRIMARY -> WayColors.Primary500 to Color.White
+      kind == ActionKind.DANGER -> WayColors.Error500 to Color.White
       else -> Color.White to WayColors.Grey700
     }
   Row(

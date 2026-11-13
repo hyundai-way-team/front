@@ -43,9 +43,11 @@ class FakeNavigator(var route: RoutePreview = RoutePreview(4_000, 12 * 60)) : Na
   }
 
   var handedOverTo: LatLng? = null
+  var handOvers = 0
 
   override suspend fun handOver(destination: LatLng, name: String, address: String) {
     handedOverTo = destination
+    handOvers++
   }
 }
 

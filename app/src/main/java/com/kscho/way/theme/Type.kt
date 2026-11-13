@@ -23,6 +23,7 @@ object WayType {
   private fun style(size: Int, weight: FontWeight, line: Double, tracking: Double = -0.02) =
     TextStyle(fontFamily = Pretendard, fontSize = size.sp, fontWeight = weight, lineHeight = line.em, letterSpacing = tracking.em)
 
+  val DisplayXL = style(48, FontWeight.Bold, 1.3)
   val HeadingL = style(36, FontWeight.Bold, 1.3)
   val HeadingM = style(32, FontWeight.Bold, 1.4)
   val TitleXL = style(24, FontWeight.Bold, 1.4)

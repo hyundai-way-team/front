@@ -99,6 +99,7 @@ class PickupService : Service() {
     if (state.isBoarded) {
       question.cancel()
       notifications().cancel(PickupNotifications.CALL_OFFER_ID)
+      PickupNotifications.TEXT_IDS.forEach(notifications()::cancel)
       // 탑승 안내를 마저 말하고 멈춘다(onEffect 의 Boarded)
       stopAfterSpeech = true
       main.postDelayed({ stopSelf() }, 15_000) // 안내가 끝 신호를 못 받아도
@@ -116,7 +117,7 @@ class PickupService : Service() {
       is PickupEffect.Announce -> {
         Log.i(TAG, "음성 안내: ${effect.announcement.text}")
         speech.trySend(PickupPrompts.announcement(effect.announcement))
-        if (effect.announcement == Announcement.Boarded) speech.trySend(STOP)
+        if (effect.announcement is Announcement.Boarded) speech.trySend(STOP)
       }
       is PickupEffect.OfferCall -> offerCall(effect.announcement.passenger)
       else -> Unit

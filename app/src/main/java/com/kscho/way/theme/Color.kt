@@ -18,6 +18,8 @@ object WayColors {
   val Grey200 = Color(0xFFE2E8F0)
   val Grey100 = Color(0xFFF4F8FC)
   val Error600 = Color(0xFFDC2626)
+  val Error500 = Color(0xFFEF4444)
+  val Error100 = Color(0xFFFEE2E2)
   val Error200 = Color(0xFFFECACA)
   val Error50 = Color(0xFFFEF2F2)
   val Warning700 = Color(0xFFB45309)
