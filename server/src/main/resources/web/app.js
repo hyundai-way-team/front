@@ -287,11 +287,19 @@ function setLines(node, lines) {
   node.replaceChildren(...lines.flatMap((l, i) => (i ? [h("br"), l] : [l])));
 }
 
-/** 도착 예정 카드(P-03 · P-04) — 지도 위에 뜨는 반투명 카드. 오른쪽 100×100 원은 디자인 그대로(그래픽 자리) */
-function etaCard({ head, accent = false }) {
+/**
+ * 도착 예정 카드(P-03 · P-04) — 지도 위에 뜨는 반투명 카드. 오른쪽엔 피그마 그림(art: p03 차가 오는 길 · p04 차와 핀)이
+ * 반투명 바탕 위 · 글자 아래에 깔린다(카드 모서리에서 잘림).
+ */
+function etaCard({ head, accent = false, art }) {
   const time = h("p", { class: "time" });
   const left = h("p", { class: "left" });
-  const el = h("div", { class: `eta-card glass${accent ? " accent" : ""}` }, h("div", { class: "stack grow-x", style: "gap:8px" }, head, h("div", { class: "stack", style: "gap:2px" }, time, left)), h("div", { class: "eta-graphic", "aria-hidden": "true" }));
+  const el = h(
+    "div",
+    { class: `eta-card glass${accent ? " accent" : ""}` },
+    h("img", { class: `eta-art ${art}`, src: `/web/icons/eta-${art}.webp`, alt: "", "aria-hidden": "true", decoding: "async" }),
+    h("div", { class: "stack grow-x eta-text", style: "gap:4px" }, head, h("div", { class: "stack" }, time, left)),
+  );
   return { el, time, left };
 }
 
@@ -441,8 +449,8 @@ function mapLayout({ top, sheet, topCover = () => top }) {
     const cover = topCover();
     const topEdge = cover && !cover.hidden ? cover.getBoundingClientRect().bottom - box.top : 0;
     const folded = bottom.el.offsetHeight - bottom.moreEl.offsetHeight;
-    // 위는 카드 아래로 픽업 핀(끝이 점 자리, 몸통은 위로 ~36) 높이만큼 44, 아래는 점 밑 이름표 자리까지 44
-    return { top: topEdge + 44, bottom: folded + 44, left: 40, right: 70 };
+    // 위는 카드 아래로 픽업 핀 + '픽업 위치' 이름표(끝이 점 자리, 위로 ~80) 높이만큼 88, 아래는 점 밑 이름표 자리까지 44
+    return { top: topEdge + 88, bottom: folded + 44, left: 40, right: 70 };
   }
   return { area, mapBox, sheet: bottom, covered, destroy: () => resize.disconnect() };
 }
@@ -584,7 +592,7 @@ const screens = {
       bannerTimer = setTimeout(() => banner.classList.remove("on"), BANNER_MS);
     }
     const who = h("p", { class: "who" });
-    const card = etaCard({ head: who });
+    const card = etaCard({ head: who, art: "p03" });
     const rows = carRows();
     const top = h("div", { class: "float-top" }, card.el, banner);
     // 알림은 잠깐 떴다 사라지니 지도 맞춤은 도착 예정 카드까지만 피한다(사라질 때 지도가 튀지 않게)
@@ -596,7 +604,7 @@ const screens = {
     return {
       el,
       update(v) {
-        map ??= createMap(layout.mapBox, { carLabel: `${v.driverCallName} 님 차`, padding: layout.covered });
+        map ??= createMap(layout.mapBox, { carLabel: `${v.driverCallName} 님 차`, padding: layout.covered, pickupLabel: true });
         // 새 변경이 오면 5초 보이고 사라진다(같은 변경은 한 번만)
         const change = v.etaChange ? `${v.etaChange.from}-${v.etaChange.to}` : null;
         if (change && change !== seenEtaChange) flashBanner();
@@ -619,7 +627,7 @@ const screens = {
 
   // P-04 곧 도착해요 — 지도 위에 '곧 도착해요' 카드, 아래 시트에 차량 · 픽업 위치(펼치면 '경로 안내')
   soon() {
-    const card = etaCard({ head: h("div", { class: "eta-head" }, icon("dot", 24), h("span", {}, "곧 도착해요")), accent: true });
+    const card = etaCard({ head: h("div", { class: "eta-head" }, icon("dot", 20), h("span", {}, "곧 도착해요")), accent: true, art: "p04" });
     const rows = carRows();
     rows.el.classList.add("inset");
     const top = h("div", { class: "float-top" }, card.el);
@@ -631,7 +639,7 @@ const screens = {
     return {
       el,
       update(v) {
-        map ??= createMap(layout.mapBox, { carLabel: `${v.driverCallName} 님 차`, padding: layout.covered });
+        map ??= createMap(layout.mapBox, { carLabel: `${v.driverCallName} 님 차`, padding: layout.covered, pickupLabel: true });
         set(card.time, hhmm(v.arrivalAt));
         const sec = secondsLeft(v);
         set(card.left, sec < 60 ? "곧 픽업 위치에 도착해요" : `${minutesText(sec)} 뒤 픽업 위치에 도착해요`);
@@ -677,7 +685,7 @@ const screens = {
     return {
       el,
       update(v) {
-        map ??= createMap(layout.mapBox, { carLabel: `${v.driverCallName} 님 차`, padding: layout.covered });
+        map ??= createMap(layout.mapBox, { carLabel: `${v.driverCallName} 님 차`, padding: layout.covered, pickupLabel: true });
         rows.update(v);
         const w = v.walk;
         show(walkLabel, !!w);
@@ -755,7 +763,7 @@ const screens = {
     return {
       el,
       update(v) {
-        map ??= createMap(layout.mapBox, { carLabel: `${v.driverCallName} 님 차`, padding: layout.covered });
+        map ??= createMap(layout.mapBox, { carLabel: `${v.driverCallName} 님 차`, padding: layout.covered, pickupLabel: true });
         rows.update(v);
         layout.sheet.setExpandable(canRoute(v));
         map.update(mapView(v, { route: true }));

@@ -24,23 +24,33 @@ function style() {
 function el(className, label) {
   const wrap = document.createElement("div");
   wrap.className = `mk-wrap ${className}`;
-  const dot = document.createElement("div");
-  dot.className = className === "pin" ? "mk-pin" : `mk-dot ${className}`;
-  wrap.append(dot);
   let labelEl = null;
   if (label !== undefined) {
     labelEl = document.createElement("div");
-    labelEl.className = "mk-label";
+    labelEl.className = className === "pin" ? "mk-pin-label" : "mk-label";
     labelEl.textContent = label;
-    wrap.append(labelEl);
   }
+  if (className === "pin") {
+    // 픽업 핀 — 피그마 Marker(파란 핀 + 흰 점 + 파란 빛 그림자) 그대로. 이름표는 핀 위
+    const pin = document.createElement("img");
+    pin.className = "mk-pin";
+    pin.src = "/web/icons/marker-pickup.svg";
+    pin.alt = "";
+    if (labelEl) wrap.append(labelEl);
+    wrap.append(pin);
+    return { wrap, labelEl };
+  }
+  const dot = document.createElement("div");
+  dot.className = `mk-dot ${className}`;
+  wrap.append(dot);
+  if (labelEl) wrap.append(labelEl);
   return { wrap, labelEl };
 }
 
 const toLngLat = (p) => [p.lng, p.lat];
 
-// 카드 속 지도(P-01 · P-05)에서 점들을 맞출 때 가장자리 여백 — 아래·오른쪽은 점 옆 이름표 자리
-const CARD_PADDING = { top: 36, bottom: 70, left: 40, right: 70 };
+// 카드 속 지도(P-01)에서 점들을 맞출 때 가장자리 여백 — 위는 픽업 핀 높이(45), 아래·오른쪽은 점 옆 이름표 자리
+const CARD_PADDING = { top: 52, bottom: 70, left: 40, right: 70 };
 
 /** 걷는 길 색 — 동승자 주황(피그마 v1 걷는 길 · '나' 점 #d9822b = app.css --passenger) */
 function walkColor() {
@@ -59,8 +69,9 @@ function carRouteColor() {
  * 손으로 끌고·두 손가락/휠로 확대할 수 있다(회전·기울이기는 끔). 처음엔 점들과 길이 다 보이게 자동으로 맞추고,
  * 사용자가 지도를 한 번 만지면 그 화면에선 자동 맞춤을 멈춘다(점은 계속 움직인다). 화면이 바뀌면 지도를 새로 만드니 다시 자동 맞춤.
  * padding: 지도 위에 카드가 떠 있으면 가려지는 만큼 — 객체나, 맞출 때마다 부르는 함수({top,bottom,left,right}).
+ * pickupLabel: 픽업 핀 위에 '픽업 위치' 이름표(전체 화면 지도 P-03 · P-04 · P-04a · P-05 — 피그마 P-03).
  */
-export function createMap(container, { carLabel = "차", padding = CARD_PADDING } = {}) {
+export function createMap(container, { carLabel = "차", padding = CARD_PADDING, pickupLabel = false } = {}) {
   let map = null;
   let latest = null;
   const markers = {};
@@ -155,7 +166,7 @@ export function createMap(container, { carLabel = "차", padding = CARD_PADDING 
   }
 
   function apply(v, first) {
-    marker("pickup", "pin", undefined, v.pickup, "bottom");
+    marker("pickup", "pin", pickupLabel ? "픽업 위치" : undefined, v.pickup, "bottom");
     const hadCar = !!markers.car;
     const car = marker("car", "car", carLabel, v.car, "center");
     if (car && hadCar) moveCar(car, v.car);
