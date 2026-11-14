@@ -1,8 +1,9 @@
 // WAY 동승자 웹 — Pleos 문자의 참여 링크로 연다. 앱 설치·로그인 없이 이 페이지에서 끝난다(기획 3-4).
 // 흐름: P-01 링크 첫 화면 → P-02 위치 공유 허용 → (차 상태에 따라) P-03 대기 · P-04 곧 도착 · P-05 대기 타이머 → P-06 종료
 // 위치를 공유 중이면 P-04 의 '경로 안내'로 P-04a(내 위치 → 픽업 위치 걷는 길)를 연다. 길은 서버가 계산해 view.walk 로 보낸다.
-// P-03 · P-04 · P-04a 는 지도가 화면을 채우고 카드·시트가 위에 뜬다(와이어프레임 v2 개정). 지도는 손으로 움직일 수 있다(map.js).
+// P-03 · P-04 · P-04a · P-05 는 지도가 화면을 채우고 카드·시트가 위에 뜬다(와이어프레임 v2 개정). 지도는 손으로 움직일 수 있다(map.js).
 import { createMap, distanceMeters, offsetMeters } from "/web/map.js";
+import { timerTone } from "/web/timer-color.js";
 
 const root = document.getElementById("app");
 const token = decodeURIComponent(location.pathname.split("/")[2] ?? "");
@@ -234,7 +235,7 @@ window.addEventListener("popstate", () => {
 
 // ── 화면 조각
 
-/** '탑승 차량을 확인해 주세요' 카드(P-01·P-05) */
+/** '탑승 차량을 확인해 주세요' 카드(P-01) */
 function vehicleCard() {
   const plate = h("p", { class: "plate" });
   const desc = h("p", { class: "vehicle-desc" });
@@ -248,7 +249,7 @@ function vehicleCard() {
   };
 }
 
-/** 지도 카드 아래 '픽업 위치를 확인해 주세요'(P-01 · P-05 길 없을 때) */
+/** 지도 카드 아래 '픽업 위치를 확인해 주세요'(P-01) */
 function pickupPlace() {
   const title = h("p", { class: "place-title" });
   const detail = h("p", { class: "s-regular muted" });
@@ -285,7 +286,7 @@ function etaCard({ head, accent = false }) {
   return { el, time, left };
 }
 
-/** 아래 시트의 '차량 · 픽업 위치' 두 줄(P-03 · P-04 · P-04a) */
+/** 아래 시트의 '차량 · 픽업 위치' 두 줄(P-03 · P-04 · P-04a · P-05) */
 function carRows() {
   const car = h("span", { class: "v" });
   const spot = h("span", { class: "v" });
@@ -300,7 +301,7 @@ function carRows() {
 }
 
 /**
- * 지도가 화면을 채우고 위엔 카드, 아래엔 시트가 뜨는 틀(P-03 · P-04 · P-04a).
+ * 지도가 화면을 채우고 위엔 카드, 아래엔 시트가 뜨는 틀(P-03 · P-04 · P-04a · P-05).
  * covered() 가 지도 맞춤 여백을 돌려준다 — 위 카드(topCover)와 아래 시트가 가린 만큼.
  */
 function mapLayout({ top, sheet, topCover = () => top }) {
@@ -561,15 +562,17 @@ const screens = {
     };
   },
 
-  // P-05 정차 · 대기 타이머 — 차 화면과 같은 1분(서버 시계 기준) + 걷는 길
+  // P-05 정차 · 대기 타이머 — 지도 위에 타이머 카드(차 화면과 같은 1분, 서버 시계 기준), 아래 시트에 차량 · 픽업 위치.
+  // 카드 색은 남은 시간이 줄수록 파랑 → 빨강(timer-color.js). 내 위치 → 픽업 위치 걷는 길은 지도에 주황 선으로.
   timer() {
     const NS = "http://www.w3.org/2000/svg";
     const R = 41.625; // 지름 90 · 두께 6.75(피그마 고리)
     const C = 2 * Math.PI * R;
     const svg = document.createElementNS(NS, "svg");
     svg.setAttribute("viewBox", "0 0 90 90");
+    const track = document.createElementNS(NS, "circle");
     const arc = document.createElementNS(NS, "circle");
-    for (const [cls, node] of [["track", document.createElementNS(NS, "circle")], ["arc", arc]]) {
+    for (const [cls, node] of [["track", track], ["arc", arc]]) {
       node.setAttribute("cx", "45");
       node.setAttribute("cy", "45");
       node.setAttribute("r", String(R));
@@ -578,33 +581,22 @@ const screens = {
     }
     arc.setAttribute("stroke-dasharray", String(C));
     const sec = h("p", { class: "sec" });
-    const main = h("p", { class: "main" });
-    const sub = h("p", { class: "s-regular muted" });
-    const card = h("div", { class: "timer-card" }, h("div", { class: "ring", role: "timer", "aria-live": "off" }, svg, sec), h("div", { class: "stack grow-x", style: "gap:2px" }, main, sub));
-
-    const mapBox = h("div", { class: "map h180" });
-    const chip = h("p", { class: "map-chip", hidden: "" }, "경로를 찾고 있어요");
-    mapBox.append(chip);
-    const lines = h("p", { class: "s-regular muted" });
-    const follow = h("div", { class: "place" }, h("div", { class: "follow-head" }, icon("navigate-24", 24), h("span", {}, "이 경로를 따라 이동해 주세요")), lines);
-    const place = pickupPlace(); // 길이 아직 없으면(계산 전 · 위치 미공유) 픽업 위치를 대신 보인다
-    const vehicle = vehicleCard();
+    const sub = h("p", { class: "timer-sub" });
+    const card = h(
+      "div",
+      { class: "timer-card" },
+      h("div", { class: "ring", role: "timer", "aria-live": "off" }, svg, sec),
+      h("div", { class: "stack grow-x", style: "gap:2px" }, h("p", { class: "timer-title" }, "차량이 픽업 위치에", h("br"), "도착했어요"), sub),
+    );
+    const rows = carRows();
+    rows.el.classList.add("inset");
+    const layout = mapLayout({ top: h("div", { class: "float-top" }, card), sheet: [rows.el] });
     let map = null;
 
-    const el = h(
-      "section",
-      { class: "screen" },
-      logo(),
-      h(
-        "div",
-        { class: "stack", style: "gap:20px" },
-        h("h1", { class: "title-xl" }, "차량이 픽업 위치에 도착했어요"),
-        card,
-        h("div", { class: "stack", style: "gap:16px" }, h("div", { class: "card map-card" }, mapBox, follow, place.el), vehicle.el),
-      ),
-    );
+    const el = h("section", { class: "screen map-screen" }, layout.area);
 
     let tick = null;
+    let toneAt = null; // 마지막으로 색을 칠한 초 — 1초에 한 번만 바꾸고 사이는 CSS 가 1초 동안 섞는다
     function draw() {
       const t = view?.timer;
       if (!t) return;
@@ -613,28 +605,28 @@ const screens = {
       set(sec, `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
       arc.setAttribute("stroke-dashoffset", String(C * (1 - remaining / (t.waitSeconds * 1000))));
       arc.style.visibility = remaining === 0 ? "hidden" : "";
-      card.classList.toggle("over", remaining === 0);
-      set(main, remaining === 0 ? "대기 시간이 지났어요" : `${waitText(t.waitSeconds)} 안에 탑승해 주세요`);
+      set(sub, remaining === 0 ? "대기 시간이 지났어요" : `${waitText(t.waitSeconds)} 안에 탑승해 주세요`);
+      if (s !== toneAt) {
+        toneAt = s;
+        const tone = timerTone(s);
+        card.style.backgroundColor = tone.card;
+        track.style.stroke = tone.track;
+        sub.style.color = tone.sub;
+      }
     }
 
     return {
       el,
       update(v) {
-        map ??= createMap(mapBox, { carLabel: `${v.driverCallName} 님 차` });
-        set(sub, `${v.driverCallName} 님 차 화면에도 같은 타이머가 떠요`);
-        const w = v.walk;
-        show(follow, !!w);
-        show(place.el, !w);
-        show(chip, !w && v.sharing === "SHARING" && !v.walkFailed);
-        setLines(lines, followLines(v.driverCallName));
-        place.update(v);
-        vehicle.update(v);
+        map ??= createMap(layout.mapBox, { carLabel: `${v.driverCallName} 님 차`, padding: layout.covered });
+        rows.update(v);
         map.update(mapView(v, { route: true }));
         draw();
         tick ??= setInterval(draw, 200);
       },
       destroy() {
         clearInterval(tick);
+        layout.destroy();
         map?.destroy();
       },
     };
