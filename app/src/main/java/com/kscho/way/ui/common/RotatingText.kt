@@ -30,7 +30,7 @@ import androidx.compose.ui.text.TextStyle
 import kotlinx.coroutines.delay
 
 /**
- * 몇 초마다 글자가 굴러 바뀌는 글(shadcn Rotating Text 처럼) — 운전 화면 '1.1km ↔ 09:50 도착 예정'.
+ * 몇 초마다 글자가 굴러 바뀌는 글(shadcn Rotating Text 처럼) — 운전 화면 '픽업 위치까지 12분 ↔ 도착 예정 시간 09:50'.
  *
  * 글자 하나하나가 [staggerMillis] 씩 늦게 위로 굴러 나가고 새 글자가 아래에서 올라온다. 위·아래 끝은 흐리게 지워
  * 북처럼 돌아가는 느낌을 낸다. 글 내용이 바뀌어도(남은 거리 줄어듦) 같은 방식으로 그 자리 글자만 굴러간다.

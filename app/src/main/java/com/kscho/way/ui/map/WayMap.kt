@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,6 +40,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,6 +56,7 @@ import kotlin.math.cos
 import kotlin.math.ln
 import kotlin.math.roundToInt
 import org.maplibre.android.MapLibre
+import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng as MapLatLng
 import org.maplibre.android.maps.MapLibreMap
@@ -124,9 +127,21 @@ fun WayMap(
   showZoomButtons: Boolean = false,
   /** 지도가 멈출 때마다 화면 가운데와 보이는 반지름(m, 가운데 → 가장 먼 모서리) — 보이는 곳의 정차 금지 구간을 다시 받게. */
   onVisibleAreaSettled: ((LatLng, Int) -> Unit)? = null,
+  /** 지도 위 카드가 가리는 여백 — [center] 를 이 여백을 뺀 곳의 가운데에 둔다(D-06 왼쪽 상태 카드). */
+  cameraPadding: PaddingValues = PaddingValues(),
 ) {
   val context = LocalContext.current
   val composeDensity = LocalDensity.current.density
+  val layoutDirection = LocalLayoutDirection.current
+  val paddingPx =
+    with(LocalDensity.current) {
+      listOf(
+        cameraPadding.calculateLeftPadding(layoutDirection).toPx().toDouble(),
+        cameraPadding.calculateTopPadding().toPx().toDouble(),
+        cameraPadding.calculateRightPadding(layoutDirection).toPx().toDouble(),
+        cameraPadding.calculateBottomPadding().toPx().toDouble(),
+      )
+    }
   val mapView = rememberMapView()
   var map by remember { mutableStateOf<MapLibreMap?>(null) }
   var style by remember { mutableStateOf<Style?>(null) }
@@ -154,9 +169,13 @@ fun WayMap(
 
   // 카메라: 처음엔 바로, 이후엔 따라가기면 부드럽게
   val zoom = zoomFor(metersPerDp, center.latitude, composeDensity, context.resources.displayMetrics.density)
-  LaunchedEffect(map, center, zoom) {
+  LaunchedEffect(map, center, zoom, paddingPx) {
     val m = map ?: return@LaunchedEffect
-    val update = CameraUpdateFactory.newLatLngZoom(center.toMap(), zoom)
+    // 여백은 늘 함께 넘긴다 — 여백을 쓰다 안 쓰게 될 때(D-06 → D-08) 지난 여백이 남지 않게
+    val update =
+      CameraUpdateFactory.newCameraPosition(
+        CameraPosition.Builder(m.cameraPosition).target(center.toMap()).zoom(zoom).padding(paddingPx.toDoubleArray()).build()
+      )
     if (!cameraPlaced) {
       m.moveCamera(update)
       cameraPlaced = true

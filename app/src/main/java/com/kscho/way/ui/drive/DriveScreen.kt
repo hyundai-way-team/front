@@ -9,7 +9,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -92,12 +94,15 @@ class DriveViewModel(val coordinator: PickupCoordinator, boardingSensor: Boardin
 
   init {
     coordinator.state.value?.let { s ->
+      // 정차 금지 구간은 픽업 위치 둘레만 — 오는 길 곳곳의 구간은 운전자에게 필요 없다
       val pickup = s.plan.pickupPoint.location
-      // 출발 지점부터 픽업 위치까지 지도에 보이게
-      val reach = s.plan.route.path.maxOfOrNull { Geo.distanceMeters(it, pickup) } ?: 0.0
-      val radius = (reach + 500).coerceIn(600.0, 5_000.0).toInt()
-      viewModelScope.launch { zones.value = runCatching { restrictions.zonesNear(pickup, radius) }.getOrDefault(emptyList()) }
+      viewModelScope.launch { zones.value = runCatching { restrictions.zonesNear(pickup, PICKUP_ZONE_RADIUS_METERS) }.getOrDefault(emptyList()) }
     }
+  }
+
+  private companion object {
+    /** 정차 화면(D-08, 1dp = 0.3 m)에서 보이는 가장 먼 모서리쯤. */
+    const val PICKUP_ZONE_RADIUS_METERS = 300
   }
 
   fun confirmBoarded() = coordinator.confirmBoarded(BoardingSource.MANUAL)
@@ -163,13 +168,21 @@ fun DriveScreen(onClosed: () -> Unit) {
   val name = s.plan.passenger.callName
   Box(Modifier.fillMaxSize()) {
     // D-11 창이 뜨면 뒤(지도·카드)는 흐리게
-    Box(Modifier.fillMaxSize().then(if (connecting) Modifier.blur(2.dp) else Modifier)) {
+    BoxWithConstraints(Modifier.fillMaxSize().then(if (connecting) Modifier.blur(2.dp) else Modifier)) {
       val driving = s.phase == PickupPhase.DRIVING
       val car = s.carLocation
+      // 주행 중엔 차를 왼쪽 상태 카드에 안 가린 곳의 가운데에 두고, 픽업 위치에 가까워질수록 확대(DriveCamera)
+      val covered = STATUS_CARD_EDGE + STATUS_CARD_WIDTH
       WayMap(
         center = if (driving && car != null) car else pickup,
-        metersPerDp = if (driving) 1.6f else 0.3f,
+        metersPerDp =
+          when {
+            !driving -> DriveCamera.NEAR_METERS_PER_DP
+            car == null -> DriveCamera.FAR_METERS_PER_DP
+            else -> DriveCamera.metersPerDp(Geo.distanceMeters(car, pickup), maxWidth.value, maxHeight.value, covered.value)
+          },
         modifier = Modifier.fillMaxSize(),
+        cameraPadding = if (driving) PaddingValues(start = covered) else PaddingValues(),
         // 탄 뒤엔 정차 금지 구간·픽업 핀 없이 지금 차 자리만(D-10)
         zones = if (s.isBoarded) emptyList() else zones,
         lines =
@@ -195,7 +208,7 @@ fun DriveScreen(onClosed: () -> Unit) {
       )
 
       // 왼쪽 위: 픽업 상태
-      Column(Modifier.align(Alignment.TopStart).padding(32.dp).width(440.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Column(Modifier.align(Alignment.TopStart).padding(STATUS_CARD_EDGE).width(STATUS_CARD_WIDTH), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (s.phase) {
           PickupPhase.DRIVING -> DrivingCard(s)
           PickupPhase.WAITING -> {
@@ -265,6 +278,10 @@ private fun remainingPath(s: PickupState): List<LatLng> {
   return listOf(car) + path.drop(segment + 1)
 }
 
+/** 왼쪽 위 상태 카드 자리(화면 가장자리 여백 · 너비) — 주행 지도는 이 오른쪽을 본다. */
+private val STATUS_CARD_EDGE = 32.dp
+private val STATUS_CARD_WIDTH = 440.dp
+
 private val R12 = RoundedCornerShape(12.dp)
 private val R14 = RoundedCornerShape(14.dp)
 private val R16 = RoundedCornerShape(16.dp)
@@ -292,10 +309,10 @@ private fun DrivingCard(s: PickupState) {
       }
       Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(s.plan.pickupPoint.description.title, style = WayType.HeadingM, color = Color.Black)
-        // '픽업 위치까지 12분 | [1.1km ↔ 09:50 도착 예정]' — 뒷부분이 5초마다 굴러 바뀐다
+        // '[픽업 위치까지 12분 ↔ 도착 예정 시간 09:50] | 1.1km' — 앞부분이 5초마다 굴러 바뀌고, 남은 거리는 그대로
         Row(verticalAlignment = Alignment.CenterVertically) {
-          Text("픽업 위치까지 ${Format.minutes(remaining)} | ", style = WayType.TitleM, color = WayColors.Grey500)
-          RotatingText(listOf(Format.distance(meters), "${Format.clock(s.arrivalAtMillis)} 도착 예정"), WayType.TitleM, WayColors.Grey500)
+          RotatingText(listOf("픽업 위치까지 ${Format.minutes(remaining)}", "도착 예정 시간 ${Format.clock(s.arrivalAtMillis)}"), WayType.TitleM, WayColors.Grey500)
+          Text(" | ${Format.distance(meters)}", style = WayType.TitleM, color = WayColors.Grey500)
         }
       }
     }
