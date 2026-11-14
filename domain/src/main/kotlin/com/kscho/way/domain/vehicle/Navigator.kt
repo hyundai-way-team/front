@@ -12,7 +12,10 @@ interface Navigator {
   /** 출발 전 경로 미리보기(거리·시간). */
   suspend fun preview(destination: LatLng, name: String): RoutePreview
 
-  /** 내비 목적지를 픽업 위치로 설정하고 안내를 시작한다. 이후 [events] 로 진행·도착이 온다. */
+  /**
+   * 출발: 픽업 위치까지 따라가기 시작한다. 이후 [events] 로 진행·도착이 온다.
+   * 차량 내비 화면은 띄우지 않는다 — 픽업까지는 Way 화면을 보고, 내비로는 탑승한 뒤에야 넘어간다([handOver]·[openNavi]).
+   */
   suspend fun startGuidance(destination: LatLng, name: String, address: String)
 
   /** 안내 중 진행·도착. 구독하자마자 놓치지 않게 hot flow 로 둔다. */

@@ -1,27 +1,20 @@
 package com.kscho.way.vehicle
 
 import ai.pleos.playground.navi.constants.NaviErrorCode
-import ai.pleos.playground.navi.constants.TurnType
 import ai.pleos.playground.navi.data.CurrentLocationInfo
-import ai.pleos.playground.navi.data.DestinationArrivedInfo
-import ai.pleos.playground.navi.data.DrivingInfo
 import ai.pleos.playground.navi.data.RouteInfo
-import ai.pleos.playground.navi.data.RouteStartInfo
-import ai.pleos.playground.navi.data.TBTInfo
 import ai.pleos.playground.navi.data.TripInfo
 import ai.pleos.playground.navi.data.TripRequest
 import ai.pleos.playground.navi.helper.NaviHelper
 import ai.pleos.playground.navi.helper.listener.NaviHelperEventListener
-import android.content.Context
 import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.kscho.way.domain.model.Geo
 import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.NavEvent
 import com.kscho.way.domain.model.RoutePreview
-import com.kscho.way.domain.model.TurnInstruction
-import com.kscho.way.domain.model.TurnKind
 import com.kscho.way.domain.vehicle.Navigator
 import com.kscho.way.pickup.PickupNotifications
 import com.kscho.way.pickup.WayScreen
@@ -42,11 +35,17 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Pleos NaviHelper 로 실제 내비 안내(에뮬 11/08 확인: requestTrip·requestRoute·onDrivingInfo·onDestinationArrived).
- * requestRoute 하면 Pleos 내비가 앞으로 나와 Way 는 뒤로 간다 — 픽업 서비스(포그라운드)가 Way 를 살려 둔다.
+ * Pleos NaviHelper 연결(에뮬 11/08 확인: requestTrip·requestRoute·getCurrentLocationInfo).
+ *
+ * requestRoute 하면 Pleos 내비가 화면 앞으로 나와 Way 를 가린다(SDK 에 끌 방법이 없다). 그래서
+ * - 픽업 위치까지는 내비 안내를 걸지 않는다: 화면을 띄우지 않는 길 계산(requestTrip)과 차 위치 묻기로 Way 가 직접
+ *   남은 시간·거리·도착을 어림한다([PickupTrack]). 운전자는 Way 화면(D-06~D-09)을 본다.
+ * - 탑승한 뒤에야 내비로 넘긴다: 목적지가 있으면 [handOver](requestRoute), 없으면 [openNavi](기본 내비 화면).
  */
 class PleosNavigator(context: Context, private val clock: () -> Long) : Navigator {
   private val appContext = context.applicationContext
@@ -58,11 +57,12 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
   override val events: SharedFlow<NavEvent> = _events.asSharedFlow()
   private val trips = MutableSharedFlow<TripInfo>(extraBufferCapacity = 4)
   private val locations = MutableSharedFlow<LatLng>(extraBufferCapacity = 4)
+  /** 길 계산 답(TripInfo)엔 어느 요청의 답인지 표시가 없어 한 번에 하나만 묻는다(픽업 추적 · 목적지 미리보기가 겹칠 수 있다). */
+  private val tripAsk = Mutex()
 
   @Volatile private var lastLocation: LatLng? = null
-  /** 픽업 위치 안내 — 요청한 경로가 시작되기 전 소식(지난 경로의 남은 0초 등)은 버린다. */
-  private val route = RouteSession()
-  private var poll: Job? = null
+  /** 픽업 위치까지 차 위치·남은 길 묻기. */
+  private var tracking: Job? = null
 
   private val listener =
     object : NaviHelperEventListener {
@@ -74,27 +74,6 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
         val here = LatLng(currentLocationInfo.latitude, currentLocationInfo.longitude)
         lastLocation = here
         locations.tryEmit(here)
-      }
-
-      override fun onRouteStarted(routeStartInfo: RouteStartInfo) {
-        route.started()
-      }
-
-      override fun onDrivingInfo(drivingInfo: DrivingInfo) {
-        if (!route.live) return
-        val dest = drivingInfo.destination ?: return
-        _events.tryEmit(NavEvent.Progress(lastLocation, dest.duration, dest.distance, clock() + dest.duration * 1000L))
-      }
-
-      override fun onTBTInfo(tbtInfoList: List<TBTInfo>) {
-        if (!route.live) return
-        val next = tbtInfoList.firstOrNull() ?: return
-        _events.tryEmit(NavEvent.Turn(TurnInstruction(turnKind(next.type), next.distance.roundToInt(), next.description)))
-      }
-
-      override fun onDestinationArrived(destinationArrivedInfo: DestinationArrivedInfo) {
-        if (!route.arrive()) return
-        _events.tryEmit(NavEvent.Arrived(clock()))
       }
 
       override fun onError(errorCode: NaviErrorCode) {
@@ -128,6 +107,14 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
       }
     }
 
+  /** 지금 차 위치에서 [destination] 까지 길 계산(내비 화면을 띄우지 않는다). */
+  private suspend fun trip(destination: LatLng, name: String): TripInfo? =
+    tripAsk.withLock {
+      ask(trips, 5_000) {
+        navi.requestTrip(TripRequest(latitude = destination.latitude, longitude = destination.longitude, poiId = "", poiName = name, poiSubId = "0"))
+      }
+    }
+
   override suspend fun currentLocation(): LatLng? {
     if (!ensureReady()) return null
     return ask(locations, 3_000) { navi.getCurrentLocationInfo() } ?: lastLocation
@@ -135,14 +122,7 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
 
   override suspend fun preview(destination: LatLng, name: String): RoutePreview {
     val from = currentLocation()
-    val trip =
-      if (ensureReady()) {
-        ask(trips, 5_000) {
-          navi.requestTrip(TripRequest(latitude = destination.latitude, longitude = destination.longitude, poiId = "", poiName = name, poiSubId = "0"))
-        }
-      } else {
-        null
-      }
+    val trip = if (ensureReady()) trip(destination, name) else null
     if (trip != null) return RoutePreview(trip.distance, trip.eta, listOfNotNull(from, destination))
     // 내비가 답하지 않으면 직선거리로 어림(도심 25km/h, 우회 1.3배)
     Log.w(TAG, "requestTrip 응답 없음 — 직선거리로 어림")
@@ -150,37 +130,39 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
     return RoutePreview(meters.roundToInt(), (meters / 7.0).roundToInt(), listOfNotNull(from, destination))
   }
 
+  /**
+   * 출발: 픽업 위치까지 따라간다 — 내비 안내(requestRoute)는 걸지 않는다(내비가 앞으로 나와 Way 를 가리므로).
+   * 3초마다 차 위치를 묻고 15초마다 남은 길을 다시 계산해 [NavEvent.Progress] 를, 가까이 오면 [NavEvent.Arrived] 를 낸다.
+   */
   override suspend fun startGuidance(destination: LatLng, name: String, address: String) {
     check(ensureReady()) { "내비에 연결하지 못했어요" }
-    route.requested()
-    navi.requestRoute(
-      RouteInfo(
-        latitude = destination.latitude,
-        longitude = destination.longitude,
-        displayLatitude = null,
-        displayLongitude = null,
-        poiName = name,
-        poiId = "",
-        address = address,
-        poiSubId = "0",
-      )
-    )
-    // 차량 위치는 요청해야 오므로 안내 중엔 3초마다 묻는다
-    poll?.cancel()
-    poll =
+    tracking?.cancel()
+    tracking =
       scope.launch {
+        var trip: PickupTrack.Trip? = null
+        var tripAt = 0L
         while (isActive) { // handOver·stopGuidance 가 이 일을 멈춘다
-          navi.getCurrentLocationInfo()
-          delay(3_000)
+          val here = ask(locations, 3_000) { navi.getCurrentLocationInfo() } ?: lastLocation
+          if (trip == null || clock() - tripAt >= PickupTrack.TRIP_REFRESH_MILLIS) {
+            trip(destination, name)?.let {
+              trip = PickupTrack.Trip(it.distance, it.eta, here)
+              tripAt = clock()
+            }
+          }
+          PickupTrack.progress(here, destination, trip, clock())?.let { _events.tryEmit(it) }
+          if (PickupTrack.arrived(here, destination)) {
+            _events.tryEmit(NavEvent.Arrived(clock()))
+            break // 도착 뒤엔 더 따라가지 않는다(내비의 도착 알림처럼 한 번)
+          }
+          delay(PickupTrack.POLL_MILLIS)
         }
       }
   }
 
-  /** 탑승 뒤 목적지: 내비 안내만 걸고 위치 묻기·도착 처리는 하지 않는다(이후 stopGuidance 로 이 안내를 끄지 않음). */
+  /** 탑승 뒤 목적지: 이제야 내비 안내를 건다(내비가 앞으로 나온다). Way 는 더 따라가지 않는다(이 안내는 stopGuidance 로 끄지 않음). */
   override suspend fun handOver(destination: LatLng, name: String, address: String) {
-    poll?.cancel()
-    poll = null
-    route.stopped()
+    tracking?.cancel()
+    tracking = null
     check(ensureReady()) { "내비에 연결하지 못했어요" }
     navi.requestRoute(
       RouteInfo(
@@ -211,30 +193,13 @@ class PleosNavigator(context: Context, private val clock: () -> Long) : Navigato
     appContext.getSystemService(NotificationManager::class.java).notify(PickupNotifications.NAVI_ID, PickupNotifications.naviNeeded(appContext, maps))
   }
 
+  /** 픽업을 끝내거나 취소: 따라가기만 멈춘다(픽업 구간엔 내비 안내를 걸지 않았으니 끌 것도 없다 — cancelRoute 는 내비를 앞으로 꺼낸다). */
   override fun stopGuidance() {
-    if (route.guidingUnarrived) runCatching { navi.cancelRoute() }
-    route.stopped()
-    poll?.cancel()
-    poll = null
+    tracking?.cancel()
+    tracking = null
   }
 
   private companion object {
-    /** Pleos 회전 종류 → 화면 문구·화살표(오른쪽·왼쪽 계열로 묶는다). */
-    fun turnKind(type: TurnType): TurnKind =
-      when (type) {
-        TurnType.TURN_STRAIGHT -> TurnKind.STRAIGHT
-        TurnType.TURN_RIGHT, TurnType.TURN_SHARP_R -> TurnKind.RIGHT
-        TurnType.TURN_LEFT, TurnType.TURN_SHARP_L -> TurnKind.LEFT
-        TurnType.TURN_KEEP_R, TurnType.TURN_ENTER_IC_R, TurnType.TURN_EXIT_IC_R, TurnType.TURN_ENTER_UNDER_R, TurnType.TURN_AVOID_UNDER_R,
-        TurnType.TURN_ENTER_OVER_R, TurnType.TURN_AVOID_OVER_R -> TurnKind.KEEP_RIGHT
-        TurnType.TURN_KEEP_L, TurnType.TURN_ENTER_IC_L, TurnType.TURN_EXIT_IC_L, TurnType.TURN_ENTER_UNDER_L, TurnType.TURN_AVOID_UNDER_L,
-        TurnType.TURN_ENTER_OVER_L, TurnType.TURN_AVOID_OVER_L -> TurnKind.KEEP_LEFT
-        TurnType.TURN_UTURN -> TurnKind.U_TURN
-        TurnType.TURN_ENTER_IC_C, TurnType.TURN_EXIT_IC_C, TurnType.TURN_ENTER_UNDER_C, TurnType.TURN_AVOID_UNDER_C, TurnType.TURN_ENTER_OVER_C,
-        TurnType.TURN_AVOID_OVER_C, TurnType.TURN_TUNNEL, TurnType.TURN_TOLL -> TurnKind.STRAIGHT
-        else -> TurnKind.OTHER
-      }
-
     const val TAG = "WayNavi"
   }
 }
