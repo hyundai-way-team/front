@@ -12,6 +12,8 @@
                 <action android:name="com.kscho.way.debug.ARRIVE" />
                 <action android:name="com.kscho.way.debug.BOARD" />
                 <action android:name="com.kscho.way.debug.CLEAR_PICKUP" />
+                <action android:name="com.kscho.way.debug.DEMO_ROUTE" />
+                <action android:name="com.kscho.way.debug.DEMO_CLEAR" />
             </intent-filter>
         </receiver>
     </application>

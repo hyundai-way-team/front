@@ -72,8 +72,9 @@ class AppContainer(context: Context) {
   val restrictions: StopRestrictionRepository = StopRestrictionRepositoryImpl(api)
   private val pickups = PickupRepositoryImpl(api)
 
+  /** 디버그 빌드는 adb 로 넣는 시연 주행을 끼울 수 있다(DebugNavigator — 릴리스는 그대로). */
   val navigator: Navigator =
-    if (WayConfig.SIMULATED_DRIVE) SimulatedNavigator(scope, clock) else PleosNavigator(app, clock)
+    DebugNavigator.wrap(if (WayConfig.SIMULATED_DRIVE) SimulatedNavigator(scope, clock) else PleosNavigator(app, clock), scope, clock)
 
   val boardingSensor: BoardingSensor = PleosBoardingSensor(app, clock).also { it.start() }
 

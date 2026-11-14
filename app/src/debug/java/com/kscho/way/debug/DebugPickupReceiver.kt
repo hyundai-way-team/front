@@ -10,6 +10,7 @@ import com.kscho.way.domain.model.BoardingSource
 import com.kscho.way.domain.model.PickupPlan
 import com.kscho.way.domain.model.Place
 import com.kscho.way.domain.model.Contact
+import com.kscho.way.domain.model.LatLng
 import com.kscho.way.pickup.PickupService
 import kotlinx.coroutines.launch
 
@@ -22,6 +23,9 @@ import kotlinx.coroutines.launch
  *   정차   adb shell am broadcast --user 10 -a com.kscho.way.debug.ARRIVE -p com.kscho.way
  *   탑승   adb shell am broadcast --user 10 -a com.kscho.way.debug.BOARD -p com.kscho.way
  *   끝     adb shell am broadcast --user 10 -a com.kscho.way.debug.CLEAR_PICKUP -p com.kscho.way
+ *   시연 주행 경로(픽업까지 이 길을 빨리 달림 — DemoDriveNavigator)
+ *          adb shell am broadcast --user 10 -a com.kscho.way.debug.DEMO_ROUTE -p com.kscho.way --es path "위도,경도;위도,경도;…" --ei speedup 6 --ef speed 8
+ *   시연 주행 끄기 adb shell am broadcast --user 10 -a com.kscho.way.debug.DEMO_CLEAR -p com.kscho.way
  *
  * 포그라운드 서비스는 앱이 앞에 있을 때만 시작된다. 뒤에서 막히면 Way 를 한 번 띄우고 다시 시작한다.
  */
@@ -61,6 +65,28 @@ class DebugPickupReceiver : BroadcastReceiver() {
         c.coordinator.finish()
         Log.i(TAG, "픽업 지움")
       }
+      DEMO_ROUTE -> {
+        val demo = c.navigator as? DemoDriveNavigator
+        if (demo == null) {
+          Log.w(TAG, "시연 주행을 끼울 수 없는 내비")
+          return
+        }
+        val path =
+          intent.getStringExtra("path").orEmpty().split(';').mapNotNull { p ->
+            val (lat, lng) = p.split(',').map { it.trim().toDoubleOrNull() }.takeIf { it.size == 2 } ?: return@mapNotNull null
+            if (lat == null || lng == null) null else LatLng(lat, lng)
+          }
+        if (path.size < 2) {
+          Log.w(TAG, "시연 경로가 짧아요(${path.size}점)")
+          return
+        }
+        demo.setRoute(path, intent.getIntExtra("speedup", 6), intent.getFloatExtra("speed", 8f).toDouble())
+        Log.i(TAG, "시연 주행 경로 ${path.size}점 — 출발 지점 ${path.first()}")
+      }
+      DEMO_CLEAR -> {
+        (c.navigator as? DemoDriveNavigator)?.clear()
+        Log.i(TAG, "시연 주행 끔")
+      }
     }
   }
 
@@ -70,5 +96,7 @@ class DebugPickupReceiver : BroadcastReceiver() {
     const val ARRIVE = "com.kscho.way.debug.ARRIVE"
     const val BOARD = "com.kscho.way.debug.BOARD"
     const val CLEAR = "com.kscho.way.debug.CLEAR_PICKUP"
+    const val DEMO_ROUTE = "com.kscho.way.debug.DEMO_ROUTE"
+    const val DEMO_CLEAR = "com.kscho.way.debug.DEMO_CLEAR"
   }
 }
