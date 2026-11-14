@@ -70,6 +70,9 @@ rm -f ~/way-deploy.tgz
 NET=$(docker inspect "$CADDY" -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' | awk '{print $1}')
 printf 'WAY_DOMAIN=%s\nCADDY_NETWORK=%s\n' "$WAY_DOMAIN" "$NET" > ~/way/.env
 ok "망 $NET"
+# 카카오 키 파일은 처음 한 번 빈 파일로만 만든다(키는 사람이 직접 넣는다 — README '카카오 로컬 API 키')
+if [ ! -f ~/way/kakao.env ]; then (umask 077 && : > ~/way/kakao.env); fi
+if grep -q '^KAKAO_REST_KEY=.' ~/way/kakao.env; then ok "카카오 키 있음 — 지정 주정차 금지구역 켬"; else warn "카카오 키 없음 — 버스정류장 10m 만"; fi
 
 cd ~/way
 docker compose up -d --build 2>&1 | tail -3

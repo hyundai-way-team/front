@@ -9,6 +9,10 @@ import com.kscho.way.server.sms.OutboxTextLog
 import com.kscho.way.server.tls.LocalTls
 import com.kscho.way.server.walk.OsmWalkRoutes
 import com.kscho.way.server.walk.WalkAnswer
+import com.kscho.way.server.kakao.KakaoLocal
+import com.kscho.way.server.zones.DesignatedZones
+import com.kscho.way.server.zones.NoParkingRow
+import com.kscho.way.server.zones.RoadIndex
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.connector
 import io.ktor.server.engine.embeddedServer
@@ -53,6 +57,11 @@ fun main() {
     }
 
   val devRoutes = setting("way.devRoutes", "WAY_DEV_ROUTES")?.trim() != "0"
+  // 지정 주정차 금지구역: 카카오 로컬 API REST 키가 있을 때만(키는 환경 변수로만 — 저장소·로그에 남기지 않는다)
+  val designated =
+    setting("way.kakaoRestKey", "KAKAO_REST_KEY")?.trim()?.takeIf { it.isNotEmpty() }?.let { key ->
+      DesignatedZones(NoParkingRow.bundled(), RoadIndex.bundled(), KakaoLocal(key, log = { m -> println("[카카오] $m") }))
+    }
   val deps =
     createDeps(
       publicUrl,
@@ -64,6 +73,7 @@ fun main() {
       caCert = tls?.caCert,
       devRoutes = devRoutes,
       walkRoute = OsmWalkRoutes()::route,
+      designated = designated,
     )
   println(
     """
@@ -75,6 +85,7 @@ fun main() {
     |  · 지도 파일     ${mapDir ?: "없음 — way.mapDir 를 앱 assets/map 으로"}
     |  · https         ${tls?.let { "https://localhost:$tlsPort (아이폰 인증서: http://<이 맥 이름>.local:$port/dev/ca.mobileconfig)" } ?: "끔 — WAY_TLS_DIR 로 켠다"}
     |  · 실제 문자     ${relay?.let { "메시지 앱 → ${it.maskedNumber} (시연용)" } ?: "끔 — WAY_DEV_SMS_TO 로 켠다"}
+    |  · 지정 금지구역 ${designated?.let { "켬 — 끝점은 카카오 로컬 API 로 실시간(수도권 ${it.size}곳)" } ?: "끔 — KAKAO_REST_KEY 로 켠다(버스정류장 10m 만)"}
     |  · 맥에서 열기   ${opener?.let { "출발 문자 링크를 이 맥 브라우저로 (시연용)" } ?: "끔 — WAY_DEV_OPEN=1 로 켠다"}
     |
     """
@@ -119,6 +130,10 @@ fun createDeps(
   devRoutes: Boolean = true,
   /** 동승자 → 픽업 위치 걷는 길(walk.OsmWalkRoutes — 무료 공개 보행 경로 서버) */
   walkRoute: (suspend (LatLngDto, LatLngDto) -> WalkAnswer)? = null,
+  /** 지정 주정차 금지구역(카카오 키가 있을 때) */
+  designated: DesignatedZones? = null,
+  /** 지정 금지구역 계산 IP 별 제한 */
+  designatedGate: RateGate = RateGate(60, 60_000),
 ): ServerDeps {
   // 시연 동네 데이터(장소 검색·역지오코딩·정차 금지 구간)는 앱 mock 과 같은 것을 쓴다. 지난 픽업 기록은 앱에 있다
   val places = MockWayApi(scope, clock)
@@ -127,7 +142,7 @@ fun createDeps(
       opener?.onText(it)
     })
   val hub = PickupHub(clock, outbox, publicUrl, walkRoute = walkRoute, scope = scope)
-  return ServerDeps(hub, places, outbox, mapDir, webDir, caCert, devRoutes = devRoutes)
+  return ServerDeps(hub, places, outbox, mapDir, webDir, caCert, designated = designated, designatedGate = designatedGate, devRoutes = devRoutes)
 }
 
 private fun setting(property: String, env: String): String? = System.getProperty(property) ?: System.getenv(env)

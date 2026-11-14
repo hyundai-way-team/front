@@ -11,6 +11,7 @@ import com.kscho.way.server.pickup.PassengerLocationRequest
 import com.kscho.way.server.pickup.PickupError
 import com.kscho.way.server.pickup.PickupHub
 import com.kscho.way.server.zones.BusStopZones
+import com.kscho.way.server.zones.DesignatedZones
 import com.kscho.way.server.pickup.SharingRequest
 import com.kscho.way.server.sms.OutboxTextLog
 import com.kscho.way.server.tls.RootCaProfile
@@ -25,6 +26,7 @@ import io.ktor.server.http.content.staticFiles
 import io.ktor.server.http.content.staticResources
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.calllogging.CallLogging
+import io.ktor.server.plugins.origin
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.partialcontent.PartialContent
 import io.ktor.server.plugins.statuspages.StatusPages
@@ -50,6 +52,7 @@ import io.ktor.websocket.close
 import java.io.File
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.slf4j.event.Level
@@ -67,9 +70,20 @@ class ServerDeps(
   val caCert: File? = null,
   /** 정차 금지 구간 = 실제 버스정류장(공공데이터) 둘레 10m */
   val zones: BusStopZones = BusStopZones.bundled(),
+  /** 지정 주정차 금지구역(공공데이터 + 끝점은 카카오 로컬 API 실시간). 카카오 키(KAKAO_REST_KEY)가 없으면 null — 버스정류장만. */
+  val designated: DesignatedZones? = null,
+  /** 지정 금지구역 계산은 접속 IP 하나에 1분 60번까지(카카오 무료량 지키기) — 넘으면 버스정류장만. */
+  val designatedGate: RateGate = RateGate(60, 60_000),
   /** 개발용 경로(/dev/sms 문자 사본 · /api/dev/sms · /dev/ca*). 운영(WAY_DEV_ROUTES=0)에선 끈다 — 문자 사본에 동승자 이름·링크가 있다. */
   val devRoutes: Boolean = true,
 )
+
+/** 접속한 쪽 IP — Caddy 뒤라 X-Forwarded-For 의 마지막 값(Caddy 가 붙인 실제 접속 IP), 없으면 직접 접속한 주소. */
+internal fun ApplicationCall.clientIp(): String =
+  request.headers["X-Forwarded-For"]?.split(',')?.lastOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: request.origin.remoteHost
+
+/** 지정 금지구역(카카오 실시간) 기다리는 최대 시간 — 넘으면 버스정류장만 준다. */
+const val DESIGNATED_TIMEOUT_MS = 5_000L
 
 @Serializable data class ErrorDto(val error: String)
 
@@ -145,7 +159,15 @@ private fun Route.driverRoutes(deps: ServerDeps) {
   // 주변 정차 금지 구간 데이터만 — 지도에 그리기·정차 금지 판단은 앱이 한다(도로·장소는 앱 속 오프라인 지도)
   get("/stop-zones") {
     val at = call.latLng()
-    call.respond(deps.zones.near(at.lat, at.lng, (call.query("radius").toIntOrNull() ?: 300).coerceIn(1, 5_000)))
+    val radius = (call.query("radius").toIntOrNull() ?: 300).coerceIn(1, 5_000)
+    val bus = deps.zones.near(at.lat, at.lng, radius)
+    // 카카오가 느리거나 안 되면 버스정류장만이라도 바로 준다
+    val designated =
+      deps.designated
+        ?.takeIf { deps.designatedGate.allow(call.clientIp()) }
+        ?.let { d -> withTimeoutOrNull(DESIGNATED_TIMEOUT_MS) { d.near(at.lat, at.lng, radius) } }
+        .orEmpty()
+    call.respond(bus + designated)
   }
 
   route("/pickups") {

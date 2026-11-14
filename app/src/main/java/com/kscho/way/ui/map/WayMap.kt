@@ -512,7 +512,8 @@ private fun metersToDp(meters: Double, zoom: Double): Float =
 
 private fun zonesGeoJson(zones: List<RestrictedZone>): FeatureCollection =
   FeatureCollection.fromFeatures(
-    zones.mapNotNull { z ->
+    // 지정 금지구역은 요일·시간 창마다 같은 선이 여러 개로 온다 — 한 번만 그린다
+    zones.distinctBy { it.path to it.radiusMeters }.mapNotNull { z ->
       when {
         z.path.size >= 2 -> Feature.fromGeometry(LineString.fromLngLats(z.path.map { p -> p.point() })).apply { addNumberProperty("radius", z.radiusMeters) }
         z.path.size == 1 -> Feature.fromGeometry(Polygon.fromLngLats(listOf(Geo.circle(z.path.single(), z.radiusMeters).map { p -> p.point() })))

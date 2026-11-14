@@ -34,6 +34,22 @@ WAY_DOMAIN=way.posktop.duckdns.org bash deploy/lightsail/deploy.sh
 
 끝나면 앱 `WayConfig.SERVER_URL` 을 `https://<WAY_DOMAIN>` 으로.
 
+## 카카오 로컬 API 키(지정 주정차 금지구역)
+
+키가 있으면 핀 화면 정차 금지 구간에 **지정 주정차 금지구역**(공공데이터, 시간대 규제)이 더해진다. 없으면 버스정류장 10m 만.
+금지구역 데이터에는 좌표가 없어 끝점('○○약국 앞')을 그때그때 카카오 로컬 API 로 찾는다(카카오 정책상 찾은 좌표는 저장하지 않는다).
+
+1. [카카오디벨로퍼스](https://developers.kakao.com) → 내 애플리케이션 → 앱 만들기 → **카카오맵 사용 설정 ON** → 앱 키의 **REST API 키**.
+   무료량은 계정에서 카카오맵을 처음 켠 앱에만(주소·키워드 검색 각각 하루 10만 건).
+2. 서버에만 넣는다(저장소·채팅에 붙이지 않는다). 아래는 키를 화면에 안 보이게 받아 `~/way/kakao.env` 에 쓰고 컨테이너를 다시 띄운다:
+   ```bash
+   ssh -t -i ~/.ssh/LightsailDefaultKey-ap-northeast-2.pem ubuntu@13.124.198.66 'read -rsp "REST API 키: " k; echo; umask 077; printf "KAKAO_REST_KEY=%s\n" "$k" > ~/way/kakao.env; cd ~/way && docker compose up -d && sleep 15 && docker logs --tail 20 way-server | grep "지정 금지구역"'
+   ```
+   `deploy.sh` 는 이 파일이 없을 때 빈 파일만 만들고 내용은 건드리지 않는다.
+3. 로컬 서버는 `KAKAO_REST_KEY=… ./gradlew :server:run`.
+
+데이터 다시 만들기: `python3 tools/data/build_no_parking_zones.py` (공공데이터포털 표준데이터 + OpenStreetMap 도로 선).
+
 ## 내리기
 
 ```bash

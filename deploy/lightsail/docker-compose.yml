@@ -11,6 +11,9 @@ services:
       - "8080"
     environment:
       WAY_PUBLIC_URL: https://${WAY_DOMAIN:?WAY_DOMAIN 을 .env 에 넣어 주세요}
+    # 카카오 로컬 API 키(KAKAO_REST_KEY=…) — 서버에만 있는 파일. deploy.sh 는 빈 파일만 만들고 내용은 건드리지 않는다
+    env_file:
+      - kakao.env
     # 포스크탑과 같은 기계라 넘치지 않게 막는다
     mem_limit: 420m
     networks:
