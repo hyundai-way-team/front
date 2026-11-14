@@ -7,16 +7,26 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -56,6 +66,7 @@ import com.kscho.way.ui.map.MapPin
 import com.kscho.way.ui.map.PinKind
 import com.kscho.way.ui.map.WayMap
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -83,6 +94,8 @@ class AdjustPinViewModel(private val check: CheckPickupPoint, private val restri
   private val _state = MutableStateFlow(AdjustPinUiState(pin = draft.check.value?.point?.location ?: origin))
   val state = _state.asStateFlow()
   val zones = MutableStateFlow<List<RestrictedZone>>(emptyList())
+  /** 보이는 곳의 정차 금지 구간을 받는 중(지정 금지구역은 서버가 끝점을 실시간으로 찾아 몇 초 걸릴 수 있다). */
+  val zonesLoading = MutableStateFlow(false)
   /** 지도에 그린 구간을 받아 둔 곳 — 핀을 옮겨 화면이 이 밖으로 나가면 보이는 곳을 다시 받는다. */
   private var loadedArea: MapArea? = null
   private val visibleArea = MutableStateFlow<Pair<LatLng, Int>?>(null)
@@ -118,12 +131,14 @@ class AdjustPinViewModel(private val check: CheckPickupPoint, private val restri
   }
 
   private suspend fun load(area: MapArea) {
+    zonesLoading.value = true
     runCatching { restrictions.zonesNear(area.center, area.radiusMeters) }
       .onSuccess {
         zones.value = it
         loadedArea = area
       }
       .onFailure { Log.w("WayZones", "구간을 못 받았어요", it) }
+    zonesLoading.value = false
   }
 
   /** 지도가 멈춘 곳과 보이는 반지름 — 받아 둔 곳 밖이면 보이는 곳의 정차 금지 구간을 다시 받는다. */
@@ -157,6 +172,10 @@ fun AdjustPinScreen(onBack: () -> Unit, onSearchAgain: () -> Unit, onConfirmed: 
   val vm = viewModel { AdjustPinViewModel(c.checkPickupPoint, c.restrictions, c.draft) }
   val state by vm.state.collectAsStateWithLifecycle()
   val zones by vm.zones.collectAsStateWithLifecycle()
+  val zonesLoading by vm.zonesLoading.collectAsStateWithLifecycle()
+  // 금방 끝나는 확인·받기에는 아무것도 띄우지 않는다(깜빡임) — 0.3초 넘게 걸릴 때만 진행 표시
+  val showChecking = rememberLingering(state.checking)
+  val showZonesLoading = rememberLingering(zonesLoading)
   // 지도는 처음 핀 위치에서 시작하고, 이후엔 운전자가 움직인다
   val startCenter = remember { state.pin }
   val result = state.result?.takeIf { it.point.location == state.pin }
@@ -182,6 +201,7 @@ fun AdjustPinScreen(onBack: () -> Unit, onSearchAgain: () -> Unit, onConfirmed: 
             BulletBox(listOf("이 좌표가 $passengerName 님 화면에 그대로 보여요", "버스정류장, 횡단보도 앞은 피해 주세요"))
             when {
               state.error != null -> AlertBox(state.error!!, Tone.ERROR)
+              state.checking && (showChecking || shown == null) -> CheckingBox("정차 금지 구간을 확인하고 있어요")
               shown == null -> Unit
               blocked != null -> AlertBox("도착 예정 시각에 정차 금지 구간이에요. 핀을 옮겨주세요.", Tone.ERROR)
               else -> AlertBox("데이터에 없는 규제도 있어요. 현장 표지판을 확인해 주세요.", Tone.WARNING)
@@ -225,7 +245,48 @@ fun AdjustPinScreen(onBack: () -> Unit, onSearchAgain: () -> Unit, onConfirmed: 
           else -> null
         }
       hint?.let { MapLabel(it, Modifier.align(Alignment.BottomStart).padding(20.dp)) }
+      if (showZonesLoading) {
+        // 지도 위 가장자리 얇은 막대 — 구간을 받는 동안 멈춘 게 아니라는 표시(지도 틀 테두리 2dp 아래로)
+        LinearProgressIndicator(
+          Modifier.align(Alignment.TopCenter).padding(top = 2.dp).fillMaxWidth().height(4.dp),
+          color = WayColors.Primary500,
+          trackColor = WayColors.Primary100,
+        )
+        if (hint == null) MapLabel("정차 금지 구간 불러오는 중", Modifier.align(Alignment.BottomStart).padding(20.dp))
+      }
     }
+  }
+}
+
+/** [busy] 가 0.3초 넘게 이어질 때만 true — 짧은 확인에 진행 표시가 깜빡이지 않게. */
+@Composable
+private fun rememberLingering(busy: Boolean): Boolean {
+  var show by remember { mutableStateOf(false) }
+  LaunchedEffect(busy) {
+    if (busy) {
+      delay(300)
+      show = true
+    } else {
+      show = false
+    }
+  }
+  return busy && show
+}
+
+private val BOX_SHAPE = RoundedCornerShape(16.dp)
+
+/** 확인 중 상자 — 경고 상자와 같은 모양(라운드 16 · 안쪽 16)에 파란 진행 표시. */
+@Composable
+private fun CheckingBox(text: String) {
+  Row(
+    Modifier.fillMaxWidth().clip(BOX_SHAPE).background(WayColors.Primary50).border(1.dp, WayColors.Primary100, BOX_SHAPE).padding(16.dp),
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+      CircularProgressIndicator(Modifier.size(20.dp), color = WayColors.Primary500, trackColor = WayColors.Primary100, strokeWidth = 2.5.dp)
+    }
+    Text(text, style = WayType.LRegular, color = WayColors.Primary500, modifier = Modifier.weight(1f))
   }
 }
 
