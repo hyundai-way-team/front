@@ -790,7 +790,6 @@ const screens = {
     const el = h(
       "section",
       { class: "screen done" },
-      logo(),
       h("div", { class: "done-top" }),
       h(
         "div",
