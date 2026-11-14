@@ -40,7 +40,6 @@ import com.kscho.way.domain.vehicle.Navigator
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
 import com.kscho.way.ui.common.ActionButton
-import com.kscho.way.ui.common.Avatar
 import com.kscho.way.ui.common.MapFrame
 import com.kscho.way.ui.common.Panel
 import com.kscho.way.ui.common.ScreenFrame
@@ -136,12 +135,9 @@ private fun RecentPickupCard(record: PickupRecord, onClick: () -> Unit) {
       .padding(horizontal = 20.dp, vertical = 16.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-      Avatar()
-      Column {
-        Text(record.passenger.name, style = WayType.TitleL, color = Color.Black)
-        Text(record.pickupPoint.description.title, style = WayType.MRegular, color = WayColors.Grey500)
-      }
+    Column(Modifier.weight(1f)) {
+      Text(record.passenger.name, style = WayType.TitleL, color = Color.Black)
+      Text(record.pickupPoint.description.title, style = WayType.MRegular, color = WayColors.Grey500)
     }
     Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(32.dp))
   }

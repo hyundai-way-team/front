@@ -59,7 +59,6 @@ import com.kscho.way.domain.repository.ContactRepository
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
 import com.kscho.way.ui.common.ActionButton
-import com.kscho.way.ui.common.Avatar
 import com.kscho.way.ui.common.FieldLabel
 import com.kscho.way.ui.common.Panel
 import com.kscho.way.ui.common.ScreenFrame
@@ -230,7 +229,7 @@ fun ChoosePassengerScreen(onBack: () -> Unit, onNext: () -> Unit) {
   }
 }
 
-/** 연락처 카드(라디오 · 사진 · 이름 · 번호). 고르면 Primary-50 바탕 · Primary-500 테두리. */
+/** 연락처 카드(라디오 · 이름 · 번호). 고르면 Primary-50 바탕 · Primary-500 테두리. */
 @Composable
 private fun ContactCard(contact: Contact, on: Boolean, onClick: () -> Unit) {
   val shape = RoundedCornerShape(16.dp)
@@ -250,7 +249,6 @@ private fun ContactCard(contact: Contact, on: Boolean, onClick: () -> Unit) {
       tint = Color.Unspecified,
       modifier = Modifier.size(32.dp),
     )
-    Avatar()
     Column(Modifier.weight(1f)) {
       Text(contact.name, style = WayType.TitleL, color = Color.Black)
       Text(contact.displayPhone, style = WayType.MRegular, color = WayColors.Grey500)

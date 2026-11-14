@@ -38,6 +38,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -303,10 +305,7 @@ private fun DrivingCard(s: PickupState) {
   val meters = s.remainingMeters ?: s.plan.route.distanceMeters
   Column(Modifier.fillMaxWidth().glass().padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(Modifier.size(48.dp).clip(CircleShape).background(WayColors.Grey200).border(2.4.dp, WayColors.Primary500, CircleShape))
-        Text("${s.plan.passenger.name} 님 픽업", style = WayType.TitleL, color = WayColors.Primary500)
-      }
+      Text("${s.plan.passenger.name} 님 픽업", style = WayType.TitleL, color = WayColors.Primary500)
       Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(s.plan.pickupPoint.description.title, style = WayType.HeadingM, color = Color.Black)
         // '[픽업 위치까지 12분 ↔ 도착 예정 시간 09:50] | 1.1km' — 앞부분이 5초마다 굴러 바뀌고, 남은 거리는 그대로
@@ -442,14 +441,25 @@ private fun WaitTimerCard(leftMillis: Long, urgent: Boolean) {
   }
 }
 
-/** 둥근 진행 고리(바탕 고리 위에 남은 만큼 호). */
+/**
+ * 둥근 진행 고리(바탕 고리 위에 남은 만큼 호). 피그마 Loading 그대로 — 지름 [size], 띠 두께 10%.
+ * 호는 바탕 고리와 같은 원(띠 가운데) 위에 그린다: 캔버스 전체에 그리면 띠 반만큼 바깥으로 밀려 고리 밖에서 돈다.
+ */
 @Composable
 private fun ProgressRing(fraction: Float, track: Color, color: Color, size: Dp, content: @Composable () -> Unit = {}) {
   Box(Modifier.size(size), contentAlignment = Alignment.Center) {
     Canvas(Modifier.size(size)) {
-      val stroke = this.size.minDimension * 0.1f
-      drawCircle(track, radius = this.size.minDimension / 2 - stroke / 2, style = Stroke(stroke))
-      drawArc(color, -90f, 360f * fraction.coerceIn(0f, 1f), useCenter = false, style = Stroke(stroke, cap = StrokeCap.Round))
+      val ring = RingGeometry.of(this.size.minDimension)
+      drawCircle(track, radius = ring.radius, style = Stroke(ring.stroke))
+      drawArc(
+        color,
+        -90f,
+        360f * fraction.coerceIn(0f, 1f),
+        useCenter = false,
+        topLeft = center - Offset(ring.radius, ring.radius),
+        size = Size(2 * ring.radius, 2 * ring.radius),
+        style = Stroke(ring.stroke, cap = StrokeCap.Round),
+      )
     }
     content()
   }

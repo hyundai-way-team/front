@@ -269,12 +269,6 @@ fun AlertBox(text: String, tone: Tone, modifier: Modifier = Modifier) {
   }
 }
 
-/** 사람 사진 자리(원 · 디자인 임시 회색). */
-@Composable
-fun Avatar(size: Dp = 48.dp) {
-  Box(Modifier.size(size).clip(CircleShape).background(WayColors.Grey200))
-}
-
 /** 흰 카드(테두리 Grey-200 · 라운드 16 · 그림자 Grey-Weak). [pressed] 면 Primary-50. */
 fun Modifier.whiteCard(pressed: Boolean = false): Modifier =
   this.shadow(4.dp, R16, ambientColor = WayColors.ShadowWeak, spotColor = WayColors.ShadowWeak)
