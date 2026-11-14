@@ -1,6 +1,7 @@
 // WAY 동승자 웹 — Pleos 문자의 참여 링크로 연다. 앱 설치·로그인 없이 이 페이지에서 끝난다(기획 3-4).
 // 흐름: P-01 링크 첫 화면 → P-02 위치 공유 허용 → (차 상태에 따라) P-03 대기 · P-04 곧 도착 · P-05 대기 타이머 → P-06 종료
-// 위치를 공유 중이면 P-03·P-04 의 '경로 안내'로 P-04a(내 위치 → 픽업 위치 걷는 길)를 연다. 길은 서버가 계산해 view.walk 로 보낸다.
+// 위치를 공유 중이면 P-04 의 '경로 안내'로 P-04a(내 위치 → 픽업 위치 걷는 길)를 연다. 길은 서버가 계산해 view.walk 로 보낸다.
+// P-03 · P-04 · P-04a 는 지도가 화면을 채우고 카드·시트가 위에 뜬다(와이어프레임 v2 개정). 지도는 손으로 움직일 수 있다(map.js).
 import { createMap, distanceMeters, offsetMeters } from "/web/map.js";
 
 const root = document.getElementById("app");
@@ -233,7 +234,7 @@ window.addEventListener("popstate", () => {
 
 // ── 화면 조각
 
-/** '탑승 차량을 확인해 주세요' 카드(P-01·P-04·P-04a·P-05) */
+/** '탑승 차량을 확인해 주세요' 카드(P-01·P-05) */
 function vehicleCard() {
   const plate = h("p", { class: "plate" });
   const desc = h("p", { class: "vehicle-desc" });
@@ -247,7 +248,7 @@ function vehicleCard() {
   };
 }
 
-/** 지도 카드 아래 '픽업 위치를 확인해 주세요'(P-01·P-04·P-05 길 없을 때) */
+/** 지도 카드 아래 '픽업 위치를 확인해 주세요'(P-01 · P-05 길 없을 때) */
 function pickupPlace() {
   const title = h("p", { class: "place-title" });
   const detail = h("p", { class: "s-regular muted" });
@@ -261,7 +262,7 @@ function pickupPlace() {
   };
 }
 
-/** '경로 안내' 버튼 — 위치를 공유 중일 때만(내 위치가 있어야 길을 낸다) */
+/** '경로 안내' 버튼(P-04 시트) — 위치를 공유 중일 때만(내 위치가 있어야 길을 낸다) */
 function routeButton() {
   return h("button", { class: "btn outline-primary", type: "button", onclick: openRoute, hidden: "" }, icon("arrow", 24), "경로 안내");
 }
@@ -276,12 +277,48 @@ function setLines(node, lines) {
   node.replaceChildren(...lines.flatMap((l, i) => (i ? [h("br"), l] : [l])));
 }
 
-/** 도착 예정 카드(P-03 · P-04) — 오른쪽 100×100 원은 디자인 그대로(그래픽 자리) */
+/** 도착 예정 카드(P-03 · P-04) — 지도 위에 뜨는 반투명 카드. 오른쪽 100×100 원은 디자인 그대로(그래픽 자리) */
 function etaCard({ head, accent = false }) {
   const time = h("p", { class: "time" });
   const left = h("p", { class: "left" });
-  const el = h("div", { class: `eta-card${accent ? " accent" : ""}` }, h("div", { class: "stack grow-x", style: "gap:8px" }, head, h("div", { class: "stack", style: "gap:2px" }, time, left)), h("div", { class: "eta-graphic", "aria-hidden": "true" }));
+  const el = h("div", { class: `eta-card glass${accent ? " accent" : ""}` }, h("div", { class: "stack grow-x", style: "gap:8px" }, head, h("div", { class: "stack", style: "gap:2px" }, time, left)), h("div", { class: "eta-graphic", "aria-hidden": "true" }));
   return { el, time, left };
+}
+
+/** 아래 시트의 '차량 · 픽업 위치' 두 줄(P-03 · P-04 · P-04a) */
+function carRows() {
+  const car = h("span", { class: "v" });
+  const spot = h("span", { class: "v" });
+  const el = h("div", { class: "rows" }, h("div", { class: "row" }, h("span", { class: "k" }, "차량"), car), h("div", { class: "row" }, h("span", { class: "k" }, "픽업 위치"), spot));
+  return {
+    el,
+    update(v) {
+      set(car, `${v.vehicle.plateNumber} | ${v.vehicle.description}`);
+      set(spot, v.pickup.title);
+    },
+  };
+}
+
+/**
+ * 지도가 화면을 채우고 위엔 카드, 아래엔 시트가 뜨는 틀(P-03 · P-04 · P-04a).
+ * covered() 가 지도 맞춤 여백을 돌려준다 — 위 카드(topCover)와 아래 시트가 가린 만큼.
+ */
+function mapLayout({ top, sheet, topCover = () => top }) {
+  const mapBox = h("div", { class: "map full" });
+  const sheetEl = h("div", { class: "sheet" }, h("div", { class: "sheet-handle", "aria-hidden": "true" }), ...sheet);
+  const area = h("div", { class: "map-area" }, mapBox, top, sheetEl);
+  // 저작권 표시(ⓘ)가 시트 밑에 숨지 않게 시트 높이만큼 올린다
+  const sync = () => area.style.setProperty("--sheet-h", `${sheetEl.offsetHeight}px`);
+  const resize = new ResizeObserver(sync);
+  resize.observe(sheetEl);
+  function covered() {
+    const box = area.getBoundingClientRect();
+    const cover = topCover();
+    const topEdge = cover && !cover.hidden ? cover.getBoundingClientRect().bottom - box.top : 0;
+    // 위는 카드 아래로 픽업 핀(끝이 점 자리, 몸통은 위로 ~36) 높이만큼 44, 아래는 점 밑 이름표 자리까지 44
+    return { top: topEdge + 44, bottom: box.bottom - sheetEl.getBoundingClientRect().top + 44, left: 40, right: 70 };
+  }
+  return { area, mapBox, covered, destroy: () => resize.disconnect() };
 }
 
 // ── 화면
@@ -319,7 +356,7 @@ const screens = {
         h("div", { class: "stack", style: "gap:16px" }, vehicle.el, h("div", { class: "card map-card" }, mapBox, place.el)),
       ),
       h("div", { class: "grow" }),
-      h("div", { class: "stack", style: "gap:12px" }, h("p", { class: "caption" }, "앱 설치, 로그인 없이 이 페이지에서 끝나요"), next),
+      h("div", { class: "stack actions", style: "gap:12px" }, h("p", { class: "caption" }, "앱 설치, 로그인 없이 이 페이지에서 끝나요"), next),
     );
 
     return {
@@ -397,7 +434,7 @@ const screens = {
       ),
       toast,
       h("div", { class: "grow" }),
-      h("div", { class: "stack", style: "gap:12px" }, allow, decline),
+      h("div", { class: "stack actions", style: "gap:12px" }, allow, decline),
     );
 
     return {
@@ -410,123 +447,117 @@ const screens = {
     };
   },
 
-  // P-03 대기 — 도착 예정 시간을 크게, 바뀌었으면 위에 노란 배너. 위치 공유 중이면 '경로 안내'
+  // P-03 대기 — 지도 위에 도착 예정 카드, 바뀌었으면 그 아래 검은 알림. 아래 시트에 차량 · 픽업 위치
   wait() {
-    const banner = h("div", { class: "banner-changed", hidden: "" }, icon("info-warning"), h("span", {}, "도착 시간이 변경되었어요"));
+    const banner = h("div", { class: "banner-changed", role: "status", hidden: "" }, icon("info-white-20", 20), h("span", {}, "도착 시간이 변경되었어요"));
     const who = h("p", { class: "who" });
     const card = etaCard({ head: who });
-    const mapBox = h("div", { class: "map h180" });
-    const car = h("span", { class: "v" });
-    const spot = h("span", { class: "v" });
-    const route = routeButton();
+    const rows = carRows();
+    const top = h("div", { class: "float-top" }, card.el, banner);
+    const layout = mapLayout({ top, sheet: [rows.el, h("p", { class: "note" }, "도착 5분 전에 픽업 안내 문자를 보내드려요.")] });
     let map = null;
 
-    const el = h(
-      "section",
-      { class: "screen" },
-      logo(),
-      banner,
-      h(
-        "div",
-        { class: "stack", style: "gap:20px" },
-        card.el,
-        h("div", { class: "card map-card r14" }, mapBox, h("div", { class: "rows" }, h("div", { class: "row" }, h("span", { class: "k" }, "차량"), car), h("div", { class: "row" }, h("span", { class: "k" }, "픽업 위치"), spot))),
-        route,
-      ),
-      h("div", { class: "grow" }),
-      h("p", { class: "note" }, "도착 5분 전에 픽업 안내 문자를 보내드려요.", h("br"), "문자를 받으면 픽업 장소로 이동해 주세요."),
-    );
+    const el = h("section", { class: "screen map-screen" }, layout.area);
 
     return {
       el,
       update(v) {
-        map ??= createMap(mapBox, { carLabel: `${v.driverCallName} 님 차` });
+        map ??= createMap(layout.mapBox, { carLabel: `${v.driverCallName} 님 차`, padding: layout.covered });
         show(banner, !!v.etaChange);
         set(who, `${v.driverCallName} 님의 도착 예정`);
         set(card.time, hhmm(v.arrivalAt));
         const sec = secondsLeft(v);
         set(card.left, sec < 60 ? "곧 도착해요" : `${minutesText(sec)} 남았어요`);
-        set(car, `${v.vehicle.plateNumber} | ${v.vehicle.description}`);
-        set(spot, v.pickup.title);
-        show(route, canRoute(v));
+        rows.update(v);
         map.update(mapView(v));
       },
-      destroy: () => map?.destroy(),
+      destroy() {
+        layout.destroy();
+        map?.destroy();
+      },
     };
   },
 
-  // P-04 곧 도착해요 — 탑승 차량 · 픽업 위치 확인, 위치 공유 중이면 '경로 안내'
+  // P-04 곧 도착해요 — 지도 위에 '곧 도착해요' 카드, 아래 시트에 차량 · 픽업 위치와(위치 공유 중이면) '경로 안내'
   soon() {
     const card = etaCard({ head: h("div", { class: "eta-head" }, icon("dot", 24), h("span", {}, "곧 도착해요")), accent: true });
-    const vehicle = vehicleCard();
-    const place = pickupPlace();
-    const mapBox = h("div", { class: "map h180" });
+    const rows = carRows();
+    rows.el.classList.add("inset");
     const route = routeButton();
+    const top = h("div", { class: "float-top" }, card.el);
+    const layout = mapLayout({ top, sheet: [rows.el, route] });
     let map = null;
 
-    const el = h(
-      "section",
-      { class: "screen" },
-      logo(),
-      h("div", { class: "stack", style: "gap:20px" }, card.el, h("div", { class: "stack", style: "gap:16px" }, vehicle.el, h("div", { class: "card map-card" }, mapBox, place.el)), route),
-    );
+    const el = h("section", { class: "screen map-screen" }, layout.area);
 
     return {
       el,
       update(v) {
-        map ??= createMap(mapBox, { carLabel: `${v.driverCallName} 님 차` });
+        map ??= createMap(layout.mapBox, { carLabel: `${v.driverCallName} 님 차`, padding: layout.covered });
         set(card.time, hhmm(v.arrivalAt));
         const sec = secondsLeft(v);
         set(card.left, sec < 60 ? "곧 픽업 위치에 도착해요" : `${minutesText(sec)} 뒤 픽업 위치에 도착해요`);
-        vehicle.update(v);
-        place.update(v);
+        rows.update(v);
         show(route, canRoute(v));
         map.update(mapView(v));
       },
-      destroy: () => map?.destroy(),
+      destroy() {
+        layout.destroy();
+        map?.destroy();
+      },
     };
   },
 
-  // P-04a 경로 안내 — 내 위치에서 픽업 위치까지 가장 빠른 걷는 길(서버 계산). '<'·뒤로 가기로 돌아간다
+  // P-04a 경로 안내 — 내 위치에서 픽업 위치까지 가장 빠른 걷는 길(서버 계산). '<'·뒤로 가기로 돌아간다.
+  // '이 경로를 따라 이동해 주세요' 안내는 처음 5초만 보이고 사라진다 — 걷는 길 카드의 ⓘ 를 누르면 다시 5초.
   route() {
+    const GUIDE_MS = 5000;
     const back = h("button", { class: "back", type: "button", "aria-label": "뒤로", onclick: closeRoute }, icon("back", 32));
-    const vehicle = vehicleCard();
-    const mapBox = h("div", { class: "map h270" });
     const walkLabel = h("p", { class: "s-regular muted" }, "현재 위치에서 가는 가장 빠른 길이에요");
     const walkMain = h("p", { class: "walk-main" });
     const pending = h("p", { class: "walk-pending" }, "경로를 찾고 있어요");
-    const lines = h("p", { class: "s-regular muted" });
-    const guide = h("div", { class: "guide-card" }, icon("info", 24), h("div", { class: "stack grow-x", style: "gap:4px" }, h("p", { class: "m-semibold ink" }, "이 경로를 따라 이동해 주세요"), lines));
+    const lines = h("p", { class: "s-regular guide-lines" });
+    const guide = h("div", { class: "guide-card", role: "status", "aria-live": "polite" }, icon("info-white", 24), h("div", { class: "stack grow-x", style: "gap:4px" }, h("p", { class: "m-semibold guide-title" }, "이 경로를 따라 이동해 주세요"), lines));
+    let guideTimer = null;
+    function flashGuide() {
+      guide.classList.add("on");
+      clearTimeout(guideTimer);
+      guideTimer = setTimeout(() => guide.classList.remove("on"), GUIDE_MS);
+    }
+    const info = h("button", { class: "info-btn", type: "button", "aria-label": "경로 안내 다시 보기", onclick: flashGuide }, icon("info", 24));
+    const walkCard = h("div", { class: "walk-card glass accent" }, h("div", { class: "walk-tile" }, icon("footsteps", 24)), h("div", { class: "stack grow-x" }, walkLabel, walkMain, pending), info);
+    const rows = carRows();
+    rows.el.classList.add("inset");
+    const top = h("div", { class: "float-top under-bar" }, walkCard, guide);
+    // 안내는 잠깐 떴다 사라지니 지도 맞춤은 걷는 길 카드까지만 피한다
+    const layout = mapLayout({ top, sheet: [rows.el], topCover: () => walkCard });
     let map = null;
+    let guided = false; // 들어와서 첫 안내를 보였는지(길을 아직 찾는 중이면 길이 나올 때)
 
-    const el = h(
-      "section",
-      { class: "screen" },
-      h("div", { class: "top-bar" }, back, h("p", { class: "title-m" }, "경로 안내")),
-      h(
-        "div",
-        { class: "stack", style: "gap:16px" },
-        vehicle.el,
-        h("div", { class: "card map-card" }, mapBox, h("div", { class: "walk-row" }, h("div", { class: "walk-tile" }, icon("footsteps", 24)), h("div", { class: "stack grow-x" }, walkLabel, walkMain, pending))),
-        guide,
-      ),
-    );
+    const el = h("section", { class: "screen map-screen" }, h("div", { class: "top-bar" }, back, h("p", { class: "title-m" }, "경로 안내")), layout.area);
 
     return {
       el,
       update(v) {
-        map ??= createMap(mapBox, { carLabel: `${v.driverCallName} 님 차` });
-        vehicle.update(v);
+        map ??= createMap(layout.mapBox, { carLabel: `${v.driverCallName} 님 차`, padding: layout.covered });
+        rows.update(v);
         const w = v.walk;
         show(walkLabel, !!w);
         show(walkMain, !!w);
         show(pending, !w);
-        show(guide, !!w);
         if (w) set(walkMain, walkText(w));
         setLines(lines, followLines(v.driverCallName));
+        if (w && !guided) {
+          guided = true;
+          flashGuide();
+        }
         map.update(mapView(v, { route: true, car: false }));
       },
-      destroy: () => map?.destroy(),
+      destroy() {
+        clearTimeout(guideTimer);
+        layout.destroy();
+        map?.destroy();
+      },
     };
   },
 

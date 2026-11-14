@@ -39,17 +39,29 @@ function el(className, label) {
 
 const toLngLat = (p) => [p.lng, p.lat];
 
+// 카드 속 지도(P-01 · P-05)에서 점들을 맞출 때 가장자리 여백 — 아래·오른쪽은 점 옆 이름표 자리
+const CARD_PADDING = { top: 36, bottom: 70, left: 40, right: 70 };
+
+/** 걷는 길 색 — 동승자 주황(피그마 v1 걷는 길 · '나' 점 #d9822b = app.css --passenger) */
+function walkColor() {
+  return getComputedStyle(document.documentElement).getPropertyValue("--passenger").trim() || "#d9822b";
+}
+
 /**
- * 작은 지도 하나. update({ pickup, car, me, meLabel, route }) 로 점·걷는 길을 옮긴다.
+ * 지도 하나. update({ pickup, car, me, meLabel, route }) 로 점·걷는 길을 옮긴다.
  * route 는 서버가 계산한 보행 경로 [{lat,lng}…] — 없으면 선을 그리지 않는다(가짜 직선 금지).
- * 손으로 움직이지 않게(카드 속 지도) 하고, 점들과 길이 다 보이게 자동으로 맞춘다.
+ * 손으로 끌고·두 손가락/휠로 확대할 수 있다(회전·기울이기는 끔). 처음엔 점들과 길이 다 보이게 자동으로 맞추고,
+ * 사용자가 지도를 한 번 만지면 그 화면에선 자동 맞춤을 멈춘다(점은 계속 움직인다). 화면이 바뀌면 지도를 새로 만드니 다시 자동 맞춤.
+ * padding: 지도 위에 카드가 떠 있으면 가려지는 만큼 — 객체나, 맞출 때마다 부르는 함수({top,bottom,left,right}).
  */
-export function createMap(container, { carLabel = "차" } = {}) {
+export function createMap(container, { carLabel = "차", padding = CARD_PADDING } = {}) {
   let map = null;
   let latest = null;
   const markers = {};
   let carAnim = null;
   let lastFitKey = "";
+  let userMoved = false; // 사용자가 지도를 움직였으면 자동 맞춤을 멈춘다
+  let destroyed = false;
 
   const empty = document.createElement("div");
   empty.className = "map-empty";
@@ -58,23 +70,36 @@ export function createMap(container, { carLabel = "차" } = {}) {
 
   style()
     .then((s) => {
+      if (destroyed) return; // 스타일을 받기 전에 화면이 바뀌었다
       map = new Map({
         container,
         style: s,
         center: latest ? toLngLat(latest.pickup) : [126.942, 37.5567],
         zoom: 16,
-        interactive: false,
+        // 끌기 · 두 손가락 확대 · 휠 확대 · 두 번 눌러 확대. 회전·기울이기는 끈다(북쪽이 늘 위)
+        dragRotate: false,
+        pitchWithRotate: false,
+        touchPitch: false,
+        maxPitch: 0,
         attributionControl: false,
         fadeDuration: 0,
       });
+      map.touchZoomRotate.disableRotation();
+      map.keyboard.disableRotation();
       map.addControl(new AttributionControl({ compact: true }), "bottom-right");
+      // 사용자가 만든 움직임(originalEvent 가 있음)만 — fitBounds 같은 자동 이동은 거른다
+      map.on("movestart", (e) => {
+        if (e.originalEvent) userMoved = true;
+      });
       map.on("load", () => {
         empty.remove();
-        // 걷는 길(P-04a·P-05) — 흰 테두리 위에 파란 선
+        // 좁은 지도에선 저작권 표시가 펼쳐진 채 시작해 지도를 가린다 — 'ⓘ' 로 접어 둔다(누르면 펼쳐진다)
+        container.querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
+        // 걷는 길 — 흰 테두리 위에 동승자 주황 선(모든 화면 같은 색)
         map.addSource("walk", { type: "geojson", data: line([]) });
         const round = { "line-cap": "round", "line-join": "round" };
         map.addLayer({ id: "walk-casing", type: "line", source: "walk", layout: round, paint: { "line-color": "#ffffff", "line-width": 9 } });
-        map.addLayer({ id: "walk", type: "line", source: "walk", layout: round, paint: { "line-color": "#3b67f6", "line-width": 5 } });
+        map.addLayer({ id: "walk", type: "line", source: "walk", layout: round, paint: { "line-color": walkColor(), "line-width": 5 } });
         if (latest) apply(latest, true);
       });
     })
@@ -129,22 +154,40 @@ export function createMap(container, { carLabel = "차" } = {}) {
     fit(v, first);
   }
 
+  /** 지금 가려진 가장자리(카드·시트) — 지도 높이보다 크면 줄여서 맞출 자리를 남긴다 */
+  function edges() {
+    const p = { ...(typeof padding === "function" ? padding() : padding) };
+    const room = container.clientHeight - 60;
+    if (room > 0 && p.top + p.bottom > room) {
+      const k = room / (p.top + p.bottom);
+      p.top *= k;
+      p.bottom *= k;
+    }
+    for (const side of ["top", "bottom", "left", "right"]) p[side] = Math.max(0, Math.round(p[side]));
+    return p;
+  }
+
   function fit(v, first) {
+    if (userMoved) return; // 사용자가 옮긴 화면을 덮어쓰지 않는다
     const route = v.route ?? [];
     const points = [v.pickup, v.car, v.me, ...route].filter(Boolean);
-    // 점이 크게 움직였을 때만 다시 맞춘다(작은 흔들림에 화면이 계속 움직이지 않게)
+    const pad = edges();
+    // 점이 크게 움직였거나 가려진 자리가 바뀌었을 때만 다시 맞춘다(작은 흔들림에 화면이 계속 움직이지 않게)
     const key = [v.pickup, v.car, v.me, route[0], route[route.length - 1]]
       .map((p) => (p ? `${p.lat.toFixed(4)},${p.lng.toFixed(4)}` : "-"))
-      .join("|") + `|${route.length}`;
+      .join("|") + `|${route.length}|${pad.top},${pad.bottom},${pad.left},${pad.right}`;
     if (!first && key === lastFitKey) return;
     lastFitKey = key;
     if (points.length === 1) {
-      map.jumpTo({ center: toLngLat(v.pickup), zoom: 16.5 });
+      // 점 하나는 가운데로 — 카드·시트가 떠 있는 지도면 가려지지 않은 자리 가운데로
+      // (camera padding 은 지도에 남아 다음 맞춤에 더해지니 offset 으로)
+      const offset = typeof padding === "function" ? [(pad.left - pad.right) / 2, (pad.top - pad.bottom) / 2] : [0, 0];
+      map.easeTo({ center: toLngLat(v.pickup), zoom: 16.5, offset, duration: 0 });
       return;
     }
     const bounds = new LngLatBounds();
     points.forEach((p) => bounds.extend(toLngLat(p)));
-    map.fitBounds(bounds, { padding: { top: 36, bottom: 70, left: 40, right: 70 }, maxZoom: 17.5, duration: first ? 0 : 600 });
+    map.fitBounds(bounds, { padding: pad, maxZoom: 17.5, duration: first ? 0 : 600 });
   }
 
   return {
@@ -153,6 +196,7 @@ export function createMap(container, { carLabel = "차" } = {}) {
       if (map && map.loaded()) apply(v, false);
     },
     destroy() {
+      destroyed = true;
       if (carAnim) cancelAnimationFrame(carAnim);
       map?.remove();
     },
