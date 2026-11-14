@@ -185,8 +185,9 @@ class PickupService : Service() {
   }
 
   private fun offerCall(passenger: Contact) {
-    // 화면에도 같은 질문 — 음성을 못 알아들어도 버튼으로 걸 수 있다
-    notifications().notify(PickupNotifications.CALL_OFFER_ID, PickupNotifications.callOffer(this, passenger))
+    // Way 화면이 앞이면 D-09 의 빨간 '전화하기' 버튼이 같은 일을 한다(디자인에 알림 창은 없다).
+    // Way 가 가려져 있을 때만(운전자가 다른 앱을 연 경우) 알림으로 같은 질문을 남겨 버튼으로 걸 수 있게
+    if (!WayScreen.isVisible(this)) notifications().notify(PickupNotifications.CALL_OFFER_ID, PickupNotifications.callOffer(this, passenger))
     if (!requestFocus()) {
       Log.w(TAG, "오디오 포커스를 못 얻어(다른 음성 안내·Gleo 대화 중) 화면 알림만 남김")
       return

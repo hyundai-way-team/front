@@ -4,7 +4,7 @@ package com.kscho.way.di
 object WayConfig {
   /**
    * true  = 시연용 시뮬레이션 주행. Way 화면에서 D-06~D-10 흐름이 그대로 보인다(시간 20배속).
-   * false = Pleos 내비로 실제 안내(requestRoute). 내비가 앞으로 나와 Way 는 뒤에서 음성·헤드업 알림으로 동작한다.
+   * false = Pleos 내비 연결. 픽업까지는 Way 화면(D-06~D-09)이 앞에 있고, 탑승한 뒤에야 내비로 넘어간다.
    */
   const val SIMULATED_DRIVE = false
 
