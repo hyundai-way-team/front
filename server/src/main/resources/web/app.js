@@ -193,8 +193,12 @@ function h(tag, attrs = {}, ...children) {
 }
 
 const icon = (name, size = 20) => h("img", { src: `/web/icons/${name}.svg`, alt: "", width: size, height: size });
-const cardHead = (name, text) => h("div", { class: "card-head" }, icon(name), h("span", {}, text));
+/** P-01 카드 머리글(Label/Medium · Primary-500) — 피그마 개정: 앞 아이콘 없음 */
+const cardHead = (text) => h("p", { class: "card-head" }, text);
 const logo = () => h("p", { class: "logo" }, "WAY");
+/** P-01 로고(피그마 477:3378): WAY 워드마크 + WHERE ARE YOU */
+const brandLogo = () =>
+  h("div", { class: "brand-logo", role: "img", "aria-label": "WAY · Where are you" }, h("img", { class: "way", src: "/web/icons/logo-way.svg", alt: "" }), h("img", { class: "where", src: "/web/icons/logo-where.svg", alt: "" }));
 const set = (node, text) => {
   if (node.textContent !== text) node.textContent = text;
 };
@@ -248,7 +252,7 @@ window.addEventListener("popstate", () => {
 function vehicleCard() {
   const plate = h("p", { class: "plate" });
   const desc = h("p", { class: "vehicle-desc" });
-  const el = h("div", { class: "card vehicle-card" }, cardHead("car", "탑승 차량을 확인해 주세요"), h("div", { class: "vehicle-row" }, h("div", { class: "car-tile" }), h("div", { class: "stack grow-x" }, plate, desc)));
+  const el = h("div", { class: "card vehicle-card" }, cardHead("탑승 차량을 확인해 주세요"), h("div", { class: "vehicle-row" }, h("div", { class: "car-tile" }), h("div", { class: "stack grow-x" }, plate, desc)));
   return {
     el,
     update(v) {
@@ -262,7 +266,7 @@ function vehicleCard() {
 function pickupPlace() {
   const title = h("p", { class: "place-title" });
   const detail = h("p", { class: "s-regular muted" });
-  const el = h("div", { class: "place" }, cardHead("navigate", "픽업 위치를 확인해 주세요"), h("div", { class: "stack", style: "gap:2px" }, title, detail));
+  const el = h("div", { class: "place" }, cardHead("픽업 위치를 확인해 주세요"), h("div", { class: "stack", style: "gap:2px" }, title, detail));
   return {
     el,
     update(v) {
@@ -460,7 +464,7 @@ function mapLayout({ top, sheet, topCover = () => top }) {
 
 const screens = {
   loading() {
-    const el = h("section", { class: "screen" }, logo(), h("p", { class: "m-regular muted" }, failure ?? "불러오는 중…"));
+    const el = h("section", { class: "screen" }, brandLogo(), h("p", { class: "m-regular muted" }, failure ?? "불러오는 중…"));
     return { el };
   },
 
@@ -483,7 +487,7 @@ const screens = {
     const el = h(
       "section",
       { class: "screen soft" },
-      logo(),
+      brandLogo(),
       h(
         "div",
         { class: "stack", style: "gap:20px" },

@@ -1,5 +1,6 @@
 package com.kscho.way.ui.home
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -14,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,7 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -69,7 +68,7 @@ class HomeViewModel(private val history: PickupHistoryRepository, private val na
   }
 }
 
-/** D-01 홈(와이어프레임 v2): 픽업 만들기 · 최근 픽업 · 현재 위치 지도. */
+/** D-01 홈(와이어프레임 v2): 로고 · 최근 픽업 · (아래) 픽업 만들기 · 현재 위치 지도. */
 @Composable
 fun HomeScreen(onCreatePickup: () -> Unit, onReuse: (PickupRecord) -> Unit) {
   val c = appContainer()
@@ -78,19 +77,10 @@ fun HomeScreen(onCreatePickup: () -> Unit, onReuse: (PickupRecord) -> Unit) {
   LaunchedEffect(Unit) { vm.refresh() }
 
   ScreenFrame {
+    // 위: 로고 → 48 → 최근 픽업, 아래 끝: 픽업 만들기(Panel 이 위아래로 벌린다)
     Panel(width = 480.dp) {
-      Column(verticalArrangement = Arrangement.spacedBy(40.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(32.dp)) {
-          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-              // 로고 자리(디자인 임시) — 워드마크에 'Where are you'가 들어갈 예정
-              Box(Modifier.size(60.dp).clip(RoundedCornerShape(10.dp)).background(WayColors.Placeholder))
-              Text("WAY", style = WayType.HeadingM, color = WayColors.Primary500)
-            }
-            Text("정확한 픽업 위치를 정하고 출발하세요", style = WayType.LMedium, color = WayColors.Grey500)
-          }
-          ActionButton("픽업 만들기", onCreatePickup, Modifier.fillMaxWidth(), icon = R.drawable.ic_plus)
-        }
+      Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(48.dp)) {
+        Image(painterResource(R.drawable.ic_logo_way), contentDescription = "WAY · Where are you")
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
           Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("최근 픽업", style = WayType.LSemiBold, color = WayColors.Grey700)
@@ -104,6 +94,7 @@ fun HomeScreen(onCreatePickup: () -> Unit, onReuse: (PickupRecord) -> Unit) {
           }
         }
       }
+      ActionButton("픽업 만들기", onCreatePickup, Modifier.fillMaxWidth().padding(top = 16.dp), icon = R.drawable.ic_plus)
     }
     MapFrame {
       val here = state.here
