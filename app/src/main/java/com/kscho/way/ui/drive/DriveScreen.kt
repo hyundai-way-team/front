@@ -9,7 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -166,19 +165,19 @@ fun DriveScreen(onClosed: () -> Unit) {
   val name = s.plan.passenger.callName
   Box(Modifier.fillMaxSize()) {
     // D-11 창이 뜨면 뒤(지도·카드)는 흐리게
-    BoxWithConstraints(Modifier.fillMaxSize().then(if (connecting) Modifier.blur(2.dp) else Modifier)) {
+    Box(Modifier.fillMaxSize().then(if (connecting) Modifier.blur(2.dp) else Modifier)) {
       val driving = s.phase == PickupPhase.DRIVING
       val car = s.carLocation
-      // 주행 중엔 차를 왼쪽 상태 카드에 안 가린 곳의 가운데에 두고, 픽업 위치에 가까워질수록 확대(DriveCamera)
+      // 주행 중엔 차를 왼쪽 상태 카드에 안 가린 곳의 가운데에 두고, 카드의 남은 거리가 가까워지면 한 번만 확대(DriveCamera)
       val covered = STATUS_CARD_EDGE + STATUS_CARD_WIDTH
+      val remaining = s.remainingMeters ?: s.plan.route.distanceMeters
+      // 한 번 확대했는지 기억(이 값이 바뀐다고 다시 그릴 일은 없어 Compose 상태 대신 그냥 둔다)
+      val zoomLatch = remember { booleanArrayOf(false) }
+      zoomLatch[0] = DriveCamera.zoomedIn(zoomLatch[0], if (driving) remaining else null)
+      val zoomedIn = zoomLatch[0]
       WayMap(
         center = if (driving && car != null) car else pickup,
-        metersPerDp =
-          when {
-            !driving -> DriveCamera.NEAR_METERS_PER_DP
-            car == null -> DriveCamera.FAR_METERS_PER_DP
-            else -> DriveCamera.metersPerDp(Geo.distanceMeters(car, pickup), maxWidth.value, maxHeight.value, covered.value)
-          },
+        metersPerDp = if (driving) DriveCamera.metersPerDp(zoomedIn) else DriveCamera.NEAR_METERS_PER_DP,
         modifier = Modifier.fillMaxSize(),
         cameraPadding = if (driving) PaddingValues(start = covered) else PaddingValues(),
         // 손으로 옮기거나 확대해 볼 수 있고, 10초 손을 떼면 다시 차(정차 뒤엔 픽업 위치)를 따라간다
