@@ -449,8 +449,9 @@ function mapLayout({ top, sheet, topCover = () => top }) {
     const cover = topCover();
     const topEdge = cover && !cover.hidden ? cover.getBoundingClientRect().bottom - box.top : 0;
     const folded = bottom.el.offsetHeight - bottom.moreEl.offsetHeight;
-    // 위는 카드 아래로 픽업 핀 + '픽업 위치' 이름표(끝이 점 자리, 위로 ~80) 높이만큼 88, 아래는 점 밑 이름표 자리까지 44
-    return { top: topEdge + 88, bottom: folded + 44, left: 40, right: 70 };
+    // 위는 카드 아래로 픽업 핀 + '픽업 위치' 이름표(끝점에서 위로 ~83) 높이만큼 92,
+    // 아래는 점 반지름(12)과 여유 24, 양옆은 가운데 정렬 이름표 반 폭(~40) 44 — 이름표는 모두 표식 위에 붙는다
+    return { top: topEdge + 92, bottom: folded + 24, left: 44, right: 44 };
   }
   return { area, mapBox, sheet: bottom, covered, destroy: () => resize.disconnect() };
 }
@@ -477,7 +478,7 @@ const screens = {
       step = view.sharing === "NOT_YET" ? "consent" : "live";
       render();
     });
-    const map = createMap(mapBox, { carLabel: "차" });
+    const map = createMap(mapBox, { carLabel: `${view.driverCallName} 님 차` });
 
     const el = h(
       "section",

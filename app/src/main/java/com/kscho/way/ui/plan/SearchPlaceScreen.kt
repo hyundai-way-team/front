@@ -164,7 +164,7 @@ fun SearchPlaceScreen(onBack: () -> Unit, onNext: () -> Unit) {
           metersPerDp = if (place != null) 0.35f else 1.2f,
           modifier = Modifier.fillMaxSize(),
           zones = zones,
-          pins = if (place != null) listOf(MapPin(place.location, PinKind.PLACE, "검색한 약속 장소")) else listOf(MapPin(center, PinKind.CAR, "현재 위치")),
+          pins = if (place != null) listOf(MapPin(place.location, PinKind.PLACE, "검색한 장소")) else listOf(MapPin(center, PinKind.CAR, "현재 위치")),
           caption = if (place != null) "지도 · 검색한 약속 장소" else "지도 · 현재 위치",
           interactive = true,
         )

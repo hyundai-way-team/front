@@ -233,7 +233,7 @@ fun AdjustPinScreen(onBack: () -> Unit, onSearchAgain: () -> Unit, onConfirmed: 
         interactive = true,
         followCamera = false,
         centerPin =
-          if (blocked != null) MapPin(state.pin, PinKind.PICKUP_BLOCKED, "픽업 위치 · 정차 금지 구간")
+          if (blocked != null) MapPin(state.pin, PinKind.PICKUP_BLOCKED, "픽업 위치")
           else MapPin(state.pin, PinKind.PICKUP, "픽업 위치"),
         onCenterSettled = vm::setPin,
         showZoomButtons = true,

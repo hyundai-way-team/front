@@ -7,6 +7,7 @@ import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Paint
 import android.graphics.Path as AndroidPath
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -38,6 +39,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
@@ -232,7 +234,16 @@ fun WayMap(
 
   LaunchedEffect(style, zones) { style?.getSourceAs<GeoJsonSource>(SRC_ZONES)?.setGeoJson(zonesGeoJson(zones)) }
   LaunchedEffect(style, lines) { style?.getSourceAs<GeoJsonSource>(SRC_LINES)?.setGeoJson(linesGeoJson(lines)) }
-  LaunchedEffect(style, pins) { style?.getSourceAs<GeoJsonSource>(SRC_PINS)?.setGeoJson(pinsGeoJson(pins)) }
+  LaunchedEffect(style, pins) {
+    val s = style ?: return@LaunchedEffect
+    // 확정 마커(이름표 + 핀·점)는 글자마다 그림이 달라 처음 보는 것만 그려 올린다(Compose 디자인 단위 그대로)
+    pins.forEach { pin ->
+      val look = WayMarkers.lookOf(pin.kind) ?: return@forEach
+      val key = markerKey(look, markerLabel(pin))
+      if (s.getImage(key) == null) s.addImage(key, WayMarkers.draw(context, look, markerLabel(pin), composeDensity).bitmap)
+    }
+    s.getSourceAs<GeoJsonSource>(SRC_PINS)?.setGeoJson(pinsGeoJson(pins))
+  }
 
   val settled by rememberUpdatedState(onCenterSettled)
   val areaSettled by rememberUpdatedState(onVisibleAreaSettled)
@@ -311,6 +322,23 @@ private fun ZoomButton(text: String, onClick: () -> Unit) {
 /** 화면 가운데 고정 핀 — 뾰족한 끝이 정확히 지도 중심을 가리킨다. */
 @Composable
 private fun CenterPin(pin: MapPin, modifier: Modifier) {
+  val look = WayMarkers.lookOf(pin.kind)
+  if (look != null) {
+    val context = LocalContext.current
+    val scale = LocalDensity.current.density
+    val label = markerLabel(pin)
+    val drawn = remember(look, label, scale) { WayMarkers.draw(context, look, label, scale) }
+    val g = drawn.geometry
+    // 그림 한가운데(= 핀 끝)가 지도 가운데에 오게
+    Box(modifier.anchorAt(0.dp, 0.dp)) {
+      Image(
+        drawn.bitmap.asImageBitmap(),
+        contentDescription = label,
+        modifier = Modifier.anchorAt((-g.anchorX).dp, (-g.anchorY).dp).size(g.width.dp, g.height.dp),
+      )
+    }
+    return
+  }
   val color = pinColor(pin.kind)
   // 크기가 0인 점에 두고 그 점을 기준으로 그린다 — 이름표 길이가 핀 위치를 밀지 않게
   Box(modifier.anchorAt(0.dp, 0.dp)) {
@@ -480,8 +508,9 @@ private fun addWayLayers(style: Style, context: Context) {
         PropertyFactory.lineDasharray(arrayOf(2f, 2f)),
       )
   )
-  // 핀(뾰족한 끝이 좌표) · 점(가운데가 좌표)
+  // 핀(뾰족한 끝이 좌표) · 점(가운데가 좌표). 확정 마커(designed)는 아래 way-markers 가 그린다
   val isDot = Expression.any(Expression.eq(Expression.get("kind"), PinKind.CAR.name), Expression.eq(Expression.get("kind"), PinKind.PASSENGER.name))
+  val designed = Expression.eq(Expression.get("designed"), Expression.literal(true))
   fun labelProps(offset: Array<Float>) =
     arrayOf(
       PropertyFactory.iconImage(Expression.get("icon")),
@@ -500,15 +529,32 @@ private fun addWayLayers(style: Style, context: Context) {
     )
   style.addLayer(
     SymbolLayer("way-pins", SRC_PINS)
-      .withFilter(Expression.not(isDot))
+      .withFilter(Expression.all(Expression.not(isDot), Expression.not(designed)))
       .withProperties(PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM), *labelProps(arrayOf(1.4f, -2.2f)))
   )
   style.addLayer(
     SymbolLayer("way-dots", SRC_PINS)
-      .withFilter(isDot)
+      .withFilter(Expression.all(isDot, Expression.not(designed)))
       .withProperties(PropertyFactory.iconAnchor(Property.ICON_ANCHOR_CENTER), *labelProps(arrayOf(1.3f, 0f)))
   )
+  // 확정 마커: 그림 한가운데가 핀 끝·점 가운데(MarkerGeometry)라 가운데를 좌표에 맞춘다
+  style.addLayer(
+    SymbolLayer("way-markers", SRC_PINS)
+      .withFilter(designed)
+      .withProperties(
+        PropertyFactory.iconImage(Expression.get("marker")),
+        PropertyFactory.iconAnchor(Property.ICON_ANCHOR_CENTER),
+        PropertyFactory.iconAllowOverlap(true),
+        PropertyFactory.iconIgnorePlacement(true),
+      )
+  )
 }
+
+/** 확정 마커 그림 이름 — 모양과 이름표 글자마다 하나. */
+private fun markerKey(look: WayMarkers.Look, label: String) = "way-marker-${look.name.lowercase()}-$label"
+
+/** 이름표 글자 — 정차 금지여도 '픽업 위치'(피그마 D-03 핀 지정 Warning), 나머지는 부르는 쪽이 준 그대로. */
+private fun markerLabel(pin: MapPin): String = if (pin.kind == PinKind.PICKUP_BLOCKED) "픽업 위치" else pin.label ?: ""
 
 private fun iconName(kind: PinKind) = "way-${kind.name.lowercase()}"
 
@@ -606,6 +652,9 @@ private fun pinsGeoJson(pins: List<MapPin>): FeatureCollection =
         addStringProperty("icon", iconName(pin.kind))
         addStringProperty("label", pin.label ?: "")
         addStringProperty("color", hex(if (pin.kind == PinKind.PASSENGER) WayColors.Orange else pinColor(pin.kind).copy(alpha = 1f)))
+        val look = WayMarkers.lookOf(pin.kind)
+        addBooleanProperty("designed", look != null)
+        if (look != null) addStringProperty("marker", markerKey(look, markerLabel(pin)))
       }
     }
   )

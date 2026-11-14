@@ -19,9 +19,11 @@
   --grey-300: #cbd5e1;
   --grey-400: #94a3b8;
   --grey-500: #64748b;
+  --grey-600: #475569;
   --grey-700: #334155;
   --grey-900: #0f172a;
   --warning-50: #fffbeb;
+  --warning-600: #d97706;
   --warning-700: #b45309;
   --black: #000;
   --ink: #1f2328;
@@ -545,14 +547,26 @@ body:has(.screen.soft) {
   color: var(--grey-500);
 }
 
-/* 픽업 핀 — 피그마 Marker. 그림(53×65)은 둘레 10px 이 빛 그림자라 그만큼 빼서 핀(33×45) 끝이 점 자리에 오게 */
-.mk-wrap.pin {
+/* ── 지도 표식 — 피그마 Component 확정본(Icons/Marker · Location Dot · Tag/Location Mobile Web).
+   이름표는 표식 바로 위 가운데: 핀은 이름표 아래 끝에서 보이는 핀 위 끝까지 9.33(2 + 그림 안 여백 7.33), 점은 8.
+   위치는 MapLibre 가 잡는다(position:absolute) — 감싸는 상자를 이름표 + 표식 크기로만 */
+.mk-wrap {
+  width: max-content;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 7px;
 }
 
+.mk-wrap.pin {
+  gap: 9.33px;
+}
+
+.mk-wrap.car,
+.mk-wrap.me {
+  gap: 8px;
+}
+
+/* 핀 그림 53×64.97 — 둘레 10 은 파란 빛이라 빼서 핀(33×45) 끝이 상자 아래 끝(좌표)에 */
 .mk-pin {
   display: block;
   width: 53px;
@@ -561,63 +575,48 @@ body:has(.screen.soft) {
   pointer-events: none;
 }
 
-/* '픽업 위치' 이름표(피그마 P-03) — 흰 바탕 · 파란 테두리 */
-.mk-pin-label {
+/* 점 그림 56×56 — 둘레 16 은 그림자라 빼서 점(지름 24)만 자리를 차지 */
+.mk-dot {
+  display: block;
+  width: 56px;
+  height: 56px;
+  margin: -16px;
+  pointer-events: none;
+}
+
+/* Tag/Location(Mobile Web) — 피그마 너비 70(긴 이름이면 늘어남). 지도 안은 MapLibre 글꼴이라 다시 지정 */
+.mk-tag {
+  min-width: 70px;
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
   white-space: nowrap;
-  background: var(--white);
-  border: 1px solid var(--primary-500);
+  text-align: center;
+  border: 1px solid;
   border-radius: 12px;
   padding: 2px 8px;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.6;
-  letter-spacing: -0.01em;
-  color: var(--primary-500);
+  letter-spacing: -0.14px;
 }
 
-.mk-dot {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 3px solid var(--white);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+.mk-tag.pin {
+  background: var(--primary-500);
+  border-color: var(--primary-500);
+  color: var(--white);
 }
 
-.mk-dot.car {
-  width: 24px;
-  height: 24px;
-  background: var(--ink);
+.mk-tag.me {
+  background: var(--warning-50);
+  border-color: var(--warning-600);
+  color: var(--warning-600);
+  filter: drop-shadow(0 0 5px rgba(15, 23, 42, 0.2));
 }
 
-.mk-dot.me {
-  background: var(--passenger);
-}
-
-/* 위치는 MapLibre 가 잡는다(position:absolute) — 감싸는 상자를 점 크기로만 */
-.mk-wrap {
-  width: max-content;
-}
-
-.mk-label {
-  position: absolute;
-  left: 50%;
-  top: calc(100% + 4px);
-  transform: translateX(-50%);
-  white-space: nowrap;
-  background: var(--white);
-  border-radius: 8px;
-  padding: 1px 6px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--ink);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
-}
-
-.mk-wrap.me .mk-label {
-  top: 50%;
-  left: calc(100% + 6px);
-  transform: translateY(-50%);
-  color: var(--warn-ink);
+.mk-tag.car {
+  background: var(--grey-100);
+  border-color: var(--grey-600);
+  color: var(--grey-900);
+  filter: drop-shadow(0 0 5px rgba(15, 23, 42, 0.2));
 }
 
 .maplibregl-ctrl-attrib {

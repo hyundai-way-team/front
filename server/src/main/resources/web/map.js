@@ -21,36 +21,38 @@ function style() {
   return stylePromise;
 }
 
-function el(className, label) {
+// 지도 표식 — 피그마 Component 페이지 확정본: Icons/Marker(픽업 핀) · Location Dot(현재 위치 · 차량 위치) · Tag/Location(이름표, Mobile Web).
+// 이름표는 핀·점 바로 위 가운데. 그림 둘레의 빛·그림자 여백(핀 10 · 점 16)은 CSS 음수 여백으로 빼서
+// 핀은 끝점이, 점은 가운데가 좌표에 오게 한다(MARK 의 anchor · offset).
+const MARK = {
+  pin: { src: "/web/icons/marker-pickup.svg", anchor: "bottom", offset: [0, 0] },
+  car: { src: "/web/icons/dot-car.svg", anchor: "bottom", offset: [0, 12] }, // 점 지름 24 의 절반만큼 내려 점 가운데를 좌표에
+  me: { src: "/web/icons/dot-me.svg", anchor: "bottom", offset: [0, 12] },
+};
+
+function el(kind, label) {
   const wrap = document.createElement("div");
-  wrap.className = `mk-wrap ${className}`;
+  wrap.className = `mk-wrap ${kind}`;
   let labelEl = null;
   if (label !== undefined) {
     labelEl = document.createElement("div");
-    labelEl.className = className === "pin" ? "mk-pin-label" : "mk-label";
+    labelEl.className = `mk-tag ${kind}`;
     labelEl.textContent = label;
+    wrap.append(labelEl);
   }
-  if (className === "pin") {
-    // 픽업 핀 — 피그마 Marker(파란 핀 + 흰 점 + 파란 빛 그림자) 그대로. 이름표는 핀 위
-    const pin = document.createElement("img");
-    pin.className = "mk-pin";
-    pin.src = "/web/icons/marker-pickup.svg";
-    pin.alt = "";
-    if (labelEl) wrap.append(labelEl);
-    wrap.append(pin);
-    return { wrap, labelEl };
-  }
-  const dot = document.createElement("div");
-  dot.className = `mk-dot ${className}`;
-  wrap.append(dot);
-  if (labelEl) wrap.append(labelEl);
+  const img = document.createElement("img");
+  img.className = kind === "pin" ? "mk-pin" : "mk-dot";
+  img.src = MARK[kind].src;
+  img.alt = "";
+  wrap.append(img);
   return { wrap, labelEl };
 }
 
 const toLngLat = (p) => [p.lng, p.lat];
 
-// 카드 속 지도(P-01)에서 점들을 맞출 때 가장자리 여백 — 위는 픽업 핀 높이(45), 아래·오른쪽은 점 옆 이름표 자리
-const CARD_PADDING = { top: 52, bottom: 70, left: 40, right: 70 };
+// 카드 속 지도(P-01)에서 점들을 맞출 때 가장자리 여백 — 위는 점 위 이름표(점 가운데에서 ~48) · 핀(45) 자리,
+// 아래는 점 반지름(12)과 여유, 양옆은 가운데 정렬 이름표 반 폭(~40)
+const CARD_PADDING = { top: 56, bottom: 24, left: 44, right: 44 };
 
 /** 걷는 길 색 — 동승자 주황(피그마 v1 걷는 길 · '나' 점 #d9822b = app.css --passenger) */
 function walkColor() {
@@ -132,7 +134,7 @@ export function createMap(container, { carLabel = "차", padding = CARD_PADDING,
     return { type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} };
   }
 
-  function marker(key, className, label, at, anchor) {
+  function marker(key, kind, label, at) {
     if (!at) {
       markers[key]?.marker.remove();
       delete markers[key];
@@ -140,8 +142,9 @@ export function createMap(container, { carLabel = "차", padding = CARD_PADDING,
     }
     let m = markers[key];
     if (!m) {
-      const { wrap, labelEl } = el(className, label);
-      m = { marker: new Marker({ element: wrap, anchor }).setLngLat(toLngLat(at)).addTo(map), labelEl };
+      const { wrap, labelEl } = el(kind, label);
+      const { anchor, offset } = MARK[kind];
+      m = { marker: new Marker({ element: wrap, anchor, offset }).setLngLat(toLngLat(at)).addTo(map), labelEl };
       markers[key] = m;
     } else if (key !== "car") {
       m.marker.setLngLat(toLngLat(at));
@@ -166,11 +169,11 @@ export function createMap(container, { carLabel = "차", padding = CARD_PADDING,
   }
 
   function apply(v, first) {
-    marker("pickup", "pin", pickupLabel ? "픽업 위치" : undefined, v.pickup, "bottom");
+    marker("pickup", "pin", pickupLabel ? "픽업 위치" : undefined, v.pickup);
     const hadCar = !!markers.car;
-    const car = marker("car", "car", carLabel, v.car, "center");
+    const car = marker("car", "car", carLabel, v.car);
     if (car && hadCar) moveCar(car, v.car);
-    marker("me", "me", v.meLabel ?? "현재 위치", v.me, "center");
+    marker("me", "me", v.meLabel ?? "현재 위치", v.me);
     map.getSource("walk")?.setData(line((v.route ?? []).map(toLngLat)));
     map.getSource("car-route")?.setData(line((v.carRoute ?? []).map(toLngLat)));
     fit(v, first);

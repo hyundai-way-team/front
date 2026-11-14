@@ -202,7 +202,7 @@ fun DriveScreen(onClosed: () -> Unit) {
               return@buildList
             }
             add(MapPin(pickup, PinKind.PICKUP, "픽업 위치"))
-            s.passenger.location?.let { add(MapPin(it, PinKind.PASSENGER, "$name 님" + (s.passengerDistanceMeters?.let { d -> " · ${Format.distance(d)}" } ?: ""))) }
+            s.passenger.location?.let { add(MapPin(it, PinKind.PASSENGER, "${name}님")) }
             car?.let { add(MapPin(if (driving) it else pickup, PinKind.CAR)) }
           },
       )
