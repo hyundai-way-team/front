@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kscho.way.domain.model.LatLng
+import com.kscho.way.domain.model.PickupZones
 import com.kscho.way.domain.model.Place
 import com.kscho.way.domain.model.RestrictedZone
 import com.kscho.way.domain.repository.PlaceRepository
@@ -59,6 +60,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
@@ -78,17 +80,26 @@ class SearchPlaceViewModel(
 
   fun load() {
     viewModelScope.launch {
-      val at = draft.place.value?.location ?: runCatching { navigator.currentLocation() }.getOrNull() ?: return@launch
-      here.value = at
-      zones.value = runCatching { restrictions.zonesNear(at, 500) }.getOrDefault(emptyList())
+      // 고른 약속 장소가 있으면(다시 들어옴) 그 둘레 구간만, 없으면 현재 위치만 — 구간은 픽업 위치 둘레만 본다
+      val place = draft.place.value
+      here.value = place?.location ?: runCatching { navigator.currentLocation() }.getOrNull() ?: return@launch
+      if (place != null) loadZones(place.location)
     }
+  }
+
+  private var zonesJob: Job? = null
+
+  private suspend fun loadZones(at: LatLng) {
+    zones.value = runCatching { PickupZones.around(at, restrictions.zonesNear(at, PickupZones.RADIUS_METERS)) }.getOrDefault(emptyList())
   }
 
   fun select(place: Place) {
     draft.place.value = place
     draft.pinStart.value = place.location
     draft.check.value = null
-    viewModelScope.launch { zones.value = runCatching { restrictions.zonesNear(place.location, 400) }.getOrDefault(emptyList()) }
+    zones.value = emptyList() // 앞서 고른 장소 둘레 구간은 바로 지운다
+    zonesJob?.cancel() // 늦게 끝난 앞 장소 구간이 덮지 않게
+    zonesJob = viewModelScope.launch { loadZones(place.location) }
   }
 }
 

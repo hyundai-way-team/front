@@ -208,6 +208,7 @@ private fun RoutePreviewMap(path: List<LatLng>, pickup: LatLng, modifier: Modifi
       lines = listOf(MapLine(path, WayColors.Blue, 7f)),
       pins = listOfNotNull(path.firstOrNull()?.takeIf { path.size > 1 }?.let { MapPin(it, PinKind.CAR, "내 차 · 출발 지점") }, MapPin(pickup, PinKind.PICKUP, "픽업 위치")),
       caption = "지도 · 픽업 위치까지 경로 미리보기",
+      interactive = true,
     )
   }
 }

@@ -2,6 +2,7 @@ package com.kscho.way.ui.map
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.SystemClock
 import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Paint
 import android.graphics.Path as AndroidPath
@@ -25,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -55,6 +57,7 @@ import com.kscho.way.theme.WayColors
 import kotlin.math.cos
 import kotlin.math.ln
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -129,6 +132,11 @@ fun WayMap(
   onVisibleAreaSettled: ((LatLng, Int) -> Unit)? = null,
   /** 지도 위 카드가 가리는 여백 — [center] 를 이 여백을 뺀 곳의 가운데에 둔다(D-06 왼쪽 상태 카드). */
   cameraPadding: PaddingValues = PaddingValues(),
+  /**
+   * 따라가는 지도([followCamera] · [interactive])를 손으로 움직이면 이만큼 손을 떼고 있을 때까지 따라가기를 멈춘다(주행 화면).
+   * null 이면 멈추지 않는다 — [center] 가 바뀌면 바로 그리로 간다(장소 검색에서 다른 장소를 고를 때 등).
+   */
+  resumeFollowAfterMillis: Long? = null,
 ) {
   val context = LocalContext.current
   val composeDensity = LocalDensity.current.density
@@ -165,12 +173,50 @@ fun WayMap(
     onDispose {}
   }
 
-  LaunchedEffect(map, interactive) { map?.uiSettings?.setAllGesturesEnabled(interactive) }
+  LaunchedEffect(map, interactive) {
+    map?.uiSettings?.apply {
+      setAllGesturesEnabled(interactive) // 끌어서 이동 · 두 손가락 확대 · 두 번 눌러 확대
+      // 위에서 모두 켜면 회전·기울이기도 켜진다 — 차 화면 지도는 늘 북쪽 위, 평면
+      isRotateGesturesEnabled = false
+      isTiltGesturesEnabled = false
+    }
+  }
 
-  // 카메라: 처음엔 바로, 이후엔 따라가기면 부드럽게
+  // 손으로 지도를 만진 때(경과 시간, 0 = 안 만짐) — [resumeFollowAfterMillis] 동안 따라가기를 멈춘다
+  var touchedAt by remember { mutableLongStateOf(0L) }
+  DisposableEffect(map, resumeFollowAfterMillis) {
+    val m = map
+    if (m == null || resumeFollowAfterMillis == null) return@DisposableEffect onDispose {}
+    var gesture = false
+    val started =
+      MapLibreMap.OnCameraMoveStartedListener { reason ->
+        if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+          gesture = true
+          touchedAt = SystemClock.elapsedRealtime()
+        }
+      }
+    // 오래 끌어도 손을 뗀 때부터 센다
+    val idle =
+      MapLibreMap.OnCameraIdleListener {
+        if (gesture) touchedAt = SystemClock.elapsedRealtime()
+        gesture = false
+      }
+    m.addOnCameraMoveStartedListener(started)
+    m.addOnCameraIdleListener(idle)
+    onDispose {
+      m.removeOnCameraMoveStartedListener(started)
+      m.removeOnCameraIdleListener(idle)
+    }
+  }
+
+  // 카메라: 처음엔 바로, 이후엔 따라가기면 부드럽게(손으로 만졌으면 잠시 뒤에)
   val zoom = zoomFor(metersPerDp, center.latitude, composeDensity, context.resources.displayMetrics.density)
-  LaunchedEffect(map, center, zoom, paddingPx) {
+  LaunchedEffect(map, center, zoom, paddingPx, touchedAt) {
     val m = map ?: return@LaunchedEffect
+    if (cameraPlaced && followCamera && touchedAt != 0L && resumeFollowAfterMillis != null) {
+      val wait = touchedAt + resumeFollowAfterMillis - SystemClock.elapsedRealtime()
+      if (wait > 0) delay(wait) // 그새 또 만지면(touchedAt 바뀜) 처음부터 다시 기다린다
+    }
     // 여백은 늘 함께 넘긴다 — 여백을 쓰다 안 쓰게 될 때(D-06 → D-08) 지난 여백이 남지 않게
     val update =
       CameraUpdateFactory.newCameraPosition(

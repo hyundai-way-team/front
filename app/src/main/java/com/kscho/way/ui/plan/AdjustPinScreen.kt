@@ -39,6 +39,7 @@ import com.kscho.way.R
 import com.kscho.way.domain.model.Geo
 import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.MapArea
+import com.kscho.way.domain.model.PickupZones
 import com.kscho.way.domain.model.Place
 import com.kscho.way.domain.model.StopRestriction
 import com.kscho.way.domain.model.RestrictedZone
@@ -73,8 +74,11 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -93,21 +97,23 @@ class AdjustPinViewModel(private val check: CheckPickupPoint, private val restri
   val origin: LatLng = draft.pinStart.value ?: place?.location ?: draft.check.value?.point?.location ?: LatLng(37.5555, 126.939)
   private val _state = MutableStateFlow(AdjustPinUiState(pin = draft.check.value?.point?.location ?: origin))
   val state = _state.asStateFlow()
-  val zones = MutableStateFlow<List<RestrictedZone>>(emptyList())
-  /** 보이는 곳의 정차 금지 구간을 받는 중(지정 금지구역은 서버가 끝점을 실시간으로 찾아 몇 초 걸릴 수 있다). */
+  /** 받아 둔 정차 금지 구간(핀 둘레보다 넉넉히) — 지도엔 지금 핀 둘레만 그린다([zones]). */
+  private val loadedZones = MutableStateFlow<List<RestrictedZone>>(emptyList())
+  /** 지도에 그릴 구간 = 지금 핀(픽업 위치) 둘레만(PickupZones). 화면 곳곳의 구간은 그리지 않는다. */
+  val zones: StateFlow<List<RestrictedZone>> =
+    combine(loadedZones, _state.map { it.pin }.distinctUntilChanged()) { all, pin -> PickupZones.around(pin, all) }
+      .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+  /** 핀 둘레 정차 금지 구간을 받는 중(지정 금지구역은 서버가 끝점을 실시간으로 찾아 몇 초 걸릴 수 있다). */
   val zonesLoading = MutableStateFlow(false)
-  /** 지도에 그린 구간을 받아 둔 곳 — 핀을 옮겨 화면이 이 밖으로 나가면 보이는 곳을 다시 받는다. */
+  /** 구간을 받아 둔 곳 — 핀을 옮겨 핀 둘레가 이 밖으로 나가면 다시 받는다. */
   private var loadedArea: MapArea? = null
-  private val visibleArea = MutableStateFlow<Pair<LatLng, Int>?>(null)
 
   init {
-    // 처음 자리(둘레 500 m)도 같은 줄로 받는다 — 따로 받으면 늦게 끝난 쪽이 지금 화면 구간을 덮는다
-    visibleArea.value = origin to 333
     viewModelScope.launch {
-      // 받는 중인 요청은 끊지 않는다(지도가 연달아 멈춰도) — 그새 쌓인 낡은 자리만 건너뛴다
-      visibleArea.filterNotNull().conflate().collect { (center, radius) ->
-        if (loadedArea?.covers(center, radius) == true) return@collect
-        load(MapArea.around(center, radius))
+      // 받는 중인 요청은 끊지 않는다(핀을 연달아 옮겨도) — 그새 쌓인 낡은 자리만 건너뛴다
+      _state.map { it.pin }.distinctUntilChanged().conflate().collect { pin ->
+        if (!PickupZones.needsReload(loadedArea, pin)) return@collect
+        load(PickupZones.areaFor(pin))
       }
     }
     viewModelScope.launch {
@@ -134,16 +140,11 @@ class AdjustPinViewModel(private val check: CheckPickupPoint, private val restri
     zonesLoading.value = true
     runCatching { restrictions.zonesNear(area.center, area.radiusMeters) }
       .onSuccess {
-        zones.value = it
+        loadedZones.value = it
         loadedArea = area
       }
       .onFailure { Log.w("WayZones", "구간을 못 받았어요", it) }
     zonesLoading.value = false
-  }
-
-  /** 지도가 멈춘 곳과 보이는 반지름 — 받아 둔 곳 밖이면 보이는 곳의 정차 금지 구간을 다시 받는다. */
-  fun onVisibleArea(center: LatLng, radiusMeters: Int) {
-    visibleArea.value = center to radiusMeters
   }
 
   /** 지도를 움직여 멈춘 곳(= 화면 가운데 핀). */
@@ -236,7 +237,6 @@ fun AdjustPinScreen(onBack: () -> Unit, onSearchAgain: () -> Unit, onConfirmed: 
           else MapPin(state.pin, PinKind.PICKUP, "픽업 위치"),
         onCenterSettled = vm::setPin,
         showZoomButtons = true,
-        onVisibleAreaSettled = vm::onVisibleArea,
       )
       val hint =
         when {

@@ -57,6 +57,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kscho.way.R
 import com.kscho.way.domain.model.BoardingSource
 import com.kscho.way.domain.model.Geo
+import com.kscho.way.domain.model.PickupZones
 import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.RestrictedZone
 import com.kscho.way.domain.model.TurnInstruction
@@ -96,13 +97,10 @@ class DriveViewModel(val coordinator: PickupCoordinator, boardingSensor: Boardin
     coordinator.state.value?.let { s ->
       // 정차 금지 구간은 픽업 위치 둘레만 — 오는 길 곳곳의 구간은 운전자에게 필요 없다
       val pickup = s.plan.pickupPoint.location
-      viewModelScope.launch { zones.value = runCatching { restrictions.zonesNear(pickup, PICKUP_ZONE_RADIUS_METERS) }.getOrDefault(emptyList()) }
+      viewModelScope.launch {
+        zones.value = runCatching { PickupZones.around(pickup, restrictions.zonesNear(pickup, PickupZones.RADIUS_METERS)) }.getOrDefault(emptyList())
+      }
     }
-  }
-
-  private companion object {
-    /** 정차 화면(D-08, 1dp = 0.3 m)에서 보이는 가장 먼 모서리쯤. */
-    const val PICKUP_ZONE_RADIUS_METERS = 300
   }
 
   fun confirmBoarded() = coordinator.confirmBoarded(BoardingSource.MANUAL)
@@ -183,6 +181,9 @@ fun DriveScreen(onClosed: () -> Unit) {
           },
         modifier = Modifier.fillMaxSize(),
         cameraPadding = if (driving) PaddingValues(start = covered) else PaddingValues(),
+        // 손으로 옮기거나 확대해 볼 수 있고, 10초 손을 떼면 다시 차(정차 뒤엔 픽업 위치)를 따라간다
+        interactive = true,
+        resumeFollowAfterMillis = 10_000L,
         // 탄 뒤엔 정차 금지 구간·픽업 핀 없이 지금 차 자리만(D-10)
         zones = if (s.isBoarded) emptyList() else zones,
         lines =
