@@ -73,6 +73,7 @@ fun main() {
       caCert = tls?.caCert,
       devRoutes = devRoutes,
       walkRoute = OsmWalkRoutes()::route,
+      carRoute = OsmWalkRoutes(OsmWalkRoutes.CAR_BASE_URL)::route,
       designated = designated,
     )
   println(
@@ -130,6 +131,8 @@ fun createDeps(
   devRoutes: Boolean = true,
   /** 동승자 → 픽업 위치 걷는 길(walk.OsmWalkRoutes — 무료 공개 보행 경로 서버) */
   walkRoute: (suspend (LatLngDto, LatLngDto) -> WalkAnswer)? = null,
+  /** 차 → 픽업 위치 차 길(같은 공개 OSRM 의 차 프로필) — 동승자 웹 파란 선 */
+  carRoute: (suspend (LatLngDto, LatLngDto) -> WalkAnswer)? = null,
   /** 지정 주정차 금지구역(카카오 키가 있을 때) */
   designated: DesignatedZones? = null,
   /** 지정 금지구역 계산 IP 별 제한 */
@@ -141,7 +144,7 @@ fun createDeps(
       relay?.send(it.text)
       opener?.onText(it)
     })
-  val hub = PickupHub(clock, outbox, publicUrl, walkRoute = walkRoute, scope = scope)
+  val hub = PickupHub(clock, outbox, publicUrl, walkRoute = walkRoute, carRoute = carRoute, scope = scope)
   return ServerDeps(hub, places, outbox, mapDir, webDir, caCert, designated = designated, designatedGate = designatedGate, devRoutes = devRoutes)
 }
 

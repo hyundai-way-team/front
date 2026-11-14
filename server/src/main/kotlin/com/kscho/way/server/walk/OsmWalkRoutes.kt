@@ -63,6 +63,8 @@ class OsmWalkRoutes(
 
   companion object {
     const val DEFAULT_BASE_URL = "https://routing.openstreetmap.de/routed-foot"
+    /** 같은 공개 OSRM 의 차 프로필 — 동승자 웹에 차가 오는 길(파란 선)을 그린다. 차 좌표 두 점만 보낸다. */
+    const val CAR_BASE_URL = "https://routing.openstreetmap.de/routed-car"
     private const val USER_AGENT = "Way-pickup-demo/1.0 (hyundai-way-team)"
     private val json = Json { ignoreUnknownKeys = true }
 

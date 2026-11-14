@@ -189,6 +189,104 @@ class PickupHubTest {
     assertEquals(100, hub.view(token).walk!!.meters)
   }
 
+  /** 차 길도 뒤에서 묻는다 — 시험에선 바로 돌게(Unconfined). */
+  private fun carRouted(carRoute: suspend (LatLngDto, LatLngDto) -> WalkAnswer) =
+    PickupHub(
+      clock = { now },
+      texts = outbox,
+      linkBase = "http://x",
+      newId = { "id${nextId++}" },
+      carRoute = carRoute,
+      scope = CoroutineScope(Dispatchers.Unconfined),
+    )
+
+  private fun report(hub: PickupHub, pickupId: String, at: LatLngDto) =
+    hub.reportDriver(pickupId, DriverStatusRequest(at, 600, 1500, epoch("2026-11-09T09:40:00")))
+
+  // 차가 남쪽에서 와 한 번 살짝 꺾여(동쪽 약 44 m) 픽업 위치(37.5567, 126.942)에 닿는 길
+  private val carStart = LatLngDto(37.5500, 126.942)
+  private val carMid = LatLngDto(37.5533, 126.9425)
+
+  @Test
+  fun driverReport_getsACarRoute_trimmedToTheCar_forTheWeb() {
+    // 동승자 웹도 차가 오는 길을 파란 선으로 — 차가 지나온 부분은 잘라서 보낸다
+    val asked = mutableListOf<Pair<LatLngDto, LatLngDto>>()
+    val hub = carRouted { from, to ->
+      asked += from to to
+      WalkAnswer.Found(WalkRouteDto(listOf(from, carMid, to), meters = 750, seconds = 120))
+    }
+    val response = hub.create(request)
+    val token = tokenOf(response.shareUrl)
+    report(hub, response.pickupId, carStart)
+
+    assertEquals(listOf(carStart to pickupPoint), asked)
+    assertEquals(listOf(carStart, carMid, pickupPoint), hub.view(token).carRoute)
+
+    // 길 위를 달리면 다시 묻지 않고, 지나온 점은 빠진다
+    val onRoute = LatLngDto(37.5540, 126.942)
+    report(hub, response.pickupId, onRoute)
+    assertEquals(1, asked.size)
+    assertEquals(listOf(onRoute, pickupPoint), hub.view(token).carRoute)
+  }
+
+  @Test
+  fun offRoute_hidesTheStaleRoute_andAsksAgain_butNotTooOften() {
+    var asked = 0
+    val hub = carRouted { from, to ->
+      asked++
+      WalkAnswer.Found(WalkRouteDto(listOf(from, to), 750, 120))
+    }
+    val response = hub.create(request)
+    val token = tokenOf(response.shareUrl)
+    report(hub, response.pickupId, carStart)
+    now += 5_000
+    val detour = LatLngDto(37.5520, 126.9435) // 길에서 약 130 m 옆
+    report(hub, response.pickupId, detour)
+    assertEquals(1, asked) // 방금 물었다(간격 안)
+    // 벗어난 차에서 옛 길로 곧은 선을 긋지 않는다 — 새 길을 받을 때까지 감춘다
+    assertNull(hub.view(token).carRoute)
+    now += PickupHub.CAR_ROUTE_MIN_INTERVAL_MILLIS
+    report(hub, response.pickupId, detour)
+    assertEquals(2, asked)
+    assertEquals(listOf(detour, pickupPoint), hub.view(token).carRoute)
+  }
+
+  @Test
+  fun carRoute_serviceBusy_retriesLater_andNoRouteWaitsUntilTheCarMovesFar() {
+    var answer: WalkAnswer = WalkAnswer.Unavailable
+    var asked = 0
+    val hub = carRouted { _, _ ->
+      asked++
+      answer
+    }
+    val response = hub.create(request)
+    val token = tokenOf(response.shareUrl)
+    report(hub, response.pickupId, carStart)
+    report(hub, response.pickupId, carStart)
+    assertEquals(1, asked)
+    assertNull(hub.view(token).carRoute)
+    now += PickupHub.CAR_ROUTE_MIN_INTERVAL_MILLIS
+    answer = WalkAnswer.NoRoute
+    report(hub, response.pickupId, carStart)
+    assertEquals(2, asked)
+    // 길 없음은 기억 — 조금 움직여선 안 묻고, 멀리 움직이면 다시
+    now += PickupHub.CAR_ROUTE_MIN_INTERVAL_MILLIS
+    report(hub, response.pickupId, LatLngDto(37.5505, 126.942))
+    assertEquals(2, asked)
+    report(hub, response.pickupId, carMid)
+    assertEquals(3, asked)
+  }
+
+  @Test
+  fun carArrived_dropsTheCarRoute() {
+    val hub = carRouted { from, to -> WalkAnswer.Found(WalkRouteDto(listOf(from, to), 750, 120)) }
+    val response = hub.create(request)
+    val token = tokenOf(response.shareUrl)
+    report(hub, response.pickupId, carStart)
+    hub.arrival(response.pickupId, ArrivalRequest(now, 60))
+    assertNull(hub.view(token).carRoute)
+  }
+
   @Test
   fun stoppingSharing_dropsTheRoute() {
     val hub = routed { from, to -> WalkAnswer.Found(WalkRouteDto(listOf(from, to), 50, 45)) }

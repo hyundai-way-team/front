@@ -1,6 +1,7 @@
 // WAY 동승자 웹 — Pleos 문자의 참여 링크로 연다. 앱 설치·로그인 없이 이 페이지에서 끝난다(기획 3-4).
 // 흐름: P-01 링크 첫 화면 → P-02 위치 공유 허용 → (차 상태에 따라) P-03 대기 · P-04 곧 도착 · P-05 대기 타이머 → P-06 종료
-// 위치를 공유 중이면 P-04 의 '경로 안내'로 P-04a(내 위치 → 픽업 위치 걷는 길)를 연다. 길은 서버가 계산해 view.walk 로 보낸다.
+// 위치를 공유 중이면 P-03 · P-04 · P-05 의 아래 시트를 끌어 올려 '경로 안내'로 P-04a(내 위치 → 픽업 위치 걷는 길)를 연다.
+// 길은 서버가 계산해 view.walk 로 보낸다.
 // P-03 · P-04 · P-04a · P-05 는 지도가 화면을 채우고 카드·시트가 위에 뜬다(와이어프레임 v2 개정). 지도는 손으로 움직일 수 있다(map.js).
 import { createMap, distanceMeters, offsetMeters } from "/web/map.js";
 import { timerTone } from "/web/timer-color.js";
@@ -15,6 +16,7 @@ let view = null; // 서버가 보낸 최신 화면 상태
 let clockOffset = 0; // 서버 시계 - 내 시계(대기 타이머를 차 화면과 맞춘다)
 let step = "intro"; // intro → consent → live
 let routeOpen = history.state?.wayRoute === true; // P-04a 경로 안내를 열었는지(뒤로 가기로 닫힌다)
+let routeFrom = history.state?.wayRouteFrom ?? null; // 어디서 열었는지 — "ARRIVED"(P-05) · "BEFORE"(P-03 · P-04)
 let current = null; // 지금 화면 { key, el, update, destroy }
 let failure = null; // 링크를 못 열었을 때 문구
 
@@ -199,23 +201,28 @@ const show = (node, on) => {
   node.hidden = !on;
 };
 
-/** 지도에 넘길 점들. route: 걷는 길을 그릴지 · car: 차를 보일지 */
+/** 지도에 넘길 점들. route: 걷는 길을 그릴지 · car: 차(와 차가 오는 파란 길)를 보일지 */
 function mapView(v, { route = false, car = true } = {}) {
   return {
     pickup: v.pickup.location,
     car: car ? (v.car?.location ?? null) : null,
     me: v.me ?? null,
     route: route ? (v.walk?.path ?? null) : null,
+    // 서버가 차가 오는 중(P-01·P-03·P-04)에만 보낸다 — 정차(P-05) 뒤엔 없음
+    carRoute: car ? (v.carRoute ?? null) : null,
   };
 }
 
-// 위치를 공유 중이고, 지금 자리에서 길을 못 찾은 게 아닐 때(서버 walkFailed — 공개 경로 서버가 못 찾음·3 km 넘게 멂)
-const canRoute = (v) => v.sharing === "SHARING" && !v.walkFailed && (v.phase === "EN_ROUTE" || v.phase === "ARRIVING_SOON");
+// 위치를 공유 중이고, 지금 자리에서 길을 못 찾은 게 아닐 때(서버 walkFailed — 공개 경로 서버가 못 찾음·3 km 넘게 멂).
+// 오는 중(P-03) · 곧 도착(P-04) · 정차(P-05) 모두 — 시트를 펼치면 '경로 안내'가 보인다
+const canRoute = (v) => v.sharing === "SHARING" && !v.walkFailed && (v.phase === "EN_ROUTE" || v.phase === "ARRIVING_SOON" || v.phase === "ARRIVED");
 
-// P-04a 경로 안내 — 휴대폰 '뒤로'로도 닫히게 기록을 하나 쌓는다
+// P-04a 경로 안내 — 휴대폰 '뒤로'로도 닫히게 기록을 하나 쌓는다. 어디서 열었는지도 남긴다:
+// 차가 오는 중에 연 것은 차가 도착하면 닫고 P-05(1분 타이머)로, P-05 에서 스스로 연 것은 열린 채로 둔다
 function openRoute() {
   routeOpen = true;
-  history.pushState({ wayRoute: true }, "");
+  routeFrom = view?.phase === "ARRIVED" ? "ARRIVED" : "BEFORE";
+  history.pushState({ wayRoute: true, wayRouteFrom: routeFrom }, "");
   render();
 }
 
@@ -230,6 +237,7 @@ function closeRoute() {
 
 window.addEventListener("popstate", () => {
   routeOpen = history.state?.wayRoute === true;
+  routeFrom = history.state?.wayRouteFrom ?? null;
   render();
 });
 
@@ -263,9 +271,9 @@ function pickupPlace() {
   };
 }
 
-/** '경로 안내' 버튼(P-04 시트) — 위치를 공유 중일 때만(내 위치가 있어야 길을 낸다) */
+/** '경로 안내' 버튼 — 펼친 시트 안(P-03 · P-04 · P-05). 위치를 공유 중일 때만 시트가 펼쳐진다(내 위치가 있어야 길을 낸다) */
 function routeButton() {
-  return h("button", { class: "btn outline-primary", type: "button", onclick: openRoute, hidden: "" }, icon("arrow", 24), "경로 안내");
+  return h("button", { class: "btn outline-primary", type: "button", onclick: openRoute }, icon("arrow", 24), "경로 안내");
 }
 
 /** '이 경로를 따라 이동해 주세요' 설명 두 줄 */
@@ -300,26 +308,142 @@ function carRows() {
   };
 }
 
+let sheetSeq = 0;
+
 /**
- * 지도가 화면을 채우고 위엔 카드, 아래엔 시트가 뜨는 틀(P-03 · P-04 · P-04a · P-05).
+ * 끌어 올리고 내리는 아래 시트. 접힘 = 손잡이 + body, 펼침 = 그 아래 more(경로 안내 버튼)까지.
+ * - 손잡이 · 시트 어디든 손가락/마우스로 끌면 시트가 따라오고, 놓으면 가까운 쪽으로 붙는다(빠르게 튕기면 그 방향).
+ * - 손잡이를 누르거나(키보드 Enter · Space 포함) 하면 접기 · 펼치기.
+ * - 펼칠 게 없으면(setExpandable(false) — 위치 미공유 · 길 없음 · P-04a) 끌어도 살짝 늘었다 제자리로 돌아온다.
+ * - 시트 위 손가락 동작은 시트가 먹는다(touch-action: none) — 지도 끌기와 엉키지 않는다.
+ * 처음엔 접힌 채로 — 화면이 바뀌면 시트도 새로 만들어 접힌 채 시작한다.
+ */
+function bottomSheet({ body, more = [] }) {
+  const id = `sheet-more-${++sheetSeq}`;
+  const handle = h("button", { class: "sheet-handle", type: "button", "aria-controls": id, "aria-expanded": "false", "aria-label": "경로 안내 펼치기" });
+  const moreIn = h("div", { class: "sheet-more-in" }, ...more);
+  const moreEl = h("div", { class: "sheet-more", id, "aria-hidden": "true" }, moreIn);
+  moreEl.inert = true;
+  // 펼칠 게 생기기 전(setExpandable(true))엔 손잡이를 키보드 · 화면 읽기에서 뺀다 — 끌면 살짝 늘었다 돌아올 뿐
+  handle.tabIndex = -1;
+  handle.setAttribute("aria-hidden", "true");
+  const el = h("div", { class: "sheet" }, handle, h("div", { class: "sheet-body" }, ...body), moreEl);
+
+  let open = false;
+  let expandable = false;
+  let drag = null;
+  let draggedAt = 0; // 끌기가 끝난 시각 — 바로 뒤 따라오는 click 은 토글로 치지 않는다
+  let unclip = null; // 펼쳐서 붙은 뒤엔 버튼 초점 테두리가 잘리지 않게 넘침을 연다
+
+  const fullHeight = () => (expandable ? moreIn.offsetHeight : 0);
+  const rubber = (px) => 24 * (1 - Math.exp(-px / 80)); // 끝을 넘어 끌면 점점 덜 따라온다(최대 24)
+
+  function paint(height, down = 0) {
+    const full = fullHeight();
+    clearTimeout(unclip);
+    moreEl.style.overflow = "";
+    moreEl.style.height = `${height}px`;
+    moreEl.style.opacity = full ? String(Math.min(1, height / full)) : "0";
+    el.style.transform = down ? `translateY(${down}px)` : "";
+  }
+
+  function settle(toOpen) {
+    open = toOpen && expandable;
+    el.classList.add("settling");
+    paint(open ? fullHeight() : 0);
+    if (open) unclip = setTimeout(() => (moreEl.style.overflow = "visible"), 240);
+    moreEl.inert = !open;
+    moreEl.setAttribute("aria-hidden", String(!open));
+    handle.setAttribute("aria-expanded", String(open));
+    handle.setAttribute("aria-label", open ? "경로 안내 접기" : "경로 안내 펼치기");
+  }
+
+  handle.addEventListener("click", () => {
+    if (!expandable || performance.now() - draggedAt < 300) return;
+    settle(!open);
+  });
+
+  el.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || drag) return;
+    drag = { id: e.pointerId, y0: e.clientY, h0: moreEl.offsetHeight, moved: false, pts: [[e.timeStamp, e.clientY]] };
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dy = e.clientY - drag.y0;
+    if (!drag.moved) {
+      if (Math.abs(dy) < 6) return; // 그냥 누른 것(버튼 누르기)과 끌기를 가른다
+      drag.moved = true;
+      el.setPointerCapture(e.pointerId);
+      el.classList.remove("settling");
+      el.classList.add("dragging");
+      getSelection()?.removeAllRanges();
+    }
+    drag.pts.push([e.timeStamp, e.clientY]);
+    if (drag.pts.length > 6) drag.pts.shift();
+    const full = fullHeight();
+    const want = drag.h0 - dy;
+    if (want > full) paint(full + rubber(want - full));
+    else if (want < 0) paint(0, rubber(-want));
+    else paint(want);
+  });
+  function release(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag;
+    drag = null;
+    if (!d.moved) return;
+    draggedAt = performance.now();
+    el.classList.remove("dragging");
+    // 마지막 ~100ms 의 빠르기(px/ms, 위가 -)
+    const last = d.pts[d.pts.length - 1];
+    const from = d.pts.find((p) => last[0] - p[0] <= 100) ?? d.pts[0];
+    const v = last[0] > from[0] ? (last[1] - from[1]) / (last[0] - from[0]) : 0;
+    if (v < -0.3) settle(true);
+    else if (v > 0.3) settle(false);
+    else settle(moreEl.offsetHeight > fullHeight() / 2);
+  }
+  el.addEventListener("pointerup", release);
+  el.addEventListener("pointercancel", release);
+
+  return {
+    el,
+    moreEl,
+    /** 펼칠 게 있는지(경로 안내를 열 수 있는지). 없어지면 펼친 시트도 접는다 */
+    setExpandable(on) {
+      if (on === expandable) return;
+      expandable = on;
+      handle.tabIndex = on ? 0 : -1;
+      handle.setAttribute("aria-hidden", String(!on));
+      if (!on && open) settle(false);
+    },
+    toggle: (toOpen = !open) => settle(toOpen),
+    get open() {
+      return open;
+    },
+  };
+}
+
+/**
+ * 지도가 화면을 채우고 위엔 카드, 아래엔 끌 수 있는 시트가 뜨는 틀(P-03 · P-04 · P-04a · P-05).
  * covered() 가 지도 맞춤 여백을 돌려준다 — 위 카드(topCover)와 아래 시트가 가린 만큼.
+ * 아래는 접힌 시트 높이 기준 — 펼치고 접을 때마다 지도가 튀지 않게.
  */
 function mapLayout({ top, sheet, topCover = () => top }) {
   const mapBox = h("div", { class: "map full" });
-  const sheetEl = h("div", { class: "sheet" }, h("div", { class: "sheet-handle", "aria-hidden": "true" }), ...sheet);
-  const area = h("div", { class: "map-area" }, mapBox, top, sheetEl);
-  // 저작권 표시(ⓘ)가 시트 밑에 숨지 않게 시트 높이만큼 올린다
-  const sync = () => area.style.setProperty("--sheet-h", `${sheetEl.offsetHeight}px`);
+  const bottom = bottomSheet(sheet);
+  const area = h("div", { class: "map-area" }, mapBox, top, bottom.el);
+  // 저작권 표시(ⓘ)가 시트 밑에 숨지 않게 시트 높이만큼 올린다(펼치면 같이 올라간다)
+  const sync = () => area.style.setProperty("--sheet-h", `${bottom.el.offsetHeight}px`);
   const resize = new ResizeObserver(sync);
-  resize.observe(sheetEl);
+  resize.observe(bottom.el);
   function covered() {
     const box = area.getBoundingClientRect();
     const cover = topCover();
     const topEdge = cover && !cover.hidden ? cover.getBoundingClientRect().bottom - box.top : 0;
+    const folded = bottom.el.offsetHeight - bottom.moreEl.offsetHeight;
     // 위는 카드 아래로 픽업 핀(끝이 점 자리, 몸통은 위로 ~36) 높이만큼 44, 아래는 점 밑 이름표 자리까지 44
-    return { top: topEdge + 44, bottom: box.bottom - sheetEl.getBoundingClientRect().top + 44, left: 40, right: 70 };
+    return { top: topEdge + 44, bottom: folded + 44, left: 40, right: 70 };
   }
-  return { area, mapBox, covered, destroy: () => resize.disconnect() };
+  return { area, mapBox, sheet: bottom, covered, destroy: () => resize.disconnect() };
 }
 
 // ── 화면
@@ -448,14 +572,14 @@ const screens = {
     };
   },
 
-  // P-03 대기 — 지도 위에 도착 예정 카드, 바뀌었으면 그 아래 검은 알림. 아래 시트에 차량 · 픽업 위치
+  // P-03 대기 — 지도 위에 도착 예정 카드, 바뀌었으면 그 아래 검은 알림. 아래 시트에 차량 · 픽업 위치(펼치면 '경로 안내')
   wait() {
     const banner = h("div", { class: "banner-changed", role: "status", hidden: "" }, icon("info-white-20", 20), h("span", {}, "도착 시간이 변경되었어요"));
     const who = h("p", { class: "who" });
     const card = etaCard({ head: who });
     const rows = carRows();
     const top = h("div", { class: "float-top" }, card.el, banner);
-    const layout = mapLayout({ top, sheet: [rows.el, h("p", { class: "note" }, "도착 5분 전에 픽업 안내 문자를 보내드려요.")] });
+    const layout = mapLayout({ top, sheet: { body: [rows.el, h("p", { class: "note" }, "도착 5분 전에 픽업 안내 문자를 보내드려요.")], more: [routeButton()] } });
     let map = null;
 
     const el = h("section", { class: "screen map-screen" }, layout.area);
@@ -470,6 +594,7 @@ const screens = {
         const sec = secondsLeft(v);
         set(card.left, sec < 60 ? "곧 도착해요" : `${minutesText(sec)} 남았어요`);
         rows.update(v);
+        layout.sheet.setExpandable(canRoute(v));
         map.update(mapView(v));
       },
       destroy() {
@@ -479,14 +604,13 @@ const screens = {
     };
   },
 
-  // P-04 곧 도착해요 — 지도 위에 '곧 도착해요' 카드, 아래 시트에 차량 · 픽업 위치와(위치 공유 중이면) '경로 안내'
+  // P-04 곧 도착해요 — 지도 위에 '곧 도착해요' 카드, 아래 시트에 차량 · 픽업 위치(펼치면 '경로 안내')
   soon() {
     const card = etaCard({ head: h("div", { class: "eta-head" }, icon("dot", 24), h("span", {}, "곧 도착해요")), accent: true });
     const rows = carRows();
     rows.el.classList.add("inset");
-    const route = routeButton();
     const top = h("div", { class: "float-top" }, card.el);
-    const layout = mapLayout({ top, sheet: [rows.el, route] });
+    const layout = mapLayout({ top, sheet: { body: [rows.el], more: [routeButton()] } });
     let map = null;
 
     const el = h("section", { class: "screen map-screen" }, layout.area);
@@ -499,7 +623,7 @@ const screens = {
         const sec = secondsLeft(v);
         set(card.left, sec < 60 ? "곧 픽업 위치에 도착해요" : `${minutesText(sec)} 뒤 픽업 위치에 도착해요`);
         rows.update(v);
-        show(route, canRoute(v));
+        layout.sheet.setExpandable(canRoute(v));
         map.update(mapView(v));
       },
       destroy() {
@@ -531,7 +655,7 @@ const screens = {
     rows.el.classList.add("inset");
     const top = h("div", { class: "float-top under-bar" }, walkCard, guide);
     // 안내는 잠깐 떴다 사라지니 지도 맞춤은 걷는 길 카드까지만 피한다
-    const layout = mapLayout({ top, sheet: [rows.el], topCover: () => walkCard });
+    const layout = mapLayout({ top, sheet: { body: [rows.el] }, topCover: () => walkCard }); // 이미 경로 안내 화면 — 펼칠 것 없음
     let map = null;
     let guided = false; // 들어와서 첫 안내를 보였는지(길을 아직 찾는 중이면 길이 나올 때)
 
@@ -562,7 +686,7 @@ const screens = {
     };
   },
 
-  // P-05 정차 · 대기 타이머 — 지도 위에 타이머 카드(차 화면과 같은 1분, 서버 시계 기준), 아래 시트에 차량 · 픽업 위치.
+  // P-05 정차 · 대기 타이머 — 지도 위에 타이머 카드(차 화면과 같은 1분, 서버 시계 기준), 아래 시트에 차량 · 픽업 위치(펼치면 '경로 안내').
   // 카드 색은 남은 시간이 줄수록 파랑 → 빨강(timer-color.js). 내 위치 → 픽업 위치 걷는 길은 지도에 주황 선으로.
   timer() {
     const NS = "http://www.w3.org/2000/svg";
@@ -590,7 +714,7 @@ const screens = {
     );
     const rows = carRows();
     rows.el.classList.add("inset");
-    const layout = mapLayout({ top: h("div", { class: "float-top" }, card), sheet: [rows.el] });
+    const layout = mapLayout({ top: h("div", { class: "float-top" }, card), sheet: { body: [rows.el], more: [routeButton()] } });
     let map = null;
 
     const el = h("section", { class: "screen map-screen" }, layout.area);
@@ -620,6 +744,7 @@ const screens = {
       update(v) {
         map ??= createMap(layout.mapBox, { carLabel: `${v.driverCallName} 님 차`, padding: layout.covered });
         rows.update(v);
+        layout.sheet.setExpandable(canRoute(v));
         map.update(mapView(v, { route: true }));
         draw();
         tick ??= setInterval(draw, 200);
@@ -664,8 +789,9 @@ function screenKey() {
   if (!view) return "loading";
   if (isEnded()) return "done";
   if (step !== "live") return step;
+  // 오는 중에 연 P-04a 는 차가 도착하면 닫는다(1분 타이머가 먼저), P-05 에서 연 것은 그대로
+  if (routeOpen && canRoute(view) && (view.phase !== "ARRIVED" || routeFrom === "ARRIVED")) return "route";
   if (view.phase === "ARRIVED") return "timer";
-  if (routeOpen && canRoute(view)) return "route";
   return view.phase === "ARRIVING_SOON" ? "soon" : "wait";
 }
 
@@ -674,6 +800,7 @@ function render() {
   // P-04a 를 연 채 정차·종료·길 없음으로 화면이 바뀌면 쌓아 둔 기록도 걷는다 — 안 그러면 '뒤로'가 한 번 헛돈다
   if (current?.key === "route" && key !== "route" && history.state?.wayRoute) {
     routeOpen = false;
+    routeFrom = null;
     history.back();
   }
   if (current?.key !== key) {

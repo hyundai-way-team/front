@@ -15,6 +15,7 @@ import com.kscho.way.data.remote.WalkRouteDto
 import com.kscho.way.data.sms.PickupTexts
 import com.kscho.way.server.sms.TextLog
 import com.kscho.way.server.walk.OsmWalkRoutes
+import com.kscho.way.server.walk.RoutePaths
 import com.kscho.way.server.walk.WalkAnswer
 import java.security.SecureRandom
 import java.time.Instant
@@ -79,6 +80,13 @@ data class PickupState(
   val walkFailed: Boolean = false,
   /** 경로 서버가 바빴다 — 이 시각이 지나면 움직이지 않아도 다시 묻는다 */
   val walkRetryAt: Long? = null,
+  /** 차 → 픽업 위치 차 길(점을 줄인 것) — 웹엔 차가 지나온 부분을 잘라 보낸다 */
+  val carRoute: List<LatLngDto>? = null,
+  /** 차 길을 마지막으로 물은 자리·때(찾는 중·못 찾음 포함) */
+  val carRouteFrom: LatLngDto? = null,
+  val carRouteAskedAt: Long? = null,
+  /** 경로 서버가 바빴다 — 이 시각이 지나면 다시 묻는다 */
+  val carRouteRetryAt: Long? = null,
 )
 
 /**
@@ -101,6 +109,8 @@ class PickupHub(
   private val maxPickups: Int = 2_000,
   /** 동승자 위치 → 픽업 위치 걷는 길(walk.OsmWalkRoutes — 무료 공개 보행 경로 서버). 없으면 경로 없이 돈다 */
   private val walkRoute: (suspend (from: LatLngDto, to: LatLngDto) -> WalkAnswer)? = null,
+  /** 차 위치 → 픽업 위치 차 길(같은 공개 OSRM 의 차 프로필). 없으면 차 길 없이 돈다 */
+  private val carRoute: (suspend (from: LatLngDto, to: LatLngDto) -> WalkAnswer)? = null,
   /** 걷는 길을 뒤에서 물을 곳 — 위치 보고 요청을 붙잡지 않게 */
   private val scope: CoroutineScope? = null,
 ) {
@@ -143,7 +153,46 @@ class PickupHub(
   fun passengerStatus(pickupId: String): PassengerStatusDto = pickup(pickupId).value.passenger
 
   fun reportDriver(pickupId: String, request: DriverStatusRequest) {
-    pickup(pickupId).update { if (it.phase.ended) it else it.copy(driver = request, driverUpdatedAt = clock(), arrivalAt = request.arrivalAtEpochMillis) }
+    val state = pickup(pickupId)
+    state.update { if (it.phase.ended) it else it.copy(driver = request, driverUpdatedAt = clock(), arrivalAt = request.arrivalAtEpochMillis) }
+    request.location?.let { askCarRoute(state, it) }
+  }
+
+  /**
+   * 차가 오는 길을 뒤에서 묻는다(동승자 웹 파란 선 — Pleos 내비는 경로 모양을 주지 않는다). 처음 한 번, 그리고 차가 길에서
+   * [CAR_OFF_ROUTE_METERS] 넘게 벗어났을 때만 — 그것도 [CAR_ROUTE_MIN_INTERVAL_MILLIS] 에 한 번(무료 공개 경로 서버 사용 정책).
+   * 길이 없다는 답은 기억해 차가 [CAR_RESTEP_METERS] 넘게 움직여야 다시 묻는다.
+   */
+  private fun askCarRoute(state: MutableStateFlow<PickupState>, here: LatLngDto) {
+    val route = carRoute ?: return
+    val scope = scope ?: return
+    val now = state.value
+    if (now.phase != Phase.EN_ROUTE && now.phase != Phase.ARRIVING_SOON) return
+    val t = clock()
+    val retryDue = now.carRouteRetryAt?.let { t >= it } ?: false
+    val rested = now.carRouteAskedAt?.let { t - it >= CAR_ROUTE_MIN_INTERVAL_MILLIS } ?: true
+    val due =
+      when {
+        now.carRouteRetryAt != null -> retryDue
+        now.carRoute != null -> rested && RoutePaths.distanceToPath(here, now.carRoute) > CAR_OFF_ROUTE_METERS
+        else -> now.carRouteFrom == null || (rested && OsmWalkRoutes.distanceMeters(now.carRouteFrom, here) >= CAR_RESTEP_METERS)
+      }
+    if (!due) return
+    val pickup = now.request.pickupPoint
+    state.update { it.copy(carRouteFrom = here, carRouteAskedAt = t, carRouteRetryAt = null) }
+    scope.launch {
+      val answer = runCatching { route(here, pickup) }.getOrElse { WalkAnswer.Unavailable }
+      state.update {
+        // 그새 다른 자리에서 다시 물었거나 차가 섰으면 버린다
+        if (it.carRouteFrom != here || (it.phase != Phase.EN_ROUTE && it.phase != Phase.ARRIVING_SOON)) return@update it
+        when (answer) {
+          is WalkAnswer.Found -> it.copy(carRoute = RoutePaths.simplify(answer.route.path, CAR_ROUTE_TOLERANCE_METERS))
+          WalkAnswer.NoRoute -> it.copy(carRoute = null)
+          // 바쁨·오류는 답이 아니다 — 찾아 둔 길을 그대로 두고 잠시 뒤 다시 묻는다
+          WalkAnswer.Unavailable -> it.copy(carRouteRetryAt = clock() + CAR_ROUTE_MIN_INTERVAL_MILLIS)
+        }
+      }
+    }
   }
 
   fun notify(pickupId: String, request: NotificationRequest) {
@@ -279,6 +328,18 @@ class PickupHub(
 
   private fun WalkRouteDto.startingAt(here: LatLngDto) = copy(path = listOf(here) + path.drop(1))
 
+  /**
+   * 웹에 보낼 차 길 — 차가 오는 중일 때만, 차가 지나온 부분을 잘라서. 차가 찾아 둔 길에서 벗어나 있으면(다른 길로 듦)
+   * 옛 길로 곧은 선을 긋지 않게 새 길을 받을 때까지 감춘다.
+   */
+  private fun PickupState.carRouteView(): List<LatLngDto>? {
+    val path = carRoute ?: return null
+    if (phase != Phase.EN_ROUTE && phase != Phase.ARRIVING_SOON) return null
+    val car = driver?.location ?: return path
+    if (RoutePaths.distanceToPath(car, path) > CAR_OFF_ROUTE_METERS) return null
+    return RoutePaths.remainingFrom(path, car)
+  }
+
   private fun PickupState.toView(): PassengerViewDto {
     val r = request
     return PassengerViewDto(
@@ -299,6 +360,7 @@ class PickupHub(
       late = passenger.late,
       walk = passenger.walk,
       walkFailed = walkFailed,
+      carRoute = carRouteView(),
     )
   }
 
@@ -327,6 +389,15 @@ class PickupHub(
     const val WALK_MAX_METERS = 3_000.0
     /** 경로 서버가 바쁘면 이만큼 뒤 다시 묻는다. */
     const val WALK_RETRY_MILLIS = 20_000L
+
+    /** 차가 찾아 둔 길에서 이만큼 벗어나면 길을 다시 묻는다. */
+    const val CAR_OFF_ROUTE_METERS = 40.0
+    /** 차 길은 이 간격보다 자주 묻지 않는다(차 위치는 3초마다 온다). 벗어난 동안은 선이 감춰지니 너무 길지 않게. */
+    const val CAR_ROUTE_MIN_INTERVAL_MILLIS = 10_000L
+    /** 길이 없다는 답을 받은 뒤엔 차가 이만큼 움직여야 다시 묻는다. */
+    const val CAR_RESTEP_METERS = 200.0
+    /** 웹으로 자주 보내는 선이라 이보다 덜 휘는 점은 뺀다. */
+    const val CAR_ROUTE_TOLERANCE_METERS = 3.0
 
     /** 링크에 쓰는 추측하기 어려운 값(16바이트, URL 에 안전한 글자). */
     fun randomToken(): String {

@@ -44,6 +44,8 @@ data class PassengerViewDto(
   val walk: WalkRouteDto? = null,
   /** 지금 자리에선 걷는 길을 못 찾았다(공개 경로 서버가 못 찾음·3 km 넘게 멂) — '경로 안내'를 거두고 '찾고 있어요'를 띄우지 않는다 */
   val walkFailed: Boolean = false,
+  /** 차 → 픽업 위치 차 길(파란 선, 차가 지나온 부분은 잘라서). 차가 오는 중(EN_ROUTE·ARRIVING_SOON)이고 길을 찾았을 때만 */
+  val carRoute: List<LatLngDto>? = null,
 )
 
 @Serializable data class SharingRequest(val allow: Boolean)

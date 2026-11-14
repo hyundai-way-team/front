@@ -434,7 +434,7 @@ body:has(.screen.soft) {
   border-color: var(--primary-500);
 }
 
-/* Bottom sheet */
+/* Bottom sheet — 끌어 올리고 내린다(app.js bottomSheet). 접힘 = 손잡이 + 본문, 펼침 = 아래 '경로 안내'까지 */
 .sheet {
   position: absolute;
   z-index: 2;
@@ -447,14 +447,92 @@ body:has(.screen.soft) {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  /* 시트 위 손가락 동작은 시트가 먹는다(페이지 확대 · 지도 끌기와 엉키지 않게) */
+  touch-action: none;
 }
 
+.sheet.dragging {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* 손잡이(40×4) — 누르는 자리는 시트 위 가장자리까지 넓게 */
 .sheet-handle {
-  align-self: center;
+  position: relative;
+  align-self: stretch;
+  height: 4px;
+  display: flex;
+  justify-content: center;
+  cursor: grab;
+}
+
+.sheet-handle::before {
+  content: "";
+  position: absolute;
+  inset: -12px 0 -16px;
+}
+
+.sheet-handle::after {
+  content: "";
   width: 40px;
   height: 4px;
   border-radius: 2px;
   background: var(--grey-300);
+}
+
+/* 펼칠 게 없으면(위치 미공유 · 길 없음 · P-04a) 손잡이는 누를 수 없는 그림 */
+.sheet-handle[aria-hidden="true"] {
+  cursor: default;
+}
+
+.sheet.dragging,
+.sheet.dragging .sheet-handle {
+  cursor: grabbing;
+}
+
+.sheet-handle:focus-visible {
+  outline: none;
+}
+
+.sheet-handle:focus-visible::after {
+  outline: 3px solid var(--primary-200);
+  outline-offset: 3px;
+}
+
+.sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 펼치면 드러나는 자리 — 접히면 높이 0(시트의 gap 20 은 안쪽 위 여백으로 대신) */
+.sheet-more {
+  height: 0;
+  margin-top: -20px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.sheet-more-in {
+  padding-top: 20px;
+}
+
+/* 손을 떼면 가까운 쪽으로 붙는다 */
+.sheet.settling {
+  transition: transform 0.22s ease-out;
+}
+
+.sheet.settling .sheet-more {
+  transition:
+    height 0.22s ease-out,
+    opacity 0.22s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet.settling,
+  .sheet.settling .sheet-more {
+    transition: none;
+  }
 }
 
 .map-empty {
