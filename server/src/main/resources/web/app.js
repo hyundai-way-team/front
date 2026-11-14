@@ -18,6 +18,7 @@ let step = "intro"; // intro → consent → live
 let routeOpen = history.state?.wayRoute === true; // P-04a 경로 안내를 열었는지(뒤로 가기로 닫힌다)
 let routeFrom = history.state?.wayRouteFrom ?? null; // 어디서 열었는지 — "ARRIVED"(P-05) · "BEFORE"(P-03 · P-04)
 let current = null; // 지금 화면 { key, el, update, destroy }
+let seenEtaChange = null; // '도착 시간이 변경되었어요'를 이미 보인 변경(전→후) — 화면을 다시 만들어도 같은 변경은 다시 띄우지 않는다
 let failure = null; // 링크를 못 열었을 때 문구
 
 // ── 서버
@@ -572,14 +573,22 @@ const screens = {
     };
   },
 
-  // P-03 대기 — 지도 위에 도착 예정 카드, 바뀌었으면 그 아래 검은 알림. 아래 시트에 차량 · 픽업 위치(펼치면 '경로 안내')
+  // P-03 대기 — 지도 위에 도착 예정 카드, 바뀌었으면 그 아래 검은 알림(5초 보이고 사라짐). 아래 시트에 차량 · 픽업 위치(펼치면 '경로 안내')
   wait() {
-    const banner = h("div", { class: "banner-changed", role: "status", hidden: "" }, icon("info-white-20", 20), h("span", {}, "도착 시간이 변경되었어요"));
+    const BANNER_MS = 5000;
+    const banner = h("div", { class: "banner-changed", role: "status", "aria-live": "polite" }, icon("info-white-20", 20), h("span", {}, "도착 시간이 변경되었어요"));
+    let bannerTimer = null;
+    function flashBanner() {
+      banner.classList.add("on");
+      clearTimeout(bannerTimer);
+      bannerTimer = setTimeout(() => banner.classList.remove("on"), BANNER_MS);
+    }
     const who = h("p", { class: "who" });
     const card = etaCard({ head: who });
     const rows = carRows();
     const top = h("div", { class: "float-top" }, card.el, banner);
-    const layout = mapLayout({ top, sheet: { body: [rows.el, h("p", { class: "note" }, "도착 5분 전에 픽업 안내 문자를 보내드려요.")], more: [routeButton()] } });
+    // 알림은 잠깐 떴다 사라지니 지도 맞춤은 도착 예정 카드까지만 피한다(사라질 때 지도가 튀지 않게)
+    const layout = mapLayout({ top, sheet: { body: [rows.el, h("p", { class: "note" }, "도착 5분 전에 픽업 안내 문자를 보내드려요.")], more: [routeButton()] }, topCover: () => card.el });
     let map = null;
 
     const el = h("section", { class: "screen map-screen" }, layout.area);
@@ -588,7 +597,10 @@ const screens = {
       el,
       update(v) {
         map ??= createMap(layout.mapBox, { carLabel: `${v.driverCallName} 님 차`, padding: layout.covered });
-        show(banner, !!v.etaChange);
+        // 새 변경이 오면 5초 보이고 사라진다(같은 변경은 한 번만)
+        const change = v.etaChange ? `${v.etaChange.from}-${v.etaChange.to}` : null;
+        if (change && change !== seenEtaChange) flashBanner();
+        seenEtaChange = change ?? seenEtaChange;
         set(who, `${v.driverCallName} 님의 도착 예정`);
         set(card.time, hhmm(v.arrivalAt));
         const sec = secondsLeft(v);
@@ -598,6 +610,7 @@ const screens = {
         map.update(mapView(v));
       },
       destroy() {
+        clearTimeout(bannerTimer);
         layout.destroy();
         map?.destroy();
       },
