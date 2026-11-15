@@ -195,7 +195,6 @@ function h(tag, attrs = {}, ...children) {
 const icon = (name, size = 20) => h("img", { src: `/web/icons/${name}.svg`, alt: "", width: size, height: size });
 /** P-01 카드 머리글(Label/Medium · Primary-500) — 피그마 개정: 앞 아이콘 없음 */
 const cardHead = (text) => h("p", { class: "card-head" }, text);
-const logo = () => h("p", { class: "logo" }, "WAY");
 /** P-01 로고(피그마 477:3378): WAY 워드마크 + WHERE ARE YOU */
 const brandLogo = () =>
   h("div", { class: "brand-logo", role: "img", "aria-label": "WAY · Where are you" }, h("img", { class: "way", src: "/web/icons/logo-way.svg", alt: "" }), h("img", { class: "where", src: "/web/icons/logo-where.svg", alt: "" }));
@@ -554,7 +553,6 @@ const screens = {
     const el = h(
       "section",
       { class: "screen" },
-      logo(),
       h(
         "div",
         { class: "stack consent-body", style: "gap:40px" },

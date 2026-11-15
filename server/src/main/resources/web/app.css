@@ -110,15 +110,6 @@ body:has(.screen.soft) {
   min-width: 0;
 }
 
-/* 로고(임시) — 피그마 높이 22 · 아래 20 */
-.logo {
-  font-weight: 700;
-  font-size: 15px;
-  line-height: 22px;
-  color: var(--primary-500);
-  margin-bottom: 20px;
-}
-
 /* P-01 로고(피그마 477:3378) — 78 × 29.9 상자 안에 WAY(76.7 × 16.8) · WHERE ARE YOU(78 × 6.6), 아래 본문까지 12 */
 .brand-logo {
   position: relative;
@@ -645,9 +636,9 @@ body:has(.screen.soft) {
 
 /* ── P-02 위치 공유 허용 */
 
-/* 피그마: 로고 아래 57px 에서 시작 */
+/* 피그마 200:3622: 로고 없음 · 내용은 프레임 위 135 에서 시작 — 상태 줄 몫 56 빼고 79, 화면 위 여백 24 를 빼면 55 */
 .consent-body {
-  margin-top: 37px;
+  margin-top: 55px;
 }
 
 .status-icon {
