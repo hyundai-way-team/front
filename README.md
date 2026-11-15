@@ -6,25 +6,33 @@
 
 <sub>차가 서면 운전자 화면(왼쪽)과 동승자 휴대폰(오른쪽)에 같은 1분 타이머가 뜹니다. 동승자는 앱을 깔지 않습니다.</sub>
 
+## 내려받기
+
+[릴리스 페이지](https://github.com/hyundai-way-team/front/releases/latest)에서 `way-1.0.apk`를 받아 Pleos Connect 에뮬레이터나 차량에 설치합니다. 앱은 임시 서버(`https://way.posktop.duckdns.org`)에 붙어 있어서 서버를 따로 띄우지 않아도 됩니다.
+
+```bash
+adb install -r way-1.0.apk
+```
+
 ## 무엇을 해결하나요
 
 픽업할 때마다 "어디쯤이야?", "길 건너편이야?" 하는 통화가 오갑니다. WAY는 약속 장소를 핀으로 정하고, 동승자 화면에도 같은 좌표를 그대로 보여 줍니다. 차가 서면 1분 대기 타이머가 양쪽에서 함께 돕니다. 1분은 불법 주정차 단속의 예외 시간입니다. 문이 열렸다 닫히면 탑승으로 보고 픽업을 끝냅니다. 운전 중에 화면을 만질 일은 음성 안내와 헤드업 알림으로 줄였습니다.
 
 ## 픽업 한 번의 흐름
 
-화면 이름(D-01~D-10)은 피그마 와이어프레임 v2의 프레임 이름과 같습니다. 캡처는 모두 Pleos Connect 에뮬레이터에서 실제 데이터로 찍었습니다. 차량 번호만 시연용 값입니다.
+화면 이름(D-01~D-11, P-01~P-06)은 피그마 와이어프레임 v2의 프레임 이름과 같습니다. 캡처는 모두 Pleos Connect 에뮬레이터와 임시 서버에서 실제 데이터로 찍었습니다. 연락처와 차량 번호만 시연용 값입니다. 에뮬레이터의 차 위치는 한곳에 고정돼 있어서, 주행 장면은 디버그 빌드의 시연 주행(실제 차도 경로를 빠르게 달림)으로 찍었습니다.
 
 ### 출발 전
 
 | D-01 홈 | D-02 누구를 태우러 가나요 |
 |---|---|
-| ![홈 화면, 최근 픽업 두 건](docs/readme/d01-home.jpg) | ![기기 연락처 목록에서 동승자 고르기](docs/readme/d02-passenger.jpg) |
+| ![홈 화면, 최근 픽업 세 건](docs/readme/d01-home.jpg) | ![기기 연락처 목록에서 동승자 고르기](docs/readme/d02-passenger.jpg) |
 | 최근 픽업을 누르면 같은 사람, 같은 장소로 바로 이어집니다. | 기기 연락처에서 고르며, 최근에 태운 사람이 먼저 나옵니다. |
 
 | D-03 약속 장소 | D-04 핀 맞추기 |
 |---|---|
 | ![장소 검색 결과](docs/readme/d03-search.jpg) | ![핀이 버스정류장 앞이라 정차 금지 경고가 뜬 화면](docs/readme/d04-pin.jpg) |
-| 앱 안에 넣은 장소 색인으로 찾습니다. 인터넷 지도 API를 부르지 않습니다. | 지도를 움직여 핀을 정차할 자리에 맞춥니다. 버스정류장 둘레에 걸리면 정차 금지 구간이라고 알려 줍니다. 정차 금지 구간은 핀 둘레 300m만 그립니다(홈 지도엔 그리지 않습니다). |
+| 앱 안에 넣은 장소 색인으로 찾습니다. 인터넷 지도 API를 부르지 않습니다. | 지도를 움직여 핀을 정차할 자리에 맞춥니다. 버스정류장 둘레나 지정 주정차 금지구역에 걸리면 정차 금지 구간이라고 알려 줍니다. 정차 금지 구간은 핀 둘레 300m만 그립니다(홈 지도엔 그리지 않습니다). |
 
 | D-05 픽업 후 목적지 | D-05 출발 확인 |
 |---|---|
@@ -44,12 +52,12 @@
 | D-08 정차, 1분 대기 | D-09 15초 남았는데 아직 안 탐 |
 |---|---|
 | ![정차 카드, 동승자 도보 거리, 1분 타이머](docs/readme/d08-waiting.jpg) | ![전화할지 묻는 음성 안내와 빨간 전화하기 버튼](docs/readme/d09-call.jpg) |
-| 픽업 위치 35m 안에 들어오면 도착으로 보고 타이머가 시작됩니다. 걸어오는 동승자의 위치와 거리가 지도에 보입니다. | "전화를 걸까요?" 하고 물어 '응'이라고 답하면 전화를 겁니다. 손으로 누르는 전화하기 버튼도 있습니다. |
+| 픽업 위치 35m 안에 들어오면 도착으로 보고 타이머가 시작됩니다. 동승자가 위치를 공유했으면 걸어올 길(주황 선)과 도보 거리가 보입니다. | "전화를 걸까요?" 하고 물어 '응'이라고 답하면 전화를 겁니다. 손으로 누르는 전화하기 버튼도 있습니다. |
 
-| D-10 탑승 완료 | 10초 뒤 |
+| D-11 탑승, 다음 목적지 연결 | 5초 뒤 |
 |---|---|
-| ![탑승 확인 카드, 6초 남은 목적지 안내 카운트다운](docs/readme/d10-boarded.jpg) | ![Pleos 내비가 목적지 경로를 띄운 화면](docs/readme/d10-navi.jpg) |
-| 앞 오른쪽 문이 열렸다 닫히면 탑승으로 봅니다. 목적지를 정해 뒀으면 10초를 셉니다. 탑승 완료를 누르면 바로 넘어갑니다. | 이때 처음으로 Pleos 내비가 앞으로 나와 목적지 경로를 띄웁니다. 목적지가 없으면 기본 내비 화면을 엽니다. |
+| ![탑승을 확인하고 3초 뒤 공덕역 안내를 시작한다는 창](docs/readme/d11-next.jpg) | ![Pleos 내비가 공덕역까지 길을 안내하는 화면](docs/readme/d11-navi.jpg) |
+| 앞 오른쪽 문이 열렸다 닫히면 탑승으로 봅니다. 5초를 센 뒤 정해 둔 목적지 안내를 Pleos 내비에 넘깁니다. '안내 시작'을 누르면 바로 넘어가고, '취소'를 누르면 D-10 탑승 완료 화면에 남습니다. | 이때 처음으로 Pleos 내비가 앞으로 나와 목적지까지 안내합니다. 목적지가 없으면 기본 내비 화면을 엽니다. |
 
 ### 동승자 화면
 
@@ -57,16 +65,18 @@
 
 <table>
   <tr>
-    <td width="25%"><img src="docs/readme/p01.jpg" alt="누가 언제 오는지, 탈 차와 픽업 위치"></td>
-    <td width="25%"><img src="docs/readme/p02.jpg" alt="위치를 공유할지 묻는 화면"></td>
-    <td width="25%"><img src="docs/readme/p03.jpg" alt="도착 예정 시각과 지도, 늦어요 버튼"></td>
-    <td width="25%"><img src="docs/readme/p06.jpg" alt="탑승했어요, 링크 만료"></td>
+    <td width="20%"><img src="docs/readme/p01.jpg" alt="누가 언제 오는지, 탈 차와 픽업 위치"></td>
+    <td width="20%"><img src="docs/readme/p02.jpg" alt="위치를 공유할지 묻는 화면"></td>
+    <td width="20%"><img src="docs/readme/p04.jpg" alt="곧 도착해요 카드와 차가 오는 파란 길"></td>
+    <td width="20%"><img src="docs/readme/p05.jpg" alt="차가 도착했다는 파란 카드와 1분 타이머, 걸어갈 주황 길"></td>
+    <td width="20%"><img src="docs/readme/p06.jpg" alt="탑승 완료, 링크 만료"></td>
   </tr>
   <tr>
-    <td>누가 언제 오는지, 어떤 차를 타는지, 어디서 기다리는지 봅니다.</td>
-    <td>위치를 공유할지 고릅니다. 허용하지 않아도 차 위치와 도착 예정 시각은 보입니다.</td>
-    <td>차와 내 위치를 함께 봅니다. 차가 오는 길은 파란 선, 내가 걸어갈 길은 주황 선입니다. 아래 시트를 끌어 올리면 경로 안내가 나옵니다.</td>
-    <td>타면 위치 공유가 끝나고 링크는 만료됩니다.</td>
+    <td>P-01. 누가 언제 오는지, 어떤 차를 타는지, 어디서 기다리는지 봅니다.</td>
+    <td>P-02. 위치를 공유할지 고릅니다. 허용하지 않아도 차 위치와 도착 예정 시각은 보입니다.</td>
+    <td>P-04. 차와 내 위치를 함께 봅니다. 차가 오는 길은 파란 선입니다. 아래 시트를 끌어 올리면 경로 안내가 나옵니다.</td>
+    <td>P-05. 차가 서면 차 화면과 같은 1분 타이머가 뜨고, 걸어갈 길이 주황 선으로 나옵니다. 시간이 줄수록 카드가 파랑에서 빨강으로 바뀝니다.</td>
+    <td>P-06. 타면 위치 공유가 끝나고 링크는 만료됩니다.</td>
   </tr>
 </table>
 
@@ -97,7 +107,7 @@ sequenceDiagram
 정해 둔 것들입니다.
 
 - **지도와 장소 검색은 앱 안에 둡니다.** 공모전에서 쓸 수 있는 Pleos SDK에 지도가 없어서 MapLibre에 오프라인 지도 파일(OpenStreetMap, `app/src/main/assets/map/way.pmtiles`)과 오프라인 장소 색인(`assets/places/way-places.dat`)을 넣었습니다. 실행 중 외부 지도 API를 부르지 않습니다. Pleos 내비게이션 SDK가 열리면 그쪽으로 옮길 계획입니다.
-- **정차 금지 구간은 공공데이터로 판단합니다.** 국토교통부 전국 버스정류장 위치정보에서 수도권 74,726곳을 뽑아 정류장 둘레 10m를 금지 구간으로 봅니다. 서버가 구간을 내려 주고, 도착 예정 시각 기준의 판단은 앱이 합니다.
+- **정차 금지 구간은 공공데이터로 판단합니다.** 국토교통부 전국 버스정류장 위치정보에서 수도권 74,726곳을 뽑아 정류장 둘레 10m를 금지 구간으로 봅니다. 지정 주정차 금지구역은 행정안전부 표준데이터(수도권 10,264곳)를 씁니다. 이 데이터엔 좌표가 없고 '○○약국 앞 ~ ○○사거리' 같은 글만 있어서, 서버가 그때그때 카카오 로컬 API로 두 끝을 찾고 그 사이를 OpenStreetMap 도로 선을 따라 잘라 냅니다. 카카오 정책에 따라 찾은 결과는 저장하지 않습니다. 서버가 구간을 내려 주고, 도착 예정 시각 기준의 판단은 앱이 합니다.
 - **탑승은 도어 센서로 판정합니다.** Vehicle SDK로 앞 오른쪽 문이 열렸다 닫히는 것을 봅니다. 도어 정보를 쓸 수 없으면 화면 버튼이나 Gleo에게 "탑승 완료"라고 말해서 알립니다.
 - **동승자 지도의 길은 공개 경로 서버로 찾습니다.** Pleos 내비는 남은 거리와 시간만 주고 경로 모양은 주지 않습니다. 그래서 서버가 차 위치(차 길, 파란 선)와 동승자 위치(걷는 길, 주황 선)에서 픽업 위치까지의 길을 무료 공개 OSRM(FOSSGIS `routing.openstreetmap.de`, OpenStreetMap)에 묻습니다. 좌표 두 점만 보내고, 차 길은 차가 길에서 40m 넘게 벗어날 때만 10초에 한 번까지 다시 묻습니다.
 - **픽업까지는 Way 화면이 앞에 있습니다.** Pleos 내비는 경로를 걸면(requestRoute) 화면 앞으로 나와 다른 앱을 가립니다. 그래서 픽업 구간에는 경로를 걸지 않고, 화면 없는 길 계산(requestTrip)과 차 위치만 묻습니다. 탑승 뒤 5초가 지나거나 운전자가 버튼을 누르면 그때 목적지를 내비에 넘기고 내비가 앞으로 나옵니다. 픽업 구간에는 내비의 회전 안내가 없습니다.
@@ -122,6 +132,8 @@ JDK 17과 Pleos Connect 에뮬레이터가 필요합니다. 에뮬레이터의 �
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+릴리스 APK는 `./gradlew :app:assembleRelease`로 만듭니다. 릴리스 빌드에는 아래 디버그 명령과 시연 주행이 들어가지 않습니다. 저장소엔 서명 설정이 없어서 `app-release-unsigned.apk`가 나오고, 릴리스 페이지의 APK는 이것을 `apksigner`로 서명한 것입니다.
 
 16GB 맥에서 에뮬레이터를 켠 채 Gradle 데몬으로 빌드하면 에뮬레이터가 죽을 수 있습니다. 그럴 땐 `--no-daemon -Pkotlin.compiler.execution.strategy=in-process`를 붙입니다.
 
@@ -152,7 +164,7 @@ adb shell am broadcast --user 10 -a com.kscho.way.debug.BOARD -p com.kscho.way
 adb shell am broadcast --user 10 -a com.kscho.way.debug.CLEAR_PICKUP -p com.kscho.way
 ```
 
-차례대로 출발, 정차, 탑승, 픽업 지우기입니다. 실제 도어로 시험하려면 에뮬레이터 Virtual Console(`adb forward tcp:8088 tcp:8088` 뒤 http://127.0.0.1:8088)에서 앞 오른쪽 문을 열었다 닫습니다.
+차례대로 출발, 정차, 탑승, 픽업 지우기입니다. 에뮬레이터의 차 위치는 한곳에 고정돼 있어서, 주행 장면은 `DEMO_ROUTE`로 실제 차도 경로(`위도,경도;…`)를 빠르게 달리게 해 봅니다. 쓰는 법은 `app/src/debug/java/com/kscho/way/debug/DebugPickupReceiver.kt` 주석에 있습니다. 실제 도어로 시험하려면 에뮬레이터 Virtual Console(`adb forward tcp:8088 tcp:8088` 뒤 http://127.0.0.1:8088)에서 앞 오른쪽 문을 열었다 닫습니다.
 
 ### 서버
 
@@ -177,5 +189,7 @@ WAY_MAP_DIR=app/src/main/assets/map server/build/install/server/bin/server
 - 지도: © OpenMapTiles © OpenStreetMap contributors (ODbL). 타일은 OpenFreeMap에서 한 번 받아 `tools/map/build_offline_map.py`로 만듭니다.
 - 장소 색인: OpenStreetMap, `tools/map/build_places_index.py`
 - 버스정류장: 국토교통부 전국 버스정류장 위치정보(공공데이터포털 15067528, 이용허락범위 제한 없음), `tools/data/build_bus_stops.py`
+- 지정 주정차 금지구역: 전국주정차금지(지정)구역표준데이터(공공데이터포털 15034542)와 그 도로의 OpenStreetMap 선, `tools/data/build_no_parking_zones.py`. 구역 끝 위치는 카카오 로컬 API로 그때그때 찾습니다.
+- 길 찾기: FOSSGIS 공개 OSRM(`routing.openstreetmap.de`, OpenStreetMap)
 - 글꼴: Pretendard (SIL Open Font License, `app/src/main/assets/licenses/Pretendard-OFL.txt`)
 - 지도 그리기: MapLibre Native Android, MapLibre GL JS
