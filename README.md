@@ -1,16 +1,56 @@
 # WAY
 
-운전자는 차 화면에서 동승자를 태울 자리를 도로의 어느 쪽 인도인지까지 정합니다. 동승자는 문자로 받은 링크 하나로 그 자리와 다가오는 차를 봅니다. Pleos Connect용 차량 앱이며, 현대자동차그룹 차량용 앱 개발 공모전 출품작입니다.
+**도착하면 바로 타고 출발하는 1분 픽업 서비스.** way-point 팀이 만든 Pleos Connect용 차량 앱으로, 현대자동차그룹 차량용 앱 개발 공모전 출품작입니다.
+
+운전자는 차 화면에서 동승자를 태울 자리를 도로의 어느 쪽 인도인지까지 정합니다. 동승자는 문자로 받은 링크 하나로 그 자리와 다가오는 차를 봅니다.
 
 ![WAY 소개: 도착하면 바로 타고 출발하는 1분 픽업 서비스. 1분 대기 타이머가 15초 남은 차 화면(D-09)과 핀이 정차 금지 구간에 걸려 경고가 뜬 핀 맞추기 화면(D-04)](docs/readme/hero.jpg)
 
-## 내려받기
+## APK
 
-[릴리스 페이지](https://github.com/hyundai-way-team/front/releases/latest)에서 `way-1.0.apk`를 받아 Pleos Connect 에뮬레이터나 차량에 설치합니다. 앱은 임시 서버(`https://way.posktop.duckdns.org`)에 붙어 있어서 서버를 따로 띄우지 않아도 됩니다.
+- 파일: `way-point_way_release.apk` (release 빌드, 약 115MB)
+- 위치: [GitHub Release v1.0](https://github.com/hyundai-way-team/front/releases/tag/v1.0) ([바로 받기](https://github.com/hyundai-way-team/front/releases/download/v1.0/way-point_way_release.apk))
+- GitHub 저장소에 올릴 수 있는 파일 크기(100MB)를 넘어서 Release에 올렸습니다. [`apk/`](apk/) 폴더에도 같은 안내가 있습니다.
 
-```bash
-adb install -r way-1.0.apk
-```
+## 실행 방법
+
+1. Pleos Connect 에뮬레이터를 켭니다(아래 [테스트 환경](#테스트-환경과-설정)).
+2. APK를 설치합니다.
+
+   ```bash
+   adb install -r way-point_way_release.apk
+   ```
+
+3. 아래 바나 앱 목록에서 **Way**를 엽니다. 명령으로 열려면 다음을 실행합니다. 에뮬레이터의 앱 사용자는 10번입니다.
+
+   ```bash
+   adb shell am start --user 10 -n com.kscho.way/.MainActivity
+   ```
+
+4. 처음 열 때 알림 권한을, 동승자를 고를 때 연락처 권한을 허용합니다.
+5. 픽업 만들기 → 동승자 → 약속 장소 → 핀 맞추기 → 목적지(건너뛰어도 됨) → 출발 순서로 진행합니다. 출발하면 동승자에게 링크가 담긴 문자가 나가고 주행 화면(D-06)으로 넘어갑니다.
+
+앱은 임시 서버(`https://way.posktop.duckdns.org`)에 붙어 있어서 서버를 따로 띄우지 않아도 됩니다.
+
+## 테스트 환경과 설정
+
+| 항목 | 내용 |
+|---|---|
+| 에뮬레이터 | Pleos Connect v2.1.0 시스템 이미지(Android 14 · API 34, Automotive, arm64-v8a, 42dot), Android Emulator 37.1.11 |
+| 화면 규격 | 2560 × 1440, 160dpi, 가로. Way 화면은 왼쪽 계기 영역과 위아래 바를 뺀 앱 영역(약 1680 × 1210)에 뜹니다. |
+| AVD | RAM 4GB, CPU 4코어, 데이터 6GB |
+| 개발 PC | macOS 26, Apple M1 · 16GB |
+| 빌드 | JDK 17, Android Gradle Plugin 9.0.1, Gradle 9.1, Kotlin 2.3.20 |
+| 앱 | 패키지 `com.kscho.way`, minSdk 28, targetSdk 36, ABI arm64-v8a · x86_64 |
+
+필요한 설정입니다.
+
+- **인터넷:** 동승자 링크, 실시간 위치, 정차 금지 구간을 임시 서버에서 받습니다. 지도와 장소 검색은 앱 안에 있어서 인터넷 없이도 됩니다.
+- **권한:** 알림(헤드업 알림)과 연락처(동승자 고르기)를 허용합니다. Pleos 권한(문 상태, 내비 경로)은 매니페스트에 선언돼 있어서 따로 켤 것이 없습니다.
+- **연락처:** 에뮬레이터 주소록에 동승자로 고를 연락처를 한 명 이상 넣어 둡니다.
+- **문자:** 동승자 문자는 차에 블루투스로 연결된 운전자 휴대폰에서 Pleos 메시지로 나갑니다. 에뮬레이터엔 휴대폰이 없어서 출발할 때 Pleos 문자 화면이 '기기를 연결하세요'로 뜹니다. Way로 돌아오면 주행 화면이 이어집니다. 문자 내용과 동승자 링크는 `adb logcat -s WayText`로 볼 수 있습니다.
+- **탑승:** 에뮬레이터 Virtual Console(`adb forward tcp:8088 tcp:8088` 뒤 http://127.0.0.1:8088)에서 앞 오른쪽 문을 열었다 닫으면 탑승으로 처리됩니다.
+- **차 위치:** 에뮬레이터의 Pleos 내비 위치는 한곳(성남시 수정구 시흥동)에 고정돼 있어 실제로 달리지 않습니다. 도착과 1분 대기까지 화면으로 보려면 [소스에서 빌드하기](#소스에서-빌드하기)의 디버그 빌드에서 시연 주행(`DEMO_ROUTE`)이나 정차 명령(`ARRIVE`)을 씁니다.
 
 ## 무엇을 해결하나요
 
@@ -119,7 +159,7 @@ sequenceDiagram
 | `:app` | Compose 화면, Pleos 연동(NaviHelper, 도어 센서, STT/TTS, Gleo), 포그라운드 서비스, 기기 연락처, MapLibre 지도 |
 | `:server` | Ktor. 픽업 세션과 참여 링크, 차와 동승자 웹을 잇는 WebSocket, 동승자 웹(`/p/{token}`), 정차 금지 구간 API |
 
-## 실행하기
+## 소스에서 빌드하기
 
 JDK 17과 Pleos Connect 에뮬레이터가 필요합니다. 에뮬레이터의 앱 사용자는 10번이라 `adb` 명령에 `--user 10`을 붙입니다.
 
@@ -131,7 +171,7 @@ JDK 17과 Pleos Connect 에뮬레이터가 필요합니다. 에뮬레이터의 �
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-릴리스 APK는 `./gradlew :app:assembleRelease`로 만듭니다. 릴리스 빌드에는 아래 디버그 명령과 시연 주행이 들어가지 않습니다. 저장소엔 서명 설정이 없어서 `app-release-unsigned.apk`가 나오고, 릴리스 페이지의 APK는 이것을 `apksigner`로 서명한 것입니다.
+릴리스 APK는 `./gradlew :app:assembleRelease`로 만듭니다. 릴리스 빌드에는 아래 디버그 명령과 시연 주행이 들어가지 않습니다. 저장소엔 서명 설정이 없어서 `app-release-unsigned.apk`가 나오고, Release의 `way-point_way_release.apk`는 이것을 `apksigner`로 서명한 것입니다.
 
 16GB 맥에서 에뮬레이터를 켠 채 Gradle 데몬으로 빌드하면 에뮬레이터가 죽을 수 있습니다. 그럴 땐 `--no-daemon -Pkotlin.compiler.execution.strategy=in-process`를 붙입니다.
 
