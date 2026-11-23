@@ -1,16 +1,15 @@
 package com.kscho.way.data.mock
 
-import com.kscho.way.data.contact.ContactDataSource
-import com.kscho.way.data.remote.ContactDto
+import com.kscho.way.data.dataSource.local.contact.ContactLocalDataSource
+import com.kscho.way.data.dataSource.local.contact.DeviceContact
 
-/** 시연용 연락처(번호는 가짜). 이서연 = MVP 페르소나 동승자. */
-class MockPleosContacts : ContactDataSource {
-  override suspend fun all(): List<ContactDto> =
+class MockPleosContacts : ContactLocalDataSource {
+  override suspend fun all(): List<DeviceContact> =
     listOf(
-      ContactDto("c-seoyeon", "이서연", "01000001234"),
-      ContactDto("c-minjun", "김민준", "01000005678"),
-      ContactDto("c-jiho", "박지호", "01000009012"),
-      ContactDto("c-yuna", "최유나", "01000003456"),
-      ContactDto("c-hajun", "정하준", "01000007890"),
+      DeviceContact("c-seoyeon", "이서연", "01000001234"),
+      DeviceContact("c-minjun", "김민준", "01000005678"),
+      DeviceContact("c-jiho", "박지호", "01000009012"),
+      DeviceContact("c-yuna", "최유나", "01000003456"),
+      DeviceContact("c-hajun", "정하준", "01000007890"),
     )
 }

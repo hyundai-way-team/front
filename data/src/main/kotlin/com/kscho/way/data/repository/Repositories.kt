@@ -1,14 +1,16 @@
 package com.kscho.way.data.repository
 
-import com.kscho.way.data.contact.ContactDataSource
 import com.kscho.way.data.dataSource.base.apiCall
-import com.kscho.way.data.remote.ArrivalRequest
-import com.kscho.way.data.remote.CompletePickupRequest
-import com.kscho.way.data.remote.CreatePickupRequest
-import com.kscho.way.data.remote.DriverStatusRequest
-import com.kscho.way.data.remote.NotificationRequest
-import com.kscho.way.data.remote.NotificationType
+import com.kscho.way.data.dataSource.local.contact.ContactLocalDataSource
+import com.kscho.way.data.mapper.toDomain
+import com.kscho.way.data.mapper.toDto
 import com.kscho.way.data.remote.WayApi
+import com.kscho.way.data.request.ArrivalRequest
+import com.kscho.way.data.request.CompletePickupRequest
+import com.kscho.way.data.request.CreatePickupRequest
+import com.kscho.way.data.request.DriverStatusRequest
+import com.kscho.way.data.request.NotificationRequest
+import com.kscho.way.data.request.NotificationType
 import com.kscho.way.domain.model.base.ApiState
 import com.kscho.way.domain.model.base.map
 import com.kscho.way.domain.model.contact.CallNames
@@ -30,7 +32,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 class ContactRepositoryImpl(
-  private val source: ContactDataSource,
+  private val source: ContactLocalDataSource,
   private val recent: suspend () -> List<Contact> = { emptyList() },
 ) : ContactRepository {
   override suspend fun search(query: String): List<Contact> {

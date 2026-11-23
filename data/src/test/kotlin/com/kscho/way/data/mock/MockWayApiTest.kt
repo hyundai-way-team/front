@@ -1,11 +1,11 @@
 package com.kscho.way.data.mock
 
-import com.kscho.way.data.remote.ArrivalRequest
-import com.kscho.way.data.remote.CompletePickupRequest
-import com.kscho.way.data.remote.CreatePickupRequest
-import com.kscho.way.data.remote.NotificationRequest
-import com.kscho.way.data.remote.NotificationType
-import com.kscho.way.data.remote.SharingWire
+import com.kscho.way.data.request.ArrivalRequest
+import com.kscho.way.data.request.CompletePickupRequest
+import com.kscho.way.data.request.CreatePickupRequest
+import com.kscho.way.data.request.NotificationRequest
+import com.kscho.way.data.request.NotificationType
+import com.kscho.way.data.response.SharingWire
 import com.kscho.way.domain.model.geo.Geo
 import java.time.LocalDateTime
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -50,11 +50,10 @@ class MockWayApiTest {
 
   @Test
   fun zones_carryRadiusAndSchedule_forTheAppToJudge() = runTest {
-    // 정차 금지 판단은 앱이 한다 — 서버(mock)는 구간 데이터만
     val zones = api().stopZones(MockWorld.BUS_STOP.dto(), 300).associateBy { it.id }
     val busStop = zones.getValue("bus-stop")
     assertEquals(12.0, busStop.radiusMeters, 0.0)
-    assertNull(busStop.days) // 상시
+    assertNull(busStop.days)
     val curb = zones.getValue("south-curb")
     assertEquals(listOf("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"), curb.days)
     assertEquals(7 * 60, curb.startMinute)
@@ -78,7 +77,6 @@ class MockWayApiTest {
     val status = api.passengerUpdates(created.pickupId)
     advanceTimeBy(4_100)
     runCurrent()
-    // 링크 열고 위치 공유, 집(골목 안 130m)에서 기다림
     var now = (status as kotlinx.coroutines.flow.StateFlow).value
     assertTrue(now.linkOpened)
     assertEquals(SharingWire.SHARING, now.sharing)
@@ -86,7 +84,7 @@ class MockWayApiTest {
     assertEquals(130.0, Geo.distanceMeters(home, MockWorld.VILLA_ALLEY_ENTRANCE), 1.0)
 
     advanceTimeBy(30_000)
-    assertEquals(home, status.value.location!!.domain()) // 아직 안 나옴
+    assertEquals(home, status.value.location!!.domain())
 
     api.sendNotification(created.pickupId, NotificationRequest(NotificationType.ARRIVING_SOON, request.arrivalAtEpochMillis))
     assertTrue(api.messages.value.last().text.startsWith("[WAY] 곧 도착해요"))
@@ -122,7 +120,6 @@ class MockWayApiTest {
     api.completePickup(id, CompletePickupRequest(boarded = true, waitedSeconds = 38, pickupLocationChanges = 0, boardingSource = "DOOR"))
     assertEquals(SharingWire.ENDED, status.value.sharing)
     assertNull(status.value.location)
-    // 서버엔 동승자 번호가 없다 — 문자 사본도 이름으로만
     assertTrue(api.messages.value.all { it.to == "이서연" })
   }
 }

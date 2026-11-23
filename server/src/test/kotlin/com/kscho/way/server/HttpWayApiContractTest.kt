@@ -1,16 +1,16 @@
 package com.kscho.way.server
 
+import com.kscho.way.data.dto.LatLngDto
 import com.kscho.way.data.mock.MockWorld
-import com.kscho.way.data.remote.ArrivalRequest
-import com.kscho.way.data.remote.CompletePickupRequest
-import com.kscho.way.data.remote.CreatePickupRequest
-import com.kscho.way.data.remote.DriverStatusRequest
 import com.kscho.way.data.remote.HttpWayApi
-import com.kscho.way.data.remote.LatLngDto
-import com.kscho.way.data.remote.NotificationRequest
-import com.kscho.way.data.remote.NotificationType
-import com.kscho.way.data.remote.SharingWire
 import com.kscho.way.data.remote.WayApiException
+import com.kscho.way.data.request.ArrivalRequest
+import com.kscho.way.data.request.CompletePickupRequest
+import com.kscho.way.data.request.CreatePickupRequest
+import com.kscho.way.data.request.DriverStatusRequest
+import com.kscho.way.data.request.NotificationRequest
+import com.kscho.way.data.request.NotificationType
+import com.kscho.way.data.response.SharingWire
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer

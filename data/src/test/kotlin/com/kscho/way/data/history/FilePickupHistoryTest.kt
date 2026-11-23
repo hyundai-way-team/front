@@ -11,7 +11,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** 홈 '최근 픽업'은 앱 파일에 둔다 — 서버에 묻지 않는다. */
 class FilePickupHistoryTest {
   private val dir: File = Files.createTempDirectory("way-history").toFile()
   private val file = File(dir, "pickup_history.json")
@@ -29,11 +28,10 @@ class FilePickupHistoryTest {
     val again = demo().first().copy(id = "pk_new", endedAtMillis = now)
     first.save(again)
 
-    // 앱을 다시 켜도(새 인스턴스) 남아 있고, 같은 사람·같은 위치는 최근 것 하나만
     val restarted = FilePickupHistory(file, seed = { error("파일이 있으면 seed 를 쓰지 않는다") })
     val recent = restarted.recent(5)
     assertEquals(listOf("pk_new", "demo-2"), recent.map(PickupRecord::id))
-    assertEquals(again, recent.first()) // 연락처 id·장소·핀 설명까지 그대로
+    assertEquals(again, recent.first())
   }
 
   @Test

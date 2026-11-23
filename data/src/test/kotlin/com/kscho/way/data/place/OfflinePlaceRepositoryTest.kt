@@ -8,16 +8,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * 작은 가짜 동네(미터로 놓음)에서 검색 순위·핀 설명 방향을 본다.
- *
- * ```
- *            연세로(남북, x=200)
- *   y=120 ─────────────── 연희로11길(작은 길)
- *   y=+8  ═══════════════ 신촌로 북쪽 차로  (상·하행이 따로 그려진 큰길)
- *   y=-8  ═══════════════ 신촌로 남쪽 차로
- * ```
- */
 class OfflinePlaceRepositoryTest {
   private val origin = LatLng(37.5567, 126.9420)
 
@@ -41,7 +31,7 @@ class OfflinePlaceRepositoryTest {
   private val pois =
     listOf(
       poi("신촌자이엘라 버스정류장", "bus", "bus_stop", 60.0, 16.0),
-      poi("신촌자이엘라 버스정류장", "bus", "bus_stop", 60.0, -16.0), // 길 건너편 같은 이름 정류장
+      poi("신촌자이엘라 버스정류장", "bus", "bus_stop", 60.0, -16.0),
       poi("할매국밥", "restaurant", "restaurant", -95.0, 12.0),
       poi("2층 카페", "cafe", "cafe", -100.0, -20.0, street = false),
       poi("스타벅스 연세대점", "cafe", "cafe", 10.0, 20.0),
@@ -67,18 +57,14 @@ class OfflinePlaceRepositoryTest {
   private var here: LatLng? = origin
   private val repo = OfflinePlaceRepository(index, origin = { here })
 
-  // ── 검색
-
   @Test
   fun search_prefixBeforeContains_thenNearest() = runTest {
     val names = repo.search("연세대").map { it.name }
-    // 앞부분 일치(가까운 순 — 대학은 조금 당겨 셈) → 포함
     assertEquals(listOf("연세대앞 버스정류장", "연세대학교 신촌캠퍼스", "연세대학교 공학관", "스타벅스 연세대점"), names)
   }
 
   @Test
   fun search_samePointDifferentNames_getDistinctIds() = runTest {
-    // 한 건물 안 가게처럼 이름만 다르고 좌표가 같은 두 곳 — 목록 key(it.id)가 겹치면 화면이 죽는다
     val twin = OfflinePlaceRepository(PlaceIndex.of(areas, listOf(poi("GS25", "shop", "convenience", 0.0, 0.0), poi("GS25 신촌점", "shop", "convenience", 0.0, 0.0)), roads))
     val ids = twin.search("GS25").map { it.id }
     assertEquals(2, ids.size)
@@ -102,19 +88,16 @@ class OfflinePlaceRepositoryTest {
   @Test
   fun search_atMostEight_andSameNameNearbyOnce() = runTest {
     assertEquals(8, repo.search("편의점").size)
-    // 길 양쪽 같은 이름 정류장은 하나만
     assertEquals(listOf("신촌자이엘라 버스정류장"), repo.search("신촌자이엘라").map { it.name })
   }
 
   @Test
   fun search_areaNameAndAddress() = runTest {
     val result = repo.search("연남동")
-    // 동 이름이 그대로 맞으면 맨 앞(주소는 윗주소), 그다음 그 동 안 장소
     assertEquals("연남동", result.first().name)
     assertEquals("서울 마포구", result.first().address)
     assertEquals(setOf("동진시장", "연남 김밥"), result.drop(1).map { it.name }.toSet())
     assertTrue(result.drop(1).all { it.address == "서울 마포구 연남동" })
-    // 여러 낱말: 낱말마다 이름이나 주소에 있으면
     assertEquals(listOf("연남 김밥"), repo.search("마포구 김밥").map { it.name })
   }
 
@@ -131,12 +114,9 @@ class OfflinePlaceRepositoryTest {
   fun search_withoutOrigin_easyPlacesFirst() = runTest {
     here = null
     assertEquals("연세대학교 신촌캠퍼스", repo.search("연세대").first().name)
-    // 기준 위치를 못 받아도(예외) 검색은 된다
     val failing = OfflinePlaceRepository(index, origin = { error("위치 없음") })
     assertEquals("연세대학교 신촌캠퍼스", failing.search("연세대").first().name)
   }
-
-  // ── 핀 설명
 
   private suspend fun describe(east: Double, north: Double): LocationDescription = repo.describe(at(east, north))
 
@@ -148,13 +128,11 @@ class OfflinePlaceRepositoryTest {
 
   @Test
   fun describe_skipsAcrossTheRoadAndIndoor() = runTest {
-    // 30m 안이지만 할매국밥은 길 건너편, 2층 카페는 길에서 안 보임
     assertEquals(LocationDescription("신촌로 근처", "신촌로 · 도로 남쪽 인도"), describe(-100.0, -17.0))
   }
 
   @Test
   fun describe_betweenCarriageways_isOnRoad() = runTest {
-    // 스타벅스(22m)는 북쪽 차로 너머라 쓰지 않는다
     assertEquals(LocationDescription("신촌로 도로 위", "신촌로 · 차로 위예요 · 길가로 옮겨 주세요"), describe(0.0, 0.0))
   }
 
@@ -173,7 +151,6 @@ class OfflinePlaceRepositoryTest {
   @Test
   fun describe_noRoadNearby() = runTest {
     assertEquals(LocationDescription("지도에서 고른 위치", "큰길에서 떨어진 곳 · 골목 안일 수 있어요"), describe(3_000.0, 3_000.0))
-    // 동 이름 점이 2km 안이면 앞에 붙인다
     assertEquals(LocationDescription("지도에서 고른 위치", "연남동 · 큰길에서 떨어진 곳 · 골목 안일 수 있어요"), describe(-900.0, 900.0))
   }
 

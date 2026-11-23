@@ -1,5 +1,16 @@
 package com.kscho.way.data.remote
 
+import com.kscho.way.data.dto.LatLngDto
+import com.kscho.way.data.request.ArrivalRequest
+import com.kscho.way.data.request.CompletePickupRequest
+import com.kscho.way.data.request.CreatePickupRequest
+import com.kscho.way.data.request.DriverStatusRequest
+import com.kscho.way.data.request.NotificationRequest
+import com.kscho.way.data.response.CreatePickupResponse
+import com.kscho.way.data.response.LocationDescriptionResponse
+import com.kscho.way.data.response.PassengerStatusResponse
+import com.kscho.way.data.response.PlaceResponse
+import com.kscho.way.data.response.StopZoneResponse
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.cancellation.CancellationException
@@ -26,13 +37,8 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 
-/** 서버가 2xx 가 아닌 답을 줬다(404 없는 픽업 · 410 끝난 픽업 등). */
 class WayApiException(val code: Int, message: String) : IOException("Way 서버 $code: $message")
 
-/**
- * [WayApi] 의 HTTP 구현 — 로컬 서버(:server)나 나중의 실제 서버에 붙는다.
- * 요청·응답 모양은 [Dtos] 그대로, 경로는 서버 /api 아래.
- */
 class HttpWayApi(
   baseUrl: String,
   private val client: OkHttpClient = defaultClient(),
@@ -40,31 +46,21 @@ class HttpWayApi(
     ignoreUnknownKeys = true
     encodeDefaults = true
   },
-  /** 동승자 상태 연결이 끊겼을 때 다시 붙기까지 */
   private val reconnectDelayMillis: Long = 2_000,
 ) : WayApi {
   private val api: HttpUrl = "${baseUrl.trimEnd('/')}/api/".toHttpUrl()
 
-  // ── 장소·지도
+  override suspend fun searchPlaces(query: String): List<PlaceResponse> = get("places", "query" to query)
 
-  override suspend fun searchPlaces(query: String): List<PlaceDto> = get("places", "query" to query)
+  override suspend fun describeLocation(location: LatLngDto): LocationDescriptionResponse = get("places/reverse", *location.query())
 
-  override suspend fun describeLocation(location: LatLngDto): LocationDescriptionDto = get("places/reverse", *location.query())
-
-  override suspend fun stopZones(center: LatLngDto, radiusMeters: Int): List<ZoneDto> =
+  override suspend fun stopZones(center: LatLngDto, radiusMeters: Int): List<StopZoneResponse> =
     get("stop-zones", *center.query(), "radius" to radiusMeters.toString())
-
-
-  // ── 픽업 세션
 
   override suspend fun createPickup(request: CreatePickupRequest): CreatePickupResponse =
     json.decodeFromString(post("pickups", json.encodeToString(request)))
 
-  /**
-   * WebSocket 으로 동승자 상태를 받는다. 연결하면 지금 상태부터 오고, 끊기면 [reconnectDelayMillis] 뒤 다시 붙는다.
-   * 서버가 픽업을 모른다고 닫으면(재시작 등) 흐름을 끝낸다.
-   */
-  override fun passengerUpdates(pickupId: String): Flow<PassengerStatusDto> = flow {
+  override fun passengerUpdates(pickupId: String): Flow<PassengerStatusResponse> = flow {
     while (true) {
       try {
         connect(pickupId).collect { emit(it) }
@@ -73,7 +69,6 @@ class HttpWayApi(
       } catch (_: PickupGone) {
         return@flow
       } catch (_: IOException) {
-        // 잠깐 끊김 — 다시 붙는다
       }
       delay(reconnectDelayMillis)
     }
@@ -95,24 +90,21 @@ class HttpWayApi(
     post("pickups/$pickupId/complete", json.encodeToString(request))
   }
 
-  /** 앱이 끝날 때 연결·스레드를 정리한다(테스트용). */
   fun close() {
     client.dispatcher.executorService.shutdown()
     client.connectionPool.evictAll()
   }
 
-  // ── 내부
-
   private class PickupGone : IOException("픽업이 서버에 없어요")
 
-  private fun connect(pickupId: String): Flow<PassengerStatusDto> = callbackFlow {
+  private fun connect(pickupId: String): Flow<PassengerStatusResponse> = callbackFlow {
     val url = api.newBuilder().addPathSegments("pickups").addPathSegment(pickupId).addPathSegment("passenger").build()
     val socket =
       client.newWebSocket(
         Request.Builder().url(url).build(),
         object : WebSocketListener() {
           override fun onMessage(webSocket: WebSocket, text: String) {
-            trySend(json.decodeFromString<PassengerStatusDto>(text))
+            trySend(json.decodeFromString<PassengerStatusResponse>(text))
           }
 
           override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -144,13 +136,8 @@ class HttpWayApi(
     return res.text
   }
 
-  /** 다 읽은 응답. */
   private class Answer(val code: Int, val ok: Boolean, val message: String, val text: String)
 
-  /**
-   * 본문은 OkHttp 일꾼 스레드에서 다 읽어 넘긴다 — 이어 받는 코루틴이 메인 스레드여도 네트워크를 읽지 않게.
-   * (본문이 크면 아직 다 안 온 채로 넘어와 메인 스레드에서 읽다가 NetworkOnMainThreadException — 정차 금지 구간 선이 안 그려지던 원인)
-   */
   private suspend fun Call.await(): Answer = suspendCancellableCoroutine { cont ->
     enqueue(
       object : Callback {

@@ -1,7 +1,8 @@
 package com.kscho.way.server
 
+import com.kscho.way.data.dto.LatLngDto
 import com.kscho.way.data.mock.MockWayApi
-import com.kscho.way.data.remote.LatLngDto
+import com.kscho.way.server.kakao.KakaoLocal
 import com.kscho.way.server.pickup.PickupHub
 import com.kscho.way.server.sms.MacBrowserOpener
 import com.kscho.way.server.sms.MacMessagesRelay
@@ -9,7 +10,6 @@ import com.kscho.way.server.sms.OutboxTextLog
 import com.kscho.way.server.tls.LocalTls
 import com.kscho.way.server.walk.OsmWalkRoutes
 import com.kscho.way.server.walk.WalkAnswer
-import com.kscho.way.server.kakao.KakaoLocal
 import com.kscho.way.server.zones.DesignatedZones
 import com.kscho.way.server.zones.NoParkingRow
 import com.kscho.way.server.zones.RoadIndex

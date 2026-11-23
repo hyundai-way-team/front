@@ -1,7 +1,7 @@
 package com.kscho.way.data.history
 
-import com.kscho.way.data.remote.LatLngDto
-import com.kscho.way.data.remote.PlaceDto
+import com.kscho.way.data.dto.LatLngDto
+import com.kscho.way.data.response.PlaceResponse
 import com.kscho.way.domain.model.contact.Contact
 import com.kscho.way.domain.model.geo.LatLng
 import com.kscho.way.domain.model.pickup.PickupPoint
@@ -20,12 +20,6 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-/**
- * 지난 픽업을 앱 파일 하나(JSON)에 둔다 — 서버에 묻지 않는다.
- * 운전자 본인 기록이라 동승자 이름·번호·위치가 서버에 쌓이지 않고, 서버가 안 돼도 홈 '최근 픽업'이 보인다.
- *
- * 파일이 아직 없으면(처음 설치) [seed] 를 쓴다. 파일이 깨졌으면 빈 기록으로 다시 시작한다.
- */
 class FilePickupHistory(
   private val file: File,
   private val seed: () -> List<PickupRecord> = { emptyList() },
@@ -45,7 +39,6 @@ class FilePickupHistory(
       runCatching { json.decodeFromString<List<StoredPickup>>(file.readText()).map { it.toDomain() } }.getOrDefault(emptyList())
     }
 
-  // 임시 파일에 다 쓴 뒤 바꿔 끼운다 — 쓰다 꺼져도 옛 기록은 남는다
   private suspend fun write(records: List<PickupRecord>) =
     withContext(Dispatchers.IO) {
       file.parentFile?.mkdirs()
@@ -58,14 +51,13 @@ class FilePickupHistory(
     }
 }
 
-/** 파일에 쓰는 모양 — 앱 안에서만 쓴다(서버 API 아님). */
 @Serializable
 private data class StoredPickup(
   val id: String,
   val passengerId: String,
   val passengerName: String,
   val passengerPhone: String,
-  val place: PlaceDto? = null,
+  val place: PlaceResponse? = null,
   val pickupPoint: LatLngDto,
   val pickupTitle: String,
   val pickupDetail: String,
@@ -82,7 +74,7 @@ private fun PickupRecord.toStored() =
     passengerId = passenger.id,
     passengerName = passenger.name,
     passengerPhone = passenger.phone,
-    place = place?.let { PlaceDto(it.id, it.name, it.address, it.location.dto()) },
+    place = place?.let { PlaceResponse(it.id, it.name, it.address, it.location.dto()) },
     pickupPoint = pickupPoint.location.dto(),
     pickupTitle = pickupPoint.description.title,
     pickupDetail = pickupPoint.description.detail,

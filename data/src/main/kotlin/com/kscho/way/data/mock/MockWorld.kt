@@ -10,16 +10,9 @@ import com.kscho.way.domain.model.place.Place
 import java.time.DayOfWeek
 import java.time.ZoneId
 
-/**
- * 시연용 동네(서대문구 신촌 · 이대). 도로 모양은 앱에 넣은 오프라인 지도(OpenStreetMap)에서 그대로 옮겼고,
- * '신촌 XX 빌라'와 정차 규제는 예시다(와이어프레임의 빌라 골목 입구 · 버스정류장 구성을 실제 신촌로 위에 놓았다).
- *
- * 신촌로는 남서→북동으로 뻗은 왕복 도로라 두 차로선(북쪽 = 서쪽 방향, 남쪽 = 동쪽 방향)을 따로 둔다.
- */
 object MockWorld {
   val ZONE: ZoneId = ZoneId.of("Asia/Seoul")
 
-  /** 신촌로 북쪽 차로(아현 → 신촌역, 서쪽 방향). 시연 주행 경로이기도 하다. */
   val SINCHON_RO_NORTH =
     listOf(
       LatLng(37.559084, 126.961543),
@@ -40,7 +33,6 @@ object MockWorld {
       LatLng(37.555316, 126.936690),
     )
 
-  /** 신촌로 남쪽 차로(신촌역 → 아현, 동쪽 방향). */
   val SINCHON_RO_SOUTH =
     listOf(
       LatLng(37.555235, 126.936271),
@@ -58,16 +50,12 @@ object MockWorld {
       LatLng(37.557213, 126.958694),
     )
 
-  /** 운전자 출발 지점(아현 쪽 신촌로 · 홈 화면의 '현재 위치'). */
   val CAR_START = SINCHON_RO_NORTH.first()
 
-  /** 신촌로에서 북쪽 골목으로 들어가는 입구, 도로 북쪽 인도(= 시연 픽업 위치). */
   val VILLA_ALLEY_ENTRANCE = LatLng(37.556700, 126.942000)
 
-  /** 골목 안 40m — '주소 그대로면 골목 안'인 약속 장소. */
   val VILLA = Geo.offset(VILLA_ALLEY_ENTRANCE, east = 0.0, north = 40.0)
 
-  /** 신촌자이엘라 버스정류장(OSM) — 골목 입구에서 동쪽으로 약 57m, 같은 북쪽 인도. */
   val BUS_STOP = LatLng(37.556783, 126.942649)
 
   data class Spot(val id: String, val name: String, val address: String, val location: LatLng)
@@ -84,10 +72,6 @@ object MockWorld {
       Spot("ewha", "이화여자대학교 정문", "서울 서대문구 이화여대길 52", LatLng(37.559000, 126.946500)),
     )
 
-  /**
-   * 홈 '최근 픽업' 시연용 지난 기록 두 건 — 기록은 앱에 두므로(FilePickupHistory) 처음 설치 때만 넣는다.
-   * [now] 기준 2일·5일 전.
-   */
   fun demoHistory(now: Long): List<PickupRecord> {
     val day = 24 * 60 * 60 * 1000L
     val villa = places.first { it.id == "villa" }
@@ -116,7 +100,6 @@ object MockWorld {
     )
   }
 
-  /** 정차 금지 구간. [days]·[startMinute]·[endMinute] 가 없으면 상시. */
   data class Zone(
     val id: String,
     val name: String,
@@ -132,7 +115,6 @@ object MockWorld {
 
   val zones =
     listOf(
-      // 버스정류장 앞은 법으로 늘 정차 금지 — 시연 시각과 상관없이 D-04 ① 경고가 뜨게 상시로 둔다
       Zone(
         "bus-stop",
         "버스정류장",
@@ -140,7 +122,6 @@ object MockWorld {
         listOf(LatLng(37.556720, 126.942400), LatLng(37.556750, 126.942900)),
         radiusMeters = 12.0,
       ),
-      // 도착 시각에 따라 달라지는 규제 예시 — 신촌로 남쪽 길가(남쪽 차로에서 8m 바깥)
       Zone(
         "south-curb",
         "신촌로 남쪽 길가",
@@ -153,7 +134,6 @@ object MockWorld {
       ),
     )
 
-  /** 핀 근처 이름 붙은 지점 → 카드 제목. */
   data class Landmark(val title: String, val location: LatLng)
 
   val landmarks =
@@ -164,7 +144,6 @@ object MockWorld {
       Landmark("이대역 앞", LatLng(37.556900, 126.945900)),
     )
 
-  /** 경도 [lng] 에서 [line] 의 위도(신촌로는 동서로 길어 경도로 맞춘다). 범위 밖이면 null. */
   fun latitudeAt(line: List<LatLng>, lng: Double): Double? {
     for ((a, b) in line.zipWithNext()) {
       val lo = minOf(a.longitude, b.longitude)
@@ -177,10 +156,6 @@ object MockWorld {
     return null
   }
 
-  /**
-   * 시연 주행 경로: 출발점과 목적지가 둘 다 신촌로 북쪽 차로 가까이(80m)면 차로를 따라간다.
-   * 아니면 null(→ 시뮬레이터가 ㄱ자 경로로 대신).
-   */
   fun roadRoute(from: LatLng, to: LatLng): List<LatLng>? {
     val road = SINCHON_RO_NORTH
     if (Geo.distanceToPathMeters(from, road) > 80 || Geo.distanceToPathMeters(to, road) > 80) return null

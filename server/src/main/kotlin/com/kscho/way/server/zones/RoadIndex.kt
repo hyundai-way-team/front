@@ -1,6 +1,6 @@
 package com.kscho.way.server.zones
 
-import com.kscho.way.data.remote.LatLngDto
+import com.kscho.way.data.dto.LatLngDto
 import java.io.InputStream
 import java.util.zip.GZIPInputStream
 import kotlin.math.cos

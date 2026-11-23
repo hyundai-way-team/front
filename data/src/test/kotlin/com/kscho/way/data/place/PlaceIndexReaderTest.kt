@@ -9,9 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
-/** build_places_index.py 가 쓰는 형식을 그대로 손으로 만들어 읽어 본다. */
 class PlaceIndexReaderTest {
-  /** 파이썬 Out 과 같은 LEB128 / 지그재그 쓰개. */
   private class Out {
     val bytes = ByteArrayOutputStream()
 
@@ -44,22 +42,19 @@ class PlaceIndexReaderTest {
       out.u(b.size)
       out.raw(b)
     }
-    // 종류 1: bus/bus_stop
     out.u(1)
     out.u(3)
     out.u(4)
-    // 동네 1: 연남동(동, 윗주소 "서울 마포구")
     out.u(1)
     out.u(1)
     out.u(AreaLevel.QUARTER.ordinal)
     out.u(0)
     out.s(12_580)
     out.s(-8_041)
-    // 장소 2: 정류장 둘(두 번째는 첫 것에서 남쪽으로 −300, 동네 모름, 길에서 안 보임)
     out.u(2)
     out.u(2)
     out.u(0)
-    out.u(1) // 동네 0 + 1
+    out.u(1)
     out.u(0)
     out.s(6_783)
     out.s(12_649)
@@ -69,7 +64,6 @@ class PlaceIndexReaderTest {
     out.u(PlaceIndex.FLAG_NOT_STREET)
     out.s(-300)
     out.s(0)
-    // 도로 1: 신촌로(primary) 점 3개 — 좌표는 바로 앞 점(앞 묶음 아님, 도로 묶음 기준에서 시작)
     out.u(1)
     out.u(5)
     out.u(RoadClass.PRIMARY.ordinal)

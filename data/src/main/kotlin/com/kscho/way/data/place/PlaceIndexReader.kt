@@ -5,19 +5,11 @@ import java.io.IOException
 import java.io.InputStream
 import java.util.zip.GZIPInputStream
 
-/**
- * `tools/map/build_places_index.py` 가 만든 장소 색인 파일(way-places.dat)을 [PlaceIndex] 로 읽는다.
- * 안드로이드를 몰라 [InputStream] 만 받는다 — 앱은 `assets.open("places/way-places.dat")` 를 넘긴다.
- *
- * 형식은 파이썬 쪽 머리말 설명과 짝이다: "WAYP" · 판 · 기준 좌표 · 문자열표 · 종류표 · 동네 · 장소 · 도로.
- * gzip 이든 아니든 읽는다. 파일 이름을 .gz 로 두면 안드로이드 빌드가 풀어서 .gz 를 뗀 이름으로 넣으므로(열 때 못 찾음) .dat 로 둔다.
- */
 object PlaceIndexReader {
   const val ASSET_PATH = "places/way-places.dat"
   private val MAGIC = byteArrayOf('W'.code.toByte(), 'A'.code.toByte(), 'Y'.code.toByte(), 'P'.code.toByte())
   private const val VERSION = 1
 
-  /** [input] 을 끝까지 읽는다(닫지는 않는다). */
   fun read(input: InputStream): PlaceIndex {
     val buffered = BufferedInputStream(input, 64 * 1024)
     buffered.mark(2)
@@ -136,7 +128,6 @@ object PlaceIndexReader {
     )
   }
 
-  /** LEB128 가변 정수 읽개. */
   private class Cursor(private val b: ByteArray) {
     private var pos = 0
 

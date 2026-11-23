@@ -7,7 +7,6 @@ import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** 와이어프레임 P-00(Pleos 문자) 문구 그대로인지. */
 class PickupTextsTest {
   private val link = "http://localhost:8080/p/abc"
 

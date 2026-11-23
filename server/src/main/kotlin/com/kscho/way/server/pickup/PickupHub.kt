@@ -1,17 +1,17 @@
 package com.kscho.way.server.pickup
 
+import com.kscho.way.data.dto.LatLngDto
 import com.kscho.way.data.mock.MockWorld
-import com.kscho.way.data.remote.ArrivalRequest
-import com.kscho.way.data.remote.CompletePickupRequest
-import com.kscho.way.data.remote.CreatePickupRequest
-import com.kscho.way.data.remote.CreatePickupResponse
-import com.kscho.way.data.remote.DriverStatusRequest
-import com.kscho.way.data.remote.LatLngDto
-import com.kscho.way.data.remote.NotificationRequest
-import com.kscho.way.data.remote.NotificationType
-import com.kscho.way.data.remote.PassengerStatusDto
-import com.kscho.way.data.remote.SharingWire
-import com.kscho.way.data.remote.WalkRouteDto
+import com.kscho.way.data.request.ArrivalRequest
+import com.kscho.way.data.request.CompletePickupRequest
+import com.kscho.way.data.request.CreatePickupRequest
+import com.kscho.way.data.request.DriverStatusRequest
+import com.kscho.way.data.request.NotificationRequest
+import com.kscho.way.data.request.NotificationType
+import com.kscho.way.data.response.CreatePickupResponse
+import com.kscho.way.data.response.PassengerStatusResponse
+import com.kscho.way.data.response.SharingWire
+import com.kscho.way.data.response.WalkRouteResponse
 import com.kscho.way.data.sms.PickupTexts
 import com.kscho.way.server.sms.TextLog
 import com.kscho.way.server.walk.OsmWalkRoutes
@@ -73,7 +73,7 @@ data class PickupState(
   val driverUpdatedAt: Long? = null,
   val etaChange: EtaChangeDto? = null,
   val timer: TimerDto? = null,
-  val passenger: PassengerStatusDto = PassengerStatusDto(),
+  val passenger: PassengerStatusResponse = PassengerStatusResponse(),
   /** 걷는 길을 마지막으로 물은 자리(찾는 중·못 찾음 포함) — 여기서 [PickupHub.WALK_RESTEP_METERS] 넘게 멀어져야 다시 묻는다 */
   val walkFrom: LatLngDto? = null,
   /** 지금 자리에선 걷는 길을 못 찾았다(공개 경로 서버가 못 찾음·너무 멂) — 웹은 '경로 안내'를 거둔다 */
@@ -148,9 +148,9 @@ class PickupHub(
   }
 
   /** 운전자 앱이 받는 동승자 상태(링크 확인·위치 공유·위치). 지금 값부터, 바뀔 때만. */
-  fun driverFeed(pickupId: String): Flow<PassengerStatusDto> = pickup(pickupId).map { it.passenger }.distinctUntilChanged()
+  fun driverFeed(pickupId: String): Flow<PassengerStatusResponse> = pickup(pickupId).map { it.passenger }.distinctUntilChanged()
 
-  fun passengerStatus(pickupId: String): PassengerStatusDto = pickup(pickupId).value.passenger
+  fun passengerStatus(pickupId: String): PassengerStatusResponse = pickup(pickupId).value.passenger
 
   fun reportDriver(pickupId: String, request: DriverStatusRequest) {
     val state = pickup(pickupId)
@@ -326,7 +326,7 @@ class PickupHub(
     }
   }
 
-  private fun WalkRouteDto.startingAt(here: LatLngDto) = copy(path = listOf(here) + path.drop(1))
+  private fun WalkRouteResponse.startingAt(here: LatLngDto) = copy(path = listOf(here) + path.drop(1))
 
   /**
    * 웹에 보낼 차 길 — 차가 오는 중일 때만, 차가 지나온 부분을 잘라서. 차가 찾아 둔 길에서 벗어나 있으면(다른 길로 듦)

@@ -1,19 +1,19 @@
 package com.kscho.way.data.mock
 
-import com.kscho.way.data.remote.ArrivalRequest
-import com.kscho.way.data.remote.CompletePickupRequest
-import com.kscho.way.data.remote.CreatePickupRequest
-import com.kscho.way.data.remote.CreatePickupResponse
-import com.kscho.way.data.remote.DriverStatusRequest
-import com.kscho.way.data.remote.LatLngDto
-import com.kscho.way.data.remote.LocationDescriptionDto
-import com.kscho.way.data.remote.NotificationRequest
-import com.kscho.way.data.remote.NotificationType
-import com.kscho.way.data.remote.PassengerStatusDto
-import com.kscho.way.data.remote.PlaceDto
-import com.kscho.way.data.remote.SharingWire
+import com.kscho.way.data.dto.LatLngDto
 import com.kscho.way.data.remote.WayApi
-import com.kscho.way.data.remote.ZoneDto
+import com.kscho.way.data.request.ArrivalRequest
+import com.kscho.way.data.request.CompletePickupRequest
+import com.kscho.way.data.request.CreatePickupRequest
+import com.kscho.way.data.request.DriverStatusRequest
+import com.kscho.way.data.request.NotificationRequest
+import com.kscho.way.data.request.NotificationType
+import com.kscho.way.data.response.CreatePickupResponse
+import com.kscho.way.data.response.LocationDescriptionResponse
+import com.kscho.way.data.response.PassengerStatusResponse
+import com.kscho.way.data.response.PlaceResponse
+import com.kscho.way.data.response.SharingWire
+import com.kscho.way.data.response.StopZoneResponse
 import com.kscho.way.data.sms.PickupTexts
 import com.kscho.way.domain.model.geo.Geo
 import com.kscho.way.domain.model.geo.LatLng
@@ -34,25 +34,16 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** 동승자 흉내(웹 링크를 연 서연 님). 기본값은 와이어프레임 흐름이 다 보이게 맞춘 값. */
 data class MockPassengerScenario(
-  /** 문자를 받고 링크를 여는 데 걸리는 시간 */
   val opensLinkAfterMillis: Long = 4_000,
-  /** false 면 위치 공유를 거부(운전자 화면에 "위치 미공유") */
   val sharesLocation: Boolean = true,
-  /** 픽업 위치에서 북쪽(골목 안)으로 이만큼 떨어진 집에서 기다린다 */
   val homeDistanceMeters: Double = 130.0,
-  /** "곧 도착해요" 문자(또는 차 정차)를 받으면 걷기 시작 — 일부러 조금 늦게 도착해 전화 연결 제안까지 보이게 */
   val walkSpeedMetersPerSecond: Double = 1.3,
   val updateIntervalMillis: Long = 1_000,
 )
 
-/** mock 서버가 남긴 문자 사본 — 실제 문자는 차가 운전자 번호로 보낸다(PassengerMessenger). 서버엔 번호가 없어 [to] 는 이름. */
 data class MockSms(val pickupId: String, val to: String, val text: String, val atMillis: Long)
 
-/**
- * 서버 없이 시연하기 위한 [WayApi]. 메모리에만 두고, 동승자 웹 쪽 행동(링크 열기·위치 공유·걸어오기)을 흉내 낸다.
- */
 class MockWayApi(
   private val scope: CoroutineScope,
   private val clock: () -> Long = System::currentTimeMillis,
@@ -60,7 +51,7 @@ class MockWayApi(
   private val log: (String) -> Unit = {},
 ) : WayApi {
   private class Session(val id: String, val request: CreatePickupRequest, val url: String) {
-    val status = MutableStateFlow(PassengerStatusDto())
+    val status = MutableStateFlow(PassengerStatusResponse())
     val leave = CompletableDeferred<Unit>()
     var simulation: Job? = null
     var arrivedAt: Long? = null
@@ -70,24 +61,21 @@ class MockWayApi(
   private val counter = AtomicInteger(0)
   private val _messages = MutableStateFlow<List<MockSms>>(emptyList())
 
-  /** 지금까지 보낸 문자(시연 확인용). */
   val messages: StateFlow<List<MockSms>> = _messages.asStateFlow()
 
   private val hhmm = DateTimeFormatter.ofPattern("HH:mm").withZone(MockWorld.ZONE)
 
-  // ── 장소·지도
-
-  override suspend fun searchPlaces(query: String): List<PlaceDto> {
+  override suspend fun searchPlaces(query: String): List<PlaceResponse> {
     val q = query.normalized()
     if (q.isEmpty()) return emptyList()
     return MockWorld.places
       .filter { it.name.normalized().contains(q) || it.address.normalized().contains(q) }
       .sortedBy { if (it.name.normalized().startsWith(q)) 0 else 1 }
       .take(5)
-      .map { PlaceDto(it.id, it.name, it.address, it.location.dto()) }
+      .map { PlaceResponse(it.id, it.name, it.address, it.location.dto()) }
   }
 
-  override suspend fun describeLocation(location: LatLngDto): LocationDescriptionDto {
+  override suspend fun describeLocation(location: LatLngDto): LocationDescriptionResponse {
     val p = location.domain()
     val landmark = MockWorld.landmarks.minByOrNull { Geo.distanceMeters(p, it.location) }
     val toRoad = minOf(Geo.distanceToPathMeters(p, MockWorld.SINCHON_RO_NORTH), Geo.distanceToPathMeters(p, MockWorld.SINCHON_RO_SOUTH))
@@ -98,7 +86,7 @@ class MockWayApi(
       when {
         north != null && p.latitude > north -> "북쪽"
         south != null && p.latitude < south -> "남쪽"
-        else -> null // 두 차로 사이 = 도로 위
+        else -> null
       }
     val title =
       when {
@@ -114,15 +102,13 @@ class MockWayApi(
         nearRoad -> "신촌로 · 도로 $side 인도"
         else -> "큰길에서 떨어진 곳 · 골목 안일 수 있어요"
       }
-    return LocationDescriptionDto(title, detail)
+    return LocationDescriptionResponse(title, detail)
   }
 
-  override suspend fun stopZones(center: LatLngDto, radiusMeters: Int): List<ZoneDto> {
+  override suspend fun stopZones(center: LatLngDto, radiusMeters: Int): List<StopZoneResponse> {
     val c = center.domain()
     return MockWorld.zones.filter { z -> Geo.distanceToPathMeters(c, z.path) <= radiusMeters }.map { it.dto() }
   }
-
-  // ── 픽업 세션
 
   override suspend fun createPickup(request: CreatePickupRequest): CreatePickupResponse {
     val n = counter.incrementAndGet()
@@ -145,7 +131,7 @@ class MockWayApi(
     return CreatePickupResponse(id, url)
   }
 
-  override fun passengerUpdates(pickupId: String): Flow<PassengerStatusDto> = sessions[pickupId]?.status ?: emptyFlow()
+  override fun passengerUpdates(pickupId: String): Flow<PassengerStatusResponse> = sessions[pickupId]?.status ?: emptyFlow()
 
   override suspend fun reportDriver(pickupId: String, request: DriverStatusRequest) {
     log("차량 위치 보고 $pickupId 남은 ${request.remainingSeconds}s ${request.remainingMeters}m")
@@ -169,7 +155,7 @@ class MockWayApi(
   override suspend fun reportArrival(pickupId: String, request: ArrivalRequest) {
     val session = sessions[pickupId] ?: return
     session.arrivedAt = request.arrivedAtEpochMillis
-    session.leave.complete(Unit) // 차가 먼저 왔으면 그때라도 나온다
+    session.leave.complete(Unit)
     log("정차 $pickupId — 동승자 웹에 ${request.waitSeconds}초 대기 타이머")
   }
 
@@ -180,17 +166,15 @@ class MockWayApi(
     log("탑승 완료 $pickupId — 위치 공유 끝, 링크 만료 (탑승 ${request.boarded} · 대기 ${request.waitedSeconds}초)")
   }
 
-  // ── 동승자 흉내
-
   private suspend fun simulatePassenger(session: Session) {
     delay(scenario.opensLinkAfterMillis)
     val pickup = session.request.pickupPoint.domain()
     if (!scenario.sharesLocation) {
-      session.status.value = PassengerStatusDto(linkOpened = true, sharing = SharingWire.DECLINED)
+      session.status.value = PassengerStatusResponse(linkOpened = true, sharing = SharingWire.DECLINED)
       return
     }
     val home = Geo.offset(pickup, east = 0.0, north = scenario.homeDistanceMeters)
-    session.status.value = PassengerStatusDto(linkOpened = true, sharing = SharingWire.SHARING, location = home.dto())
+    session.status.value = PassengerStatusResponse(linkOpened = true, sharing = SharingWire.SHARING, location = home.dto())
     session.leave.await()
     val path = listOf(home, pickup)
     val total = Geo.pathLengthMeters(path)
@@ -217,4 +201,4 @@ internal fun LatLng.dto() = LatLngDto(latitude, longitude)
 internal fun LatLngDto.domain() = LatLng(lat, lng)
 
 private fun MockWorld.Zone.dto() =
-  ZoneDto(id, name, rule, path.map { it.dto() }, radiusMeters, days?.sorted()?.map { it.name }, startMinute, endMinute)
+  StopZoneResponse(id, name, rule, path.map { it.dto() }, radiusMeters, days?.sorted()?.map { it.name }, startMinute, endMinute)

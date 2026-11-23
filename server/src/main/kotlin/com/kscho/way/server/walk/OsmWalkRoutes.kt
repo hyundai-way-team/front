@@ -1,7 +1,7 @@
 package com.kscho.way.server.walk
 
-import com.kscho.way.data.remote.LatLngDto
-import com.kscho.way.data.remote.WalkRouteDto
+import com.kscho.way.data.dto.LatLngDto
+import com.kscho.way.data.response.WalkRouteResponse
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -19,7 +19,7 @@ import kotlinx.serialization.json.Json
 
 /** 걷는 길 물음의 답 — '길 없음'(기억해 되묻지 않음)과 '지금 못 물음'(잠시 뒤 다시)을 가른다. */
 sealed interface WalkAnswer {
-  data class Found(val route: WalkRouteDto) : WalkAnswer
+  data class Found(val route: WalkRouteResponse) : WalkAnswer
 
   /** 경로 서버가 길이 없다고 했다(OSRM NoRoute·NoSegment). */
   data object NoRoute : WalkAnswer
@@ -80,13 +80,13 @@ class OsmWalkRoutes(
       return parse(body)?.let { WalkAnswer.Found(it) } ?: WalkAnswer.Unavailable
     }
 
-    fun parse(body: String): WalkRouteDto? {
+    fun parse(body: String): WalkRouteResponse? {
       val answer = runCatching { json.decodeFromString<Answer>(body) }.getOrNull() ?: return null
       if (answer.code != "Ok") return null
       val route = answer.routes.firstOrNull() ?: return null
       val path = route.geometry.coordinates.filter { it.size >= 2 }.map { LatLngDto(it[1], it[0]) }
       if (path.size < 2) return null
-      return WalkRouteDto(path, route.distance.roundToInt(), route.duration.roundToInt())
+      return WalkRouteResponse(path, route.distance.roundToInt(), route.duration.roundToInt())
     }
 
     /** 두 점 사이 평면 거리(m) — 도심 짧은 거리라 평면으로. */

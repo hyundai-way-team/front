@@ -1,10 +1,10 @@
 package com.kscho.way.data.repository
 
-import com.kscho.way.data.contact.ContactDataSource
+import com.kscho.way.data.dataSource.local.contact.ContactLocalDataSource
+import com.kscho.way.data.dataSource.local.contact.DeviceContact
 import com.kscho.way.data.mock.MockPleosContacts
 import com.kscho.way.data.mock.MockWayApi
 import com.kscho.way.data.mock.MockWorld
-import com.kscho.way.data.remote.ContactDto
 import com.kscho.way.domain.model.base.getOrThrow
 import com.kscho.way.domain.model.contact.Contact
 import com.kscho.way.domain.model.geo.Geo
@@ -30,16 +30,15 @@ class RepositoriesTest {
 
   @Test
   fun contacts_recentPassengersComeFirstWithoutDuplicates() = runTest {
-    val device = object : ContactDataSource {
+    val device = object : ContactLocalDataSource {
       override suspend fun all() =
-        listOf(ContactDto("d1", "김민준", "010-0000-5678"), ContactDto("d2", "이서연", "010-0000-1234"), ContactDto("d3", "박지호", "01000009012"))
+        listOf(DeviceContact("d1", "김민준", "010-0000-5678"), DeviceContact("d2", "이서연", "010-0000-1234"), DeviceContact("d3", "박지호", "01000009012"))
     }
-    // 지난 픽업 동승자: 이서연(연락처에도 있음 — 번호 모양이 달라도 같은 사람) · 정하준(연락처에서 지워짐)
     val repo = ContactRepositoryImpl(device, recent = { listOf(Contact("h1", "이서연", "01000001234"), Contact("h2", "정하준", "01000007890")) })
 
     val all = repo.search("")
     assertEquals(listOf("이서연", "정하준", "김민준", "박지호"), all.map { it.name })
-    assertEquals("d2", all.first().id) // 연락처에 있으면 연락처 쪽 항목을 쓴다
+    assertEquals("d2", all.first().id)
     assertEquals(listOf("정하준"), repo.search("하준").map { it.name })
   }
 
@@ -53,10 +52,9 @@ class RepositoriesTest {
     assertTrue(bus is StopRestriction.NoStopping)
     assertEquals("절대 주정차 금지 · 상시", (bus as StopRestriction.NoStopping).zone.rule)
     assertEquals(StopRestriction.NotFound, judge(MockWorld.VILLA_ALLEY_ENTRANCE, "2026-11-09T09:50:00"))
-    // 신촌로 남쪽 차로에서 8m 바깥 길가 — 평일 07~22시만
     val curb = Geo.offset(LatLng(MockWorld.latitudeAt(MockWorld.SINCHON_RO_SOUTH, 126.944)!!, 126.944), 0.0, -8.0)
-    assertTrue(judge(curb, "2026-11-09T09:50:00") is StopRestriction.NoStopping) // 월 09:50
-    assertEquals(StopRestriction.NotFound, judge(curb, "2026-11-09T22:30:00")) // 월 22:30
-    assertEquals(StopRestriction.NotFound, judge(curb, "2026-11-14T09:50:00")) // 토
+    assertTrue(judge(curb, "2026-11-09T09:50:00") is StopRestriction.NoStopping)
+    assertEquals(StopRestriction.NotFound, judge(curb, "2026-11-09T22:30:00"))
+    assertEquals(StopRestriction.NotFound, judge(curb, "2026-11-14T09:50:00"))
   }
 }
