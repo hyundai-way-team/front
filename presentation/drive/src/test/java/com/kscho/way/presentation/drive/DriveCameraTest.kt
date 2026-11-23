@@ -1,0 +1,40 @@
+package com.kscho.way.presentation.drive
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class DriveCameraTest {
+  @Test
+  fun far_keepsTheWideDrivingZoom() {
+    assertFalse(DriveCamera.zoomedIn(wasZoomedIn = false, remainingMeters = 3_000))
+    assertFalse(DriveCamera.zoomedIn(wasZoomedIn = false, remainingMeters = DriveCamera.ZOOM_IN_REMAINING_METERS + 1))
+    assertEquals(DriveCamera.FAR_METERS_PER_DP, DriveCamera.metersPerDp(zoomedIn = false))
+  }
+
+  @Test
+  fun remainingDistanceReachesTheLine_zoomsInOnce() {
+    assertTrue(DriveCamera.zoomedIn(wasZoomedIn = false, remainingMeters = DriveCamera.ZOOM_IN_REMAINING_METERS))
+    assertEquals(DriveCamera.CLOSE_METERS_PER_DP, DriveCamera.metersPerDp(zoomedIn = true))
+    assertTrue("한 번 확대하면 1dp 가 덮는 거리가 줄어야 한다", DriveCamera.CLOSE_METERS_PER_DP < DriveCamera.FAR_METERS_PER_DP)
+  }
+
+  @Test
+  fun closerStill_doesNotZoomAgain() {
+    val at400 = DriveCamera.metersPerDp(DriveCamera.zoomedIn(wasZoomedIn = false, remainingMeters = 400))
+    val at100 = DriveCamera.metersPerDp(DriveCamera.zoomedIn(wasZoomedIn = true, remainingMeters = 100))
+    assertEquals(at400, at100)
+  }
+
+  @Test
+  fun onceZoomedIn_staysEvenIfTheRouteGetsLonger() {
+    assertTrue(DriveCamera.zoomedIn(wasZoomedIn = true, remainingMeters = 1_200))
+  }
+
+  @Test
+  fun unknownRemaining_keepsWhatItWas() {
+    assertFalse(DriveCamera.zoomedIn(wasZoomedIn = false, remainingMeters = null))
+    assertTrue(DriveCamera.zoomedIn(wasZoomedIn = true, remainingMeters = null))
+  }
+}

@@ -8,7 +8,6 @@ import com.kscho.way.domain.gateway.PassengerMessenger
 import com.kscho.way.domain.pickup.PickupCoordinator
 import com.kscho.way.domain.repository.history.PickupHistoryRepository
 import com.kscho.way.domain.repository.pickup.PickupRepository
-import com.kscho.way.ui.plan.PickupDraft
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -19,10 +18,6 @@ import kotlinx.coroutines.CoroutineScope
 @Module
 @InstallIn(SingletonComponent::class)
 object PickupModule {
-  @Provides
-  @Singleton
-  fun providePickupDraft(): PickupDraft = PickupDraft()
-
   @Provides
   @Singleton
   fun providePickupCoordinator(

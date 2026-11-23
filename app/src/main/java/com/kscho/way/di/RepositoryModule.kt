@@ -8,13 +8,13 @@ import com.kscho.way.data.repository.history.PickupHistoryRepositoryImpl
 import com.kscho.way.data.repository.pickup.PickupRepositoryImpl
 import com.kscho.way.data.repository.place.PlaceRepositoryImpl
 import com.kscho.way.data.repository.restriction.StopRestrictionRepositoryImpl
+import com.kscho.way.domain.pickup.PickupDraft
 import com.kscho.way.domain.repository.contact.ContactRepository
 import com.kscho.way.domain.repository.history.PickupHistoryRepository
 import com.kscho.way.domain.repository.pickup.PickupRepository
 import com.kscho.way.domain.repository.place.PlaceRepository
 import com.kscho.way.domain.repository.restriction.StopRestrictionRepository
 import com.kscho.way.domain.repository.vehicle.VehicleProfileRepository
-import com.kscho.way.ui.plan.PickupDraft
 import com.kscho.way.vehicle.CarLocationTracker
 import dagger.Binds
 import dagger.Module

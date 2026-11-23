@@ -11,6 +11,7 @@ import androidx.core.app.NotificationCompat
 import com.kscho.way.MainActivity
 import com.kscho.way.domain.model.contact.Contact
 import com.kscho.way.domain.model.message.PassengerText
+import com.kscho.way.presentation.component.intent.PassengerCall
 /**
  * 픽업 중 알림. 운전 관련 알림만 쓴다(Pleos 심사: 운전과 관련 없는 알림 금지).
  *
