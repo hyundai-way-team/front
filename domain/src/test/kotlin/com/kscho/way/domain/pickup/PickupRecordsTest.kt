@@ -1,14 +1,13 @@
 package com.kscho.way.domain.pickup
 
-import com.kscho.way.domain.model.BoardingSource
-import com.kscho.way.domain.model.Contact
-import com.kscho.way.domain.model.LocationDescription
-import com.kscho.way.domain.model.PickupOutcome
-import com.kscho.way.domain.model.PickupRecord
+import com.kscho.way.domain.model.contact.Contact
+import com.kscho.way.domain.model.pickup.BoardingSource
+import com.kscho.way.domain.model.pickup.PickupOutcome
+import com.kscho.way.domain.model.pickup.PickupRecord
+import com.kscho.way.domain.model.place.LocationDescription
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** 홈 '최근 픽업'은 앱에 둔다 — 기록 만들기·같은 픽업 합치기. */
 class PickupRecordsTest {
   private val outcome = PickupOutcome(boarded = true, boardedAtMillis = 900L, waitedSeconds = 38, pickupLocationChanges = 0, boardingSource = BoardingSource.DOOR)
 
@@ -32,7 +31,6 @@ class PickupRecordsTest {
     val old = record("old")
     val other = record("other", passenger = Contact("c2", "김민준", "01000005678"))
     val elsewhere = record("elsewhere", title = "현대백화점 신촌점 정문 앞")
-    // 번호 모양이 달라도 같은 사람
     val again = record("again", passenger = Fixtures.seoyeon.copy(phone = "010-0000-1234"))
 
     val result = PickupRecords.add(listOf(old, other, elsewhere), again)

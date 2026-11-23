@@ -1,6 +1,6 @@
 package com.kscho.way.data.mock
 
-import com.kscho.way.domain.model.NavEvent
+import com.kscho.way.domain.model.route.NavEvent
 import kotlin.math.abs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.toList

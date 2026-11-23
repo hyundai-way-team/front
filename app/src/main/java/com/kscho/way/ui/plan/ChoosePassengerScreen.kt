@@ -55,8 +55,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.kscho.way.R
 import com.kscho.way.contact.DeviceContacts
-import com.kscho.way.domain.model.Contact
-import com.kscho.way.domain.repository.ContactRepository
+import com.kscho.way.domain.model.contact.Contact
+import com.kscho.way.domain.repository.contact.ContactRepository
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
 import com.kscho.way.ui.common.ActionButton

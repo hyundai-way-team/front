@@ -1,12 +1,12 @@
 package com.kscho.way.data.mock
 
-import com.kscho.way.domain.model.Contact
-import com.kscho.way.domain.model.Geo
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.LocationDescription
-import com.kscho.way.domain.model.PickupPoint
-import com.kscho.way.domain.model.PickupRecord
-import com.kscho.way.domain.model.Place
+import com.kscho.way.domain.model.contact.Contact
+import com.kscho.way.domain.model.geo.Geo
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.pickup.PickupPoint
+import com.kscho.way.domain.model.pickup.PickupRecord
+import com.kscho.way.domain.model.place.LocationDescription
+import com.kscho.way.domain.model.place.Place
 import java.time.DayOfWeek
 import java.time.ZoneId
 

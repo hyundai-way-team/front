@@ -1,12 +1,11 @@
 package com.kscho.way.domain.pickup
 
-import com.kscho.way.domain.model.BoardingSource
-import com.kscho.way.domain.model.NavEvent
-import com.kscho.way.domain.model.PassengerStatus
-import com.kscho.way.domain.model.PickupOutcome
+import com.kscho.way.domain.model.passenger.PassengerStatus
+import com.kscho.way.domain.model.pickup.BoardingSource
+import com.kscho.way.domain.model.pickup.PickupOutcome
+import com.kscho.way.domain.model.route.NavEvent
 import kotlin.math.abs
 
-/** 픽업 중 일어나는 일. */
 sealed interface PickupEvent {
   data class Nav(val event: NavEvent) : PickupEvent
 
@@ -17,11 +16,9 @@ sealed interface PickupEvent {
   data class Tick(val nowMillis: Long) : PickupEvent
 }
 
-/** 규칙이 정한 할 일 — 실행(문자·음성·서버 보고)은 [PickupCoordinator] 와 앱이 한다. */
 sealed interface PickupEffect {
   data class Announce(val announcement: Announcement) : PickupEffect
 
-  /** 음성으로 전화 연결을 묻는다(대답을 듣는 질문). */
   data class OfferCall(val announcement: Announcement.CallOffer) : PickupEffect
 
   data class NotifyEtaChanged(val previousArrivalAtMillis: Long, val arrivalAtMillis: Long) : PickupEffect
@@ -35,10 +32,6 @@ sealed interface PickupEffect {
 
 data class Transition(val state: PickupState, val effects: List<PickupEffect> = emptyList())
 
-/**
- * 기획 3-5 ~ 3-10 규칙. 순수 함수라 시간·순서를 단위 테스트로 고정한다.
- * 탑승 뒤엔 아무 일도 바꾸지 않는다.
- */
 object PickupRules {
   fun reduce(state: PickupState, event: PickupEvent, nowMillis: Long): Transition {
     if (state.isBoarded) return Transition(state)
@@ -47,7 +40,6 @@ object PickupRules {
         when (val nav = event.event) {
           is NavEvent.Progress -> onProgress(state, nav, nowMillis)
           is NavEvent.Arrived -> onArrived(state, nav.atMillis)
-          // 회전 안내는 주행 중에만 보여 준다
           is NavEvent.Turn -> Transition(if (state.phase == PickupPhase.DRIVING) state.copy(nextTurn = nav.instruction) else state)
         }
       is PickupEvent.Passenger -> onPassenger(state, event.status, nowMillis)
@@ -67,14 +59,12 @@ object PickupRules {
       )
     val effects = mutableListOf<PickupEffect>()
 
-    // 3-5 ETA 가 기준 이상 바뀌면 다시 알린다
     val moved = abs(nav.arrivalAtMillis - state.notifiedArrivalAtMillis)
     if (moved >= PickupPolicy.ETA_RESEND_THRESHOLD_SECONDS * 1000L) {
       effects += PickupEffect.NotifyEtaChanged(state.notifiedArrivalAtMillis, nav.arrivalAtMillis)
       next = next.copy(notifiedArrivalAtMillis = nav.arrivalAtMillis, etaChangeNotices = state.etaChangeNotices + 1)
     }
 
-    // 3-6 도착 5분 전 "곧 도착해요" — 1회
     if (!state.arrivingSoonSent && nav.remainingSeconds <= PickupPolicy.ARRIVING_SOON_SECONDS) {
       val said = Announcement.ArrivingSoonSent(state.plan.passenger)
       effects += PickupEffect.NotifyArrivingSoon(nav.arrivalAtMillis)
@@ -92,9 +82,7 @@ object PickupRules {
 
   private fun onPassenger(state: PickupState, status: PassengerStatus, now: Long): Transition {
     val said = buildList {
-      // 3-8 링크 확인 안내 — 처음 열었을 때만
       if (!state.passenger.linkOpened && status.linkOpened) add(Announcement.LinkChecked(state.plan.passenger))
-      // 동승자 '늦어요' — 처음 눌렀을 때만
       if (!state.passenger.late && status.late) add(Announcement.PassengerLate(state.plan.passenger))
     }
     val next = state.copy(passenger = status)
@@ -106,7 +94,6 @@ object PickupRules {
     if (state.phase != PickupPhase.WAITING || state.callOffered) return Transition(state)
     val remaining = state.waitRemainingMillis(now) ?: return Transition(state)
     if (remaining > PickupPolicy.CALL_OFFER_REMAINING_SECONDS * 1000L) return Transition(state)
-    // 3-9 15초 남았는데 미탑승 → 음성으로 전화 연결 제안(1회)
     val ask = Announcement.CallOffer(state.plan.passenger)
     return Transition(
       state.copy(callOffered = true, lastAnnouncement = SpokenAnnouncement(ask, now)),
@@ -115,7 +102,6 @@ object PickupRules {
   }
 
   private fun onBoarded(state: PickupState, event: PickupEvent.Boarded, now: Long): Transition {
-    // 3-10 정차 전에 타도 그 시점에 끝낸다(예외 케이스)
     val said = Announcement.Boarded(destinationName = state.plan.destination?.name)
     val next =
       state.copy(

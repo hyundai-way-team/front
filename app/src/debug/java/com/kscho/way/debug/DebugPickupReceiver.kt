@@ -6,16 +6,16 @@ import android.content.Intent
 import android.util.Log
 import com.kscho.way.data.mock.MockWorld
 import com.kscho.way.di.ApplicationScope
-import com.kscho.way.domain.model.BoardingSource
-import com.kscho.way.domain.model.Contact
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.PickupPlan
-import com.kscho.way.domain.model.Place
+import com.kscho.way.domain.gateway.Navigator
+import com.kscho.way.domain.model.contact.Contact
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.pickup.BoardingSource
+import com.kscho.way.domain.model.pickup.PickupPlan
+import com.kscho.way.domain.model.place.Place
 import com.kscho.way.domain.pickup.PickupCoordinator
-import com.kscho.way.domain.repository.ContactRepository
-import com.kscho.way.domain.repository.VehicleProfileRepository
-import com.kscho.way.domain.usecase.CheckPickupPoint
-import com.kscho.way.domain.vehicle.Navigator
+import com.kscho.way.domain.repository.contact.ContactRepository
+import com.kscho.way.domain.repository.vehicle.VehicleProfileRepository
+import com.kscho.way.domain.usecase.pickup.CheckPickupPointUseCase
 import com.kscho.way.pickup.PickupService
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -28,7 +28,7 @@ class DebugPickupReceiver : BroadcastReceiver() {
 
   @Inject lateinit var contacts: ContactRepository
 
-  @Inject lateinit var checkPickupPoint: CheckPickupPoint
+  @Inject lateinit var checkPickupPoint: CheckPickupPointUseCase
 
   @Inject lateinit var vehicleProfile: VehicleProfileRepository
 

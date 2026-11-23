@@ -6,7 +6,7 @@ import com.kscho.way.data.remote.CreatePickupRequest
 import com.kscho.way.data.remote.NotificationRequest
 import com.kscho.way.data.remote.NotificationType
 import com.kscho.way.data.remote.SharingWire
-import com.kscho.way.domain.model.Geo
+import com.kscho.way.domain.model.geo.Geo
 import java.time.LocalDateTime
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope

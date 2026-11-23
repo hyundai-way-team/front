@@ -4,7 +4,7 @@ import com.kscho.way.data.remote.LatLngDto
 import com.kscho.way.data.remote.PassengerStatusDto
 import com.kscho.way.data.remote.SharingWire
 import com.kscho.way.data.remote.WalkRouteDto
-import com.kscho.way.domain.model.LatLng
+import com.kscho.way.domain.model.geo.LatLng
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

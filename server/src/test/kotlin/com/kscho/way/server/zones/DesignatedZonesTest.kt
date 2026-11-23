@@ -1,8 +1,8 @@
 package com.kscho.way.server.zones
 
 import com.kscho.way.data.remote.LatLngDto
-import com.kscho.way.domain.model.Geo
-import com.kscho.way.domain.model.LatLng
+import com.kscho.way.domain.model.geo.Geo
+import com.kscho.way.domain.model.geo.LatLng
 import com.kscho.way.server.kakao.PlaceFinder
 import com.kscho.way.server.kakao.Region
 import kotlinx.coroutines.test.runTest

@@ -25,8 +25,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import com.kscho.way.domain.model.Place
-import com.kscho.way.domain.repository.PlaceRepository
+import com.kscho.way.domain.model.place.Place
+import com.kscho.way.domain.repository.place.PlaceRepository
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
 import com.kscho.way.ui.common.ActionButton

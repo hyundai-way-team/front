@@ -6,14 +6,14 @@ import com.kscho.way.data.remote.PassengerStatusDto
 import com.kscho.way.data.remote.PlaceDto
 import com.kscho.way.data.remote.SharingWire
 import com.kscho.way.data.remote.ZoneDto
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.LocationDescription
-import com.kscho.way.domain.model.LocationSharing
-import com.kscho.way.domain.model.PassengerStatus
-import com.kscho.way.domain.model.Place
-import com.kscho.way.domain.model.RestrictedZone
-import com.kscho.way.domain.model.WalkRoute
-import com.kscho.way.domain.model.ZoneSchedule
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.passenger.LocationSharing
+import com.kscho.way.domain.model.passenger.PassengerStatus
+import com.kscho.way.domain.model.passenger.WalkRoute
+import com.kscho.way.domain.model.place.LocationDescription
+import com.kscho.way.domain.model.place.Place
+import com.kscho.way.domain.model.restriction.RestrictedZone
+import com.kscho.way.domain.model.restriction.ZoneSchedule
 import java.time.DayOfWeek
 
 internal fun LatLngDto.toDomain() = LatLng(lat, lng)

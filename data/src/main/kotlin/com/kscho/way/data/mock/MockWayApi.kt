@@ -15,8 +15,8 @@ import com.kscho.way.data.remote.SharingWire
 import com.kscho.way.data.remote.WayApi
 import com.kscho.way.data.remote.ZoneDto
 import com.kscho.way.data.sms.PickupTexts
-import com.kscho.way.domain.model.Geo
-import com.kscho.way.domain.model.LatLng
+import com.kscho.way.domain.model.geo.Geo
+import com.kscho.way.domain.model.geo.LatLng
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap

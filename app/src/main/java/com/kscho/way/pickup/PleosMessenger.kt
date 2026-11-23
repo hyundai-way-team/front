@@ -8,9 +8,9 @@ import android.net.Uri
 import android.util.Log
 import com.kscho.way.data.sms.PickupTexts
 import com.kscho.way.di.WayConfig
-import com.kscho.way.domain.messaging.PassengerMessenger
-import com.kscho.way.domain.messaging.PassengerText
-import com.kscho.way.domain.model.Contact
+import com.kscho.way.domain.gateway.PassengerMessenger
+import com.kscho.way.domain.model.contact.Contact
+import com.kscho.way.domain.model.message.PassengerText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

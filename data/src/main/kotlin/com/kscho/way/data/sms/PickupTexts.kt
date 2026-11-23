@@ -1,6 +1,6 @@
 package com.kscho.way.data.sms
 
-import com.kscho.way.domain.messaging.PassengerText
+import com.kscho.way.domain.model.message.PassengerText
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter

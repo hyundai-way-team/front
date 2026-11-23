@@ -2,14 +2,14 @@ package com.kscho.way.data.history
 
 import com.kscho.way.data.remote.LatLngDto
 import com.kscho.way.data.remote.PlaceDto
-import com.kscho.way.domain.model.Contact
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.LocationDescription
-import com.kscho.way.domain.model.PickupPoint
-import com.kscho.way.domain.model.PickupRecord
-import com.kscho.way.domain.model.Place
+import com.kscho.way.domain.model.contact.Contact
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.pickup.PickupPoint
+import com.kscho.way.domain.model.pickup.PickupRecord
+import com.kscho.way.domain.model.place.LocationDescription
+import com.kscho.way.domain.model.place.Place
 import com.kscho.way.domain.pickup.PickupRecords
-import com.kscho.way.domain.repository.PickupHistoryRepository
+import com.kscho.way.domain.repository.history.PickupHistoryRepository
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex

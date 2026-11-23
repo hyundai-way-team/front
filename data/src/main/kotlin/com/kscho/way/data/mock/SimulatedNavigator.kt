@@ -1,10 +1,10 @@
 package com.kscho.way.data.mock
 
-import com.kscho.way.domain.model.Geo
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.NavEvent
-import com.kscho.way.domain.model.RoutePreview
-import com.kscho.way.domain.vehicle.Navigator
+import com.kscho.way.domain.gateway.Navigator
+import com.kscho.way.domain.model.geo.Geo
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.route.NavEvent
+import com.kscho.way.domain.model.route.RoutePreview
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope

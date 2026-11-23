@@ -20,19 +20,19 @@ class JosaTest {
   @Test
   fun latinAndDigits_followHowTheyAreRead() {
     assertEquals("Starbucks로", Josa.ro("Starbucks"))
-    assertEquals("GS25로", Josa.ro("GS25")) // 오
-    assertEquals("Hotel로", Josa.ro("Hotel")) // ㄹ
-    assertEquals("Station으로", Josa.ro("Station")) // ㄴ
-    assertEquals("Museum으로", Josa.ro("Museum")) // ㅁ
-    assertEquals("3번 출구 13으로", Josa.ro("3번 출구 13")) // 삼
-    assertEquals("Bundang으로", Josa.ro("Bundang")) // ㅇ
+    assertEquals("GS25로", Josa.ro("GS25"))
+    assertEquals("Hotel로", Josa.ro("Hotel"))
+    assertEquals("Station으로", Josa.ro("Station"))
+    assertEquals("Museum으로", Josa.ro("Museum"))
+    assertEquals("3번 출구 13으로", Josa.ro("3번 출구 13"))
+    assertEquals("Bundang으로", Josa.ro("Bundang"))
     assertEquals("Parking으로", Josa.ro("Parking"))
   }
 
   @Test
   fun trailingBracketsAndPunctuation_areSkipped() {
     assertEquals("스타벅스(신촌점)으로", Josa.ro("스타벅스(신촌점)"))
-    assertEquals("CU 신촌.으로", Josa.ro("CU 신촌.")) // 촌
+    assertEquals("CU 신촌.으로", Josa.ro("CU 신촌."))
     assertEquals("", Josa.ro(""))
   }
 }

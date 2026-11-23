@@ -36,16 +36,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.kscho.way.R
-import com.kscho.way.domain.model.Geo
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.MapArea
-import com.kscho.way.domain.model.PickupZones
-import com.kscho.way.domain.model.Place
-import com.kscho.way.domain.model.RestrictedZone
-import com.kscho.way.domain.model.StopRestriction
-import com.kscho.way.domain.repository.StopRestrictionRepository
-import com.kscho.way.domain.usecase.CheckPickupPoint
-import com.kscho.way.domain.usecase.PickupPointCheck
+import com.kscho.way.domain.model.geo.Geo
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.geo.MapArea
+import com.kscho.way.domain.model.pickup.PickupPointCheck
+import com.kscho.way.domain.model.pickup.PickupZones
+import com.kscho.way.domain.model.place.Place
+import com.kscho.way.domain.model.restriction.RestrictedZone
+import com.kscho.way.domain.model.restriction.StopRestriction
+import com.kscho.way.domain.repository.restriction.StopRestrictionRepository
+import com.kscho.way.domain.usecase.pickup.CheckPickupPointUseCase
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
 import com.kscho.way.ui.common.ActionButton
@@ -93,7 +93,7 @@ data class AdjustPinUiState(
 
 @OptIn(FlowPreview::class)
 @HiltViewModel
-class AdjustPinViewModel @Inject constructor(private val check: CheckPickupPoint, private val restrictions: StopRestrictionRepository, private val draft: PickupDraft) : ViewModel() {
+class AdjustPinViewModel @Inject constructor(private val check: CheckPickupPointUseCase, private val restrictions: StopRestrictionRepository, private val draft: PickupDraft) : ViewModel() {
   val place: Place? = draft.place.value
   val passengerName: String? = draft.passenger.value?.callName
   val origin: LatLng = draft.pinStart.value ?: place?.location ?: draft.check.value?.point?.location ?: LatLng(37.5555, 126.939)

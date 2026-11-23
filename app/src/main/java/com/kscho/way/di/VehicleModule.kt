@@ -2,9 +2,9 @@ package com.kscho.way.di
 
 import android.content.Context
 import com.kscho.way.data.mock.SimulatedNavigator
-import com.kscho.way.domain.messaging.PassengerMessenger
-import com.kscho.way.domain.vehicle.BoardingSensor
-import com.kscho.way.domain.vehicle.Navigator
+import com.kscho.way.domain.gateway.BoardingSensor
+import com.kscho.way.domain.gateway.Navigator
+import com.kscho.way.domain.gateway.PassengerMessenger
 import com.kscho.way.pickup.PleosMessenger
 import com.kscho.way.vehicle.PleosBoardingSensor
 import com.kscho.way.vehicle.PleosNavigator

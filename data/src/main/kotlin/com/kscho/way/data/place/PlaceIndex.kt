@@ -1,6 +1,6 @@
 package com.kscho.way.data.place
 
-import com.kscho.way.domain.model.LatLng
+import com.kscho.way.domain.model.geo.LatLng
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos

@@ -32,10 +32,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.kscho.way.R
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.PickupRecord
-import com.kscho.way.domain.repository.PickupHistoryRepository
-import com.kscho.way.domain.vehicle.Navigator
+import com.kscho.way.domain.gateway.Navigator
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.pickup.PickupRecord
+import com.kscho.way.domain.repository.history.PickupHistoryRepository
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
 import com.kscho.way.ui.common.ActionButton

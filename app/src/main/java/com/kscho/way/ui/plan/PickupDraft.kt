@@ -1,10 +1,10 @@
 package com.kscho.way.ui.plan
 
-import com.kscho.way.domain.model.Contact
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.PickupRecord
-import com.kscho.way.domain.model.Place
-import com.kscho.way.domain.usecase.PickupPointCheck
+import com.kscho.way.domain.model.contact.Contact
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.pickup.PickupPointCheck
+import com.kscho.way.domain.model.pickup.PickupRecord
+import com.kscho.way.domain.model.place.Place
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** 출발 전 화면들(D-02 동승자 → D-03 장소 → D-04 핀 → D-05 목적지 · 확인)이 채우는 계획. 출발하면 비운다. */

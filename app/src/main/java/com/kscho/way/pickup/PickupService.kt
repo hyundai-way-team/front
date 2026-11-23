@@ -15,7 +15,7 @@ import android.os.Looper
 import android.util.Log
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import com.kscho.way.domain.model.Contact
+import com.kscho.way.domain.model.contact.Contact
 import com.kscho.way.domain.pickup.PickupCoordinator
 import com.kscho.way.domain.pickup.PickupEffect
 import com.kscho.way.domain.pickup.PickupState

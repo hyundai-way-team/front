@@ -1,7 +1,7 @@
 package com.kscho.way.data.sms
 
-import com.kscho.way.domain.messaging.PassengerText
-import com.kscho.way.domain.model.MyVehicle
+import com.kscho.way.domain.model.message.PassengerText
+import com.kscho.way.domain.model.vehicle.MyVehicle
 import java.time.LocalDateTime
 import java.time.ZoneId
 import org.junit.Assert.assertEquals

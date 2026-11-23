@@ -1,14 +1,10 @@
 package com.kscho.way.domain.pickup
 
-import com.kscho.way.domain.model.PickupOutcome
-import com.kscho.way.domain.model.PickupRecord
-
-/** 지난 픽업 기록 규칙 — 앱에 두는 홈 '최근 픽업'. */
+import com.kscho.way.domain.model.pickup.PickupOutcome
+import com.kscho.way.domain.model.pickup.PickupRecord
 object PickupRecords {
-  /** 이만큼만 남긴다. */
   const val MAX = 20
 
-  /** 끝난 픽업 1건 → 기록. */
   fun of(state: PickupState, outcome: PickupOutcome, endedAtMillis: Long): PickupRecord =
     PickupRecord(
       id = state.id,
@@ -21,7 +17,6 @@ object PickupRecords {
       endedAtMillis = endedAtMillis,
     )
 
-  /** 새 기록을 맨 앞에. 같은 사람(번호)·같은 픽업 위치(제목)는 최근 것 하나만, 최대 [max]건. */
   fun add(history: List<PickupRecord>, record: PickupRecord, max: Int = MAX): List<PickupRecord> =
     (listOf(record) + history.filterNot { it.isSamePickupAs(record) }).take(max)
 

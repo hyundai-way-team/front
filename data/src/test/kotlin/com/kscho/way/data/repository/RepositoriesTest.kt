@@ -2,17 +2,17 @@ package com.kscho.way.data.repository
 
 import com.kscho.way.data.contact.ContactDataSource
 import com.kscho.way.data.mock.MockPleosContacts
-import com.kscho.way.data.remote.ContactDto
-import com.kscho.way.domain.model.Contact
 import com.kscho.way.data.mock.MockWayApi
 import com.kscho.way.data.mock.MockWorld
-import com.kscho.way.domain.model.StopRestriction
-import kotlinx.coroutines.test.runTest
-import com.kscho.way.domain.usecase.StopRestrictionRules
-import com.kscho.way.domain.model.Geo
-import com.kscho.way.domain.model.LatLng
+import com.kscho.way.data.remote.ContactDto
+import com.kscho.way.domain.model.contact.Contact
+import com.kscho.way.domain.model.geo.Geo
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.restriction.StopRestriction
+import com.kscho.way.domain.pickup.StopRestrictionRules
 import java.time.LocalDateTime
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

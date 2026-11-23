@@ -1,6 +1,6 @@
 package com.kscho.way.pickup
 
-import com.kscho.way.domain.model.Contact
+import com.kscho.way.domain.model.contact.Contact
 import com.kscho.way.domain.pickup.Announcement
 import com.kscho.way.pickup.SpeechPlan.Step
 import org.junit.Assert.assertEquals

@@ -1,8 +1,7 @@
 package com.kscho.way.data.place
 
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.Place
-
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.place.Place
 /**
  * 장소 검색 순위 — 공백·기호·대소문자는 무시한다.
  *

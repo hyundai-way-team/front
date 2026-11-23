@@ -11,11 +11,11 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.kscho.way.domain.model.Geo
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.NavEvent
-import com.kscho.way.domain.model.RoutePreview
-import com.kscho.way.domain.vehicle.Navigator
+import com.kscho.way.domain.gateway.Navigator
+import com.kscho.way.domain.model.geo.Geo
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.route.NavEvent
+import com.kscho.way.domain.model.route.RoutePreview
 import com.kscho.way.pickup.PickupNotifications
 import com.kscho.way.pickup.WayScreen
 import java.util.concurrent.atomic.AtomicBoolean
