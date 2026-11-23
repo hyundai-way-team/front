@@ -13,24 +13,23 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import com.kscho.way.domain.pickup.PickupCoordinator
 import com.kscho.way.pickup.PickupService
-import com.kscho.way.ui.common.appContainer
 import com.kscho.way.ui.drive.DriveScreen
 import com.kscho.way.ui.home.HomeScreen
 import com.kscho.way.ui.plan.AdjustPinScreen
 import com.kscho.way.ui.plan.ChoosePassengerScreen
 import com.kscho.way.ui.plan.ConfirmDepartureScreen
+import com.kscho.way.ui.plan.PickupDraft
 import com.kscho.way.ui.plan.SearchPlaceScreen
 import com.kscho.way.ui.plan.SetDestinationScreen
 
 @Composable
-fun MainNavigation() {
-  val c = appContainer()
+fun MainNavigation(coordinator: PickupCoordinator, draft: PickupDraft) {
   val context = LocalContext.current
-  val pickup by c.coordinator.state.collectAsStateWithLifecycle()
-  val backStack = rememberNavBackStack(if (c.coordinator.state.value != null) Drive else Home)
+  val pickup by coordinator.state.collectAsStateWithLifecycle()
+  val backStack = rememberNavBackStack(if (coordinator.state.value != null) Drive else Home)
 
-  // 픽업이 밖에서 시작·종료돼도(디버그 신호·Gleo) 화면을 맞춘다
   LaunchedEffect(pickup?.id) {
     val top = backStack.lastOrNull()
     if (pickup != null && top != Drive) backStack.replaceAll(Drive)
@@ -46,11 +45,11 @@ fun MainNavigation() {
         entry<Home> {
           HomeScreen(
             onCreatePickup = {
-              c.draft.reset()
+              draft.reset()
               backStack.add(ChoosePassenger)
             },
             onReuse = { record ->
-              c.draft.reuse(record)
+              draft.reuse(record)
               backStack.add(AdjustPin)
             },
           )
@@ -61,7 +60,6 @@ fun MainNavigation() {
           AdjustPinScreen(
             onBack = { backStack.removeLastOrNull() },
             onSearchAgain = {
-              // 최근 픽업에서 바로 왔으면 장소 검색 화면이 뒤에 없다
               backStack.removeLastOrNull()
               if (backStack.lastOrNull() != SearchPlace) backStack.add(SearchPlace)
             },
@@ -84,12 +82,11 @@ fun MainNavigation() {
 }
 
 private fun NavBackStack<NavKey>.replaceAll(key: NavKey) {
-  if (size == 1 && first() == key) return // 이미 그 화면 하나뿐 — 두 번 불려도 [Home, Home] 이 되지 않게
+  if (size == 1 && first() == key) return
   add(key)
   removeAll { it != key }
 }
 
-/** 출발 직후(앱이 앞에 있을 때) 픽업 서비스를 띄운다 — 내비가 앞으로 나와도 Way 가 살아 있게. */
 private fun startPickupService(context: Context) {
   PickupService.start(context)
 }

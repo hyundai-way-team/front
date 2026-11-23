@@ -27,10 +27,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kscho.way.R
 import com.kscho.way.domain.model.LatLng
 import com.kscho.way.domain.model.PickupRecord
@@ -42,11 +42,12 @@ import com.kscho.way.ui.common.ActionButton
 import com.kscho.way.ui.common.MapFrame
 import com.kscho.way.ui.common.Panel
 import com.kscho.way.ui.common.ScreenFrame
-import com.kscho.way.ui.common.appContainer
 import com.kscho.way.ui.common.whiteCard
 import com.kscho.way.ui.map.MapPin
 import com.kscho.way.ui.map.PinKind
 import com.kscho.way.ui.map.WayMap
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -54,8 +55,8 @@ import kotlinx.coroutines.launch
 
 data class HomeUiState(val recent: List<PickupRecord> = emptyList(), val here: LatLng? = null)
 
-/** 홈 지도엔 정차 금지 구간을 그리지 않는다 — 구간은 픽업 위치를 고를 때 그 둘레만 본다. */
-class HomeViewModel(private val history: PickupHistoryRepository, private val navigator: Navigator) : ViewModel() {
+@HiltViewModel
+class HomeViewModel @Inject constructor(private val history: PickupHistoryRepository, private val navigator: Navigator) : ViewModel() {
   private val _state = MutableStateFlow(HomeUiState())
   val state = _state.asStateFlow()
 
@@ -68,16 +69,13 @@ class HomeViewModel(private val history: PickupHistoryRepository, private val na
   }
 }
 
-/** D-01 홈(와이어프레임 v2): 로고 · 최근 픽업 · (아래) 픽업 만들기 · 현재 위치 지도. */
 @Composable
 fun HomeScreen(onCreatePickup: () -> Unit, onReuse: (PickupRecord) -> Unit) {
-  val c = appContainer()
-  val vm = viewModel { HomeViewModel(c.history, c.navigator) }
+  val vm: HomeViewModel = hiltViewModel()
   val state by vm.state.collectAsStateWithLifecycle()
   LaunchedEffect(Unit) { vm.refresh() }
 
   ScreenFrame {
-    // 위: 로고 → 48 → 최근 픽업, 아래 끝: 픽업 만들기(Panel 이 위아래로 벌린다)
     Panel(width = 480.dp) {
       Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(48.dp)) {
         Image(painterResource(R.drawable.ic_logo_way), contentDescription = "WAY · Where are you")
@@ -114,7 +112,6 @@ fun HomeScreen(onCreatePickup: () -> Unit, onReuse: (PickupRecord) -> Unit) {
   }
 }
 
-/** 최근 픽업 카드 — 누르면 같은 사람·같은 위치로 다시(기획 12). */
 @Composable
 private fun RecentPickupCard(record: PickupRecord, onClick: () -> Unit) {
   val press = remember { MutableInteractionSource() }
