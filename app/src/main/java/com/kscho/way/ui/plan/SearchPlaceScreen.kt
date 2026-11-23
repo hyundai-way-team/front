@@ -31,13 +31,12 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import com.kscho.way.domain.gateway.Navigator
 import com.kscho.way.domain.model.geo.LatLng
-import com.kscho.way.domain.model.pickup.PickupZones
 import com.kscho.way.domain.model.place.Place
 import com.kscho.way.domain.model.restriction.RestrictedZone
-import com.kscho.way.domain.repository.place.PlaceRepository
-import com.kscho.way.domain.repository.restriction.StopRestrictionRepository
+import com.kscho.way.domain.usecase.place.SearchPlacesUseCase
+import com.kscho.way.domain.usecase.restriction.GetPickupZonesUseCase
+import com.kscho.way.domain.usecase.vehicle.GetCarLocationUseCase
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
 import com.kscho.way.ui.common.ActionButton
@@ -67,14 +66,14 @@ import kotlinx.coroutines.launch
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class SearchPlaceViewModel @Inject constructor(
-  private val places: PlaceRepository,
-  private val restrictions: StopRestrictionRepository,
-  private val navigator: Navigator,
+  private val searchPlaces: SearchPlacesUseCase,
+  private val getPickupZones: GetPickupZonesUseCase,
+  private val getCarLocation: GetCarLocationUseCase,
   private val draft: PickupDraft,
 ) : ViewModel() {
   val query = MutableStateFlow(draft.place.value?.name ?: "")
   val results: StateFlow<List<Place>> =
-    query.debounce(250).mapLatest { runCatching { places.search(it) }.getOrDefault(emptyList()) }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    query.debounce(250).mapLatest { runCatching { searchPlaces(it) }.getOrDefault(emptyList()) }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
   val selected: StateFlow<Place?> = draft.place
   val here = MutableStateFlow<LatLng?>(null)
   val zones = MutableStateFlow<List<RestrictedZone>>(emptyList())
@@ -83,7 +82,7 @@ class SearchPlaceViewModel @Inject constructor(
   fun load() {
     viewModelScope.launch {
       val place = draft.place.value
-      here.value = place?.location ?: runCatching { navigator.currentLocation() }.getOrNull() ?: return@launch
+      here.value = place?.location ?: runCatching { getCarLocation() }.getOrNull() ?: return@launch
       if (place != null) loadZones(place.location)
     }
   }
@@ -91,7 +90,7 @@ class SearchPlaceViewModel @Inject constructor(
   private var zonesJob: Job? = null
 
   private suspend fun loadZones(at: LatLng) {
-    zones.value = runCatching { PickupZones.around(at, restrictions.zonesNear(at, PickupZones.RADIUS_METERS)) }.getOrDefault(emptyList())
+    zones.value = runCatching { getPickupZones(at) }.getOrDefault(emptyList())
   }
 
   fun select(place: Place) {

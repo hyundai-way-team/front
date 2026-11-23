@@ -28,9 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -41,7 +39,7 @@ import com.kscho.way.domain.model.geo.LatLng
 import com.kscho.way.domain.model.pickup.PickupPlan
 import com.kscho.way.domain.model.vehicle.MyVehicle
 import com.kscho.way.domain.pickup.PickupCoordinator
-import com.kscho.way.domain.repository.vehicle.VehicleProfileRepository
+import com.kscho.way.domain.usecase.vehicle.GetMyVehicleUseCase
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
 import com.kscho.way.ui.common.ActionButton
@@ -68,7 +66,7 @@ data class ConfirmUiState(val vehicle: MyVehicle? = null, val starting: Boolean 
 
 @HiltViewModel
 class ConfirmDepartureViewModel @Inject constructor(
-  private val vehicles: VehicleProfileRepository,
+  private val getMyVehicle: GetMyVehicleUseCase,
   private val coordinator: PickupCoordinator,
   private val draft: PickupDraft,
 ) : ViewModel() {
@@ -81,7 +79,7 @@ class ConfirmDepartureViewModel @Inject constructor(
 
   init {
     viewModelScope.launch {
-      runCatching { vehicles.myVehicle() }
+      runCatching { getMyVehicle() }
         .onSuccess { v -> _state.value = _state.value.copy(vehicle = v) }
         .onFailure { _state.value = _state.value.copy(error = "내 차 정보를 불러오지 못했어요") }
     }

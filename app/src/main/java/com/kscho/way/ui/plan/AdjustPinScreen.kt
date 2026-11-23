@@ -44,8 +44,8 @@ import com.kscho.way.domain.model.pickup.PickupZones
 import com.kscho.way.domain.model.place.Place
 import com.kscho.way.domain.model.restriction.RestrictedZone
 import com.kscho.way.domain.model.restriction.StopRestriction
-import com.kscho.way.domain.repository.restriction.StopRestrictionRepository
 import com.kscho.way.domain.usecase.pickup.CheckPickupPointUseCase
+import com.kscho.way.domain.usecase.restriction.GetStopZonesUseCase
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
 import com.kscho.way.ui.common.ActionButton
@@ -93,7 +93,11 @@ data class AdjustPinUiState(
 
 @OptIn(FlowPreview::class)
 @HiltViewModel
-class AdjustPinViewModel @Inject constructor(private val check: CheckPickupPointUseCase, private val restrictions: StopRestrictionRepository, private val draft: PickupDraft) : ViewModel() {
+class AdjustPinViewModel @Inject constructor(
+  private val checkPickupPoint: CheckPickupPointUseCase,
+  private val getStopZones: GetStopZonesUseCase,
+  private val draft: PickupDraft,
+) : ViewModel() {
   val place: Place? = draft.place.value
   val passengerName: String? = draft.passenger.value?.callName
   val origin: LatLng = draft.pinStart.value ?: place?.location ?: draft.check.value?.point?.location ?: LatLng(37.5555, 126.939)
@@ -117,7 +121,7 @@ class AdjustPinViewModel @Inject constructor(private val check: CheckPickupPoint
       _state.map { it.pin }.distinctUntilChanged().debounce(350).collectLatest { pin ->
         if (_state.value.result?.point?.location == pin) return@collectLatest
         _state.update { it.copy(checking = true) }
-        val result = runCatching { check(pin, place) }
+        val result = runCatching { checkPickupPoint(pin, place) }
         _state.update { now ->
           if (now.pin != pin) return@update now
           result.fold(
@@ -134,7 +138,7 @@ class AdjustPinViewModel @Inject constructor(private val check: CheckPickupPoint
 
   private suspend fun load(area: MapArea) {
     zonesLoading.value = true
-    runCatching { restrictions.zonesNear(area.center, area.radiusMeters) }
+    runCatching { getStopZones(area.center, area.radiusMeters) }
       .onSuccess {
         loadedZones.value = it
         loadedArea = area

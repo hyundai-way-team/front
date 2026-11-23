@@ -13,9 +13,9 @@ import com.kscho.way.domain.model.pickup.BoardingSource
 import com.kscho.way.domain.model.pickup.PickupPlan
 import com.kscho.way.domain.model.place.Place
 import com.kscho.way.domain.pickup.PickupCoordinator
-import com.kscho.way.domain.repository.contact.ContactRepository
-import com.kscho.way.domain.repository.vehicle.VehicleProfileRepository
+import com.kscho.way.domain.usecase.contact.SearchContactsUseCase
 import com.kscho.way.domain.usecase.pickup.CheckPickupPointUseCase
+import com.kscho.way.domain.usecase.vehicle.GetMyVehicleUseCase
 import com.kscho.way.pickup.PickupService
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -26,11 +26,11 @@ import kotlinx.coroutines.launch
 class DebugPickupReceiver : BroadcastReceiver() {
   @Inject lateinit var coordinator: PickupCoordinator
 
-  @Inject lateinit var contacts: ContactRepository
+  @Inject lateinit var searchContacts: SearchContactsUseCase
 
   @Inject lateinit var checkPickupPoint: CheckPickupPointUseCase
 
-  @Inject lateinit var vehicleProfile: VehicleProfileRepository
+  @Inject lateinit var getMyVehicle: GetMyVehicleUseCase
 
   @Inject lateinit var navigator: Navigator
 
@@ -42,10 +42,10 @@ class DebugPickupReceiver : BroadcastReceiver() {
         val pending = goAsync()
         scope.launch {
           try {
-            val passenger = contacts.search("").firstOrNull() ?: Contact("debug-1", "이서연", "01000001234")
+            val passenger = searchContacts("").firstOrNull() ?: Contact("debug-1", "이서연", "01000001234")
             val place: Place? = null
             val check = checkPickupPoint(MockWorld.VILLA_ALLEY_ENTRANCE, place)
-            val vehicle = vehicleProfile.myVehicle()
+            val vehicle = getMyVehicle()
             if (coordinator.hasActivePickup) coordinator.finish()
             coordinator.start(PickupPlan(passenger, place, check.point, check.restriction, check.route, vehicle))
             val service = PickupService.start(context)

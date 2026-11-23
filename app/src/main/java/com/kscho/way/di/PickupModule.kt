@@ -2,14 +2,12 @@ package com.kscho.way.di
 
 import android.util.Log
 import com.kscho.way.domain.gateway.BoardingSensor
+import com.kscho.way.domain.gateway.Clock
 import com.kscho.way.domain.gateway.Navigator
 import com.kscho.way.domain.gateway.PassengerMessenger
 import com.kscho.way.domain.pickup.PickupCoordinator
 import com.kscho.way.domain.repository.history.PickupHistoryRepository
 import com.kscho.way.domain.repository.pickup.PickupRepository
-import com.kscho.way.domain.repository.place.PlaceRepository
-import com.kscho.way.domain.repository.restriction.StopRestrictionRepository
-import com.kscho.way.domain.usecase.pickup.CheckPickupPointUseCase
 import com.kscho.way.ui.plan.PickupDraft
 import dagger.Module
 import dagger.Provides
@@ -27,14 +25,6 @@ object PickupModule {
 
   @Provides
   @Singleton
-  fun provideCheckPickupPoint(
-    places: PlaceRepository,
-    restrictions: StopRestrictionRepository,
-    navigator: Navigator,
-  ): CheckPickupPointUseCase = CheckPickupPointUseCase(places, restrictions, navigator, System::currentTimeMillis)
-
-  @Provides
-  @Singleton
   fun providePickupCoordinator(
     pickups: PickupRepository,
     history: PickupHistoryRepository,
@@ -42,6 +32,7 @@ object PickupModule {
     boardingSensor: BoardingSensor,
     messenger: PassengerMessenger,
     @ApplicationScope scope: CoroutineScope,
+    clock: Clock,
   ): PickupCoordinator =
     PickupCoordinator(
       pickups,
@@ -50,7 +41,7 @@ object PickupModule {
       boardingSensor,
       messenger,
       scope,
-      System::currentTimeMillis,
+      clock::now,
       onError = { what, e -> Log.w("WayPickup", "$what 실패", e) },
     )
 }

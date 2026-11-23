@@ -56,7 +56,7 @@ import androidx.lifecycle.viewModelScope
 import com.kscho.way.R
 import com.kscho.way.contact.DeviceContacts
 import com.kscho.way.domain.model.contact.Contact
-import com.kscho.way.domain.repository.contact.ContactRepository
+import com.kscho.way.domain.usecase.contact.SearchContactsUseCase
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
 import com.kscho.way.ui.common.ActionButton
@@ -81,7 +81,7 @@ import kotlinx.coroutines.launch
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ChoosePassengerViewModel @Inject constructor(
-  private val contacts: ContactRepository,
+  private val searchContacts: SearchContactsUseCase,
   private val draft: PickupDraft,
   private val deviceContacts: DeviceContacts,
 ) : ViewModel() {
@@ -94,13 +94,13 @@ class ChoosePassengerViewModel @Inject constructor(
   val all: StateFlow<List<Contact>?> = _all.asStateFlow()
 
   fun load() {
-    viewModelScope.launch { _all.value = runCatching { contacts.search("") }.getOrDefault(emptyList()) }
+    viewModelScope.launch { _all.value = runCatching { searchContacts("") }.getOrDefault(emptyList()) }
   }
 
   val suggestions: StateFlow<List<Contact>> =
     query
       .debounce(150)
-      .mapLatest { q -> if (q.isBlank()) emptyList() else runCatching { contacts.search(q) }.getOrDefault(emptyList()) }
+      .mapLatest { q -> if (q.isBlank()) emptyList() else runCatching { searchContacts(q) }.getOrDefault(emptyList()) }
       .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
   val selected: StateFlow<Contact?> = draft.passenger
