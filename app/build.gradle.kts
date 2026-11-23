@@ -87,6 +87,8 @@ dependencies {
   implementation(libs.kotlinx.serialization.json)
 
   implementation(project(":data"))
+  implementation(libs.retrofit)
+  implementation(libs.okhttp)
   implementation(libs.kotlinx.coroutines.android)
 
   implementation(libs.maplibre.android)
@@ -100,4 +102,13 @@ dependencies {
   implementation(libs.pleos.texttospeech)
   implementation(libs.pleos.speechtotext)
   implementation(libs.pleos.fusedlocation)
+
+  constraints {
+    implementation(libs.kotlinx.serialization.core) {
+      version { strictly(libs.versions.kotlinxSerialization.get()) }
+    }
+    implementation(libs.kotlinx.serialization.json) {
+      version { strictly(libs.versions.kotlinxSerialization.get()) }
+    }
+  }
 }

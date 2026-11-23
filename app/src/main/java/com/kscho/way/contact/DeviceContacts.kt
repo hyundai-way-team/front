@@ -8,15 +8,16 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.kscho.way.data.dataSource.local.contact.ContactLocalDataSource
 import com.kscho.way.data.dataSource.local.contact.DeviceContact
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * 운전자 연락처 = 기기 연락처(ContactsContract).
- * Pleos 차량은 블루투스로 연결된 휴대폰 연락처를 기기 연락처로 받아 둔다(전화 앱이 쓰는 것과 같은 곳).
- * 즐겨찾기 먼저, 그다음 이름순. 권한(READ_CONTACTS)이 없으면 빈 목록 — 화면에서 권한을 받는다.
- */
-class DeviceContacts(private val context: Context) : ContactLocalDataSource {
+@Singleton
+class DeviceContacts @Inject constructor(
+  @param:ApplicationContext private val context: Context,
+) : ContactLocalDataSource {
   val granted: Boolean
     get() = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
 
@@ -40,7 +41,6 @@ class DeviceContacts(private val context: Context) : ContactLocalDataSource {
             while (c.moveToNext()) {
               val phone = c.getString(number)?.takeIf { it.any(Char::isDigit) } ?: continue
               val digits = phone.filter(Char::isDigit)
-              // 한 사람이 번호를 여러 개 가지면 줄마다 따로 보이되, 같은 번호는 한 번만
               if (digits in out) continue
               out[digits] = DeviceContact("c${c.getLong(id)}-$digits", c.getString(name) ?: phone, phone)
             }

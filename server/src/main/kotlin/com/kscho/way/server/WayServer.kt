@@ -1,7 +1,7 @@
 package com.kscho.way.server
 
+import com.kscho.way.data.api.WayApi
 import com.kscho.way.data.dto.LatLngDto
-import com.kscho.way.data.remote.WayApi
 import com.kscho.way.data.request.ArrivalRequest
 import com.kscho.way.data.request.CompletePickupRequest
 import com.kscho.way.data.request.CreatePickupRequest
@@ -155,7 +155,7 @@ private fun Route.driverRoutes(deps: ServerDeps) {
   val places = deps.places
 
   get("/places") { call.respond(places.searchPlaces(call.query("query"))) }
-  get("/places/reverse") { call.respond(places.describeLocation(call.latLng())) }
+  get("/places/reverse") { call.respond(call.latLng().let { places.describeLocation(it.lat, it.lng) }) }
   // 주변 정차 금지 구간 데이터만 — 지도에 그리기·정차 금지 판단은 앱이 한다(도로·장소는 앱 속 오프라인 지도)
   get("/stop-zones") {
     val at = call.latLng()

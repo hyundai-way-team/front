@@ -1,7 +1,7 @@
 package com.kscho.way
 
 import android.util.Log
-import com.kscho.way.data.place.OfflinePlaceRepository
+import com.kscho.way.data.repository.place.PlaceRepositoryImpl
 import com.kscho.way.di.ApplicationScope
 import com.kscho.way.vehicle.CarLocationTracker
 import javax.inject.Inject
@@ -10,7 +10,7 @@ import kotlinx.coroutines.launch
 
 class WayStartup @Inject constructor(
   private val carLocation: CarLocationTracker,
-  private val offlinePlaces: OfflinePlaceRepository,
+  private val offlinePlaces: PlaceRepositoryImpl,
   @param:ApplicationScope private val scope: CoroutineScope,
 ) {
   fun run() {

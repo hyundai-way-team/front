@@ -1,7 +1,7 @@
 package com.kscho.way.di
 
 import android.content.Context
-import com.kscho.way.data.mock.SimulatedNavigator
+import com.kscho.way.data.fake.SimulatedNavigator
 import com.kscho.way.domain.gateway.BoardingSensor
 import com.kscho.way.domain.gateway.Navigator
 import com.kscho.way.domain.gateway.PassengerMessenger

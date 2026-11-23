@@ -1,11 +1,11 @@
 package com.kscho.way.data.dataSource.base
 
-import com.kscho.way.data.remote.WayApiException
 import com.kscho.way.domain.model.base.ApiState
 import com.kscho.way.domain.model.base.FailState
 import java.io.IOException
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.serialization.SerializationException
+import retrofit2.HttpException
 
 const val NETWORK_ERROR_CODE = -1
 const val RESPONSE_MAPPING_ERROR_CODE = -2
@@ -17,10 +17,13 @@ suspend inline fun <T> apiCall(crossinline call: suspend () -> T): ApiState<T> =
     ApiState.Success(call())
   } catch (e: CancellationException) {
     throw e
-  } catch (e: WayApiException) {
-    ApiState.Fail(FailState(e.code, e.message.orEmpty()))
+  } catch (e: HttpException) {
+    ApiState.Fail(FailState(e.code(), e.errorMessage()))
   } catch (e: SerializationException) {
     ApiState.Fail(FailState(RESPONSE_MAPPING_ERROR_CODE, RESPONSE_MAPPING_ERROR_MESSAGE))
   } catch (e: IOException) {
     ApiState.Fail(FailState(NETWORK_ERROR_CODE, NETWORK_ERROR_MESSAGE))
   }
+
+fun HttpException.errorMessage(): String =
+  runCatching { response()?.errorBody()?.string() }.getOrNull()?.takeIf { it.isNotBlank() } ?: message()

@@ -1,7 +1,7 @@
 package com.kscho.way.server.pickup
 
 import com.kscho.way.data.dto.LatLngDto
-import com.kscho.way.data.mock.MockWorld
+import com.kscho.way.data.fake.FakeWorld
 import com.kscho.way.data.request.ArrivalRequest
 import com.kscho.way.data.request.CompletePickupRequest
 import com.kscho.way.data.request.CreatePickupRequest
@@ -102,7 +102,7 @@ class PickupHub(
   /** 참여 링크 앞부분 — 동승자가 여는 주소(로컬 시연은 http://localhost:8080) */
   private val linkBase: String,
   private val newId: () -> String = ::randomToken,
-  private val zone: ZoneId = MockWorld.ZONE,
+  private val zone: ZoneId = FakeWorld.ZONE,
   /** 만든 지 이만큼 지난 픽업은 지운다(링크도 그때 끝) — 지우지 않으면 공개 서버 메모리가 끝없이 찬다 */
   private val retentionMillis: Long = 12 * 60 * 60 * 1000L,
   /** 한꺼번에 둘 수 있는 픽업 수. 넘으면 새로 만들지 않는다 */

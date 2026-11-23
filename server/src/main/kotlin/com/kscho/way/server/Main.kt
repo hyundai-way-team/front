@@ -1,7 +1,7 @@
 package com.kscho.way.server
 
 import com.kscho.way.data.dto.LatLngDto
-import com.kscho.way.data.mock.MockWayApi
+import com.kscho.way.data.fake.FakeWayApi
 import com.kscho.way.server.kakao.KakaoLocal
 import com.kscho.way.server.pickup.PickupHub
 import com.kscho.way.server.sms.MacBrowserOpener
@@ -139,7 +139,7 @@ fun createDeps(
   designatedGate: RateGate = RateGate(60, 60_000),
 ): ServerDeps {
   // 시연 동네 데이터(장소 검색·역지오코딩·정차 금지 구간)는 앱 mock 과 같은 것을 쓴다. 지난 픽업 기록은 앱에 있다
-  val places = MockWayApi(scope, clock)
+  val places = FakeWayApi(scope, clock)
   val outbox = OutboxTextLog(clock, log = { log("[문자 사본] $it") }, onRecorded = {
       relay?.send(it.text)
       opener?.onText(it)

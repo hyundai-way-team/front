@@ -1,7 +1,7 @@
 package com.kscho.way.server.pickup
 
 import com.kscho.way.data.dto.LatLngDto
-import com.kscho.way.data.mock.MockWorld
+import com.kscho.way.data.fake.FakeWorld
 import com.kscho.way.data.request.ArrivalRequest
 import com.kscho.way.data.request.CompletePickupRequest
 import com.kscho.way.data.request.CreatePickupRequest
@@ -24,7 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PickupHubTest {
-  private fun epoch(text: String) = LocalDateTime.parse(text).atZone(MockWorld.ZONE).toInstant().toEpochMilli()
+  private fun epoch(text: String) = LocalDateTime.parse(text).atZone(FakeWorld.ZONE).toInstant().toEpochMilli()
 
   private var now = epoch("2026-11-09T09:10:00")
   private val outbox = OutboxTextLog(clock = { now })
