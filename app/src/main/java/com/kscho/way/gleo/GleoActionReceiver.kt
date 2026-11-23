@@ -3,7 +3,7 @@ package com.kscho.way.gleo
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.kscho.way.domain.model.BoardingSource
+import com.kscho.way.domain.model.pickup.BoardingSource
 import com.kscho.way.domain.pickup.PickupCoordinator
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject

@@ -1,8 +1,8 @@
 package com.kscho.way.vehicle
 
-import com.kscho.way.domain.model.Geo
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.NavEvent
+import com.kscho.way.domain.model.geo.Geo
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.route.NavEvent
 import kotlin.math.roundToInt
 
 /**

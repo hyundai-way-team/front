@@ -25,8 +25,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import com.kscho.way.domain.model.Place
-import com.kscho.way.domain.repository.PlaceRepository
+import com.kscho.way.domain.model.place.Place
+import com.kscho.way.domain.usecase.place.SearchPlacesUseCase
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
 import com.kscho.way.ui.common.ActionButton
@@ -53,10 +53,13 @@ import kotlinx.coroutines.flow.stateIn
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class SetDestinationViewModel @Inject constructor(private val places: PlaceRepository, private val draft: PickupDraft) : ViewModel() {
+class SetDestinationViewModel @Inject constructor(
+  private val searchPlaces: SearchPlacesUseCase,
+  private val draft: PickupDraft,
+) : ViewModel() {
   val query = MutableStateFlow(draft.destination.value?.name ?: "")
   val results: StateFlow<List<Place>> =
-    query.debounce(250).mapLatest { runCatching { places.search(it) }.getOrDefault(emptyList()) }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    query.debounce(250).mapLatest { runCatching { searchPlaces(it) }.getOrDefault(emptyList()) }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
   val selected: StateFlow<Place?> = draft.destination
   val pickup = draft.check.value?.point?.location
 

@@ -6,8 +6,8 @@ import ai.pleos.playground.vehicle.constant.area.DoorValue
 import ai.pleos.playground.vehicle.listener.DoorPositionListener
 import android.content.Context
 import android.util.Log
-import com.kscho.way.domain.vehicle.BoardingSensor
-import com.kscho.way.domain.vehicle.DoorBoardingDetector
+import com.kscho.way.domain.gateway.BoardingSensor
+import com.kscho.way.domain.pickup.DoorBoardingDetector
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow

@@ -44,7 +44,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,20 +55,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.kscho.way.R
-import com.kscho.way.domain.model.BoardingSource
-import com.kscho.way.domain.model.Geo
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.PickupZones
-import com.kscho.way.domain.model.RestrictedZone
-import com.kscho.way.domain.model.TurnInstruction
-import com.kscho.way.domain.model.TurnKind
+import com.kscho.way.domain.gateway.BoardingSensor
+import com.kscho.way.domain.model.geo.Geo
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.pickup.BoardingSource
+import com.kscho.way.domain.model.restriction.RestrictedZone
+import com.kscho.way.domain.model.route.TurnInstruction
+import com.kscho.way.domain.model.route.TurnKind
 import com.kscho.way.domain.pickup.Announcement
 import com.kscho.way.domain.pickup.PickupCoordinator
 import com.kscho.way.domain.pickup.PickupPhase
 import com.kscho.way.domain.pickup.PickupPolicy
 import com.kscho.way.domain.pickup.PickupState
-import com.kscho.way.domain.repository.StopRestrictionRepository
-import com.kscho.way.domain.vehicle.BoardingSensor
+import com.kscho.way.domain.usecase.restriction.GetPickupZonesUseCase
 import com.kscho.way.pickup.PassengerCall
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
@@ -91,7 +89,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 @HiltViewModel
-class DriveViewModel @Inject constructor(val coordinator: PickupCoordinator, boardingSensor: BoardingSensor, private val restrictions: StopRestrictionRepository) : ViewModel() {
+class DriveViewModel @Inject constructor(
+  val coordinator: PickupCoordinator,
+  boardingSensor: BoardingSensor,
+  private val getPickupZones: GetPickupZonesUseCase,
+) : ViewModel() {
   val state: StateFlow<PickupState?> = coordinator.state
   val doorAvailable: StateFlow<Boolean?> = boardingSensor.available
   val zones = MutableStateFlow<List<RestrictedZone>>(emptyList())
@@ -100,7 +102,7 @@ class DriveViewModel @Inject constructor(val coordinator: PickupCoordinator, boa
     coordinator.state.value?.let { s ->
       val pickup = s.plan.pickupPoint.location
       viewModelScope.launch {
-        zones.value = runCatching { PickupZones.around(pickup, restrictions.zonesNear(pickup, PickupZones.RADIUS_METERS)) }.getOrDefault(emptyList())
+        zones.value = runCatching { getPickupZones(pickup) }.getOrDefault(emptyList())
       }
     }
   }

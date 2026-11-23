@@ -2,8 +2,8 @@ package com.kscho.way.server.zones
 
 import com.kscho.way.data.remote.LatLngDto
 import com.kscho.way.data.remote.ZoneDto
-import com.kscho.way.domain.model.Geo
-import com.kscho.way.domain.model.LatLng
+import com.kscho.way.domain.model.geo.Geo
+import com.kscho.way.domain.model.geo.LatLng
 import java.io.InputStream
 import java.util.zip.GZIPInputStream
 import kotlin.math.cos

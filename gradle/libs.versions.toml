@@ -60,6 +60,7 @@ pleos-fusedlocation = { module = "ai.pleos.playground:FusedLocation", version.re
 maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
+hilt-core = { module = "com.google.dagger:hilt-core", version.ref = "hilt" }
 hilt-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hilt" }
 androidx-hilt-lifecycle-viewmodel-compose = { module = "androidx.hilt:hilt-lifecycle-viewmodel-compose", version.ref = "androidxHilt" }
 ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }

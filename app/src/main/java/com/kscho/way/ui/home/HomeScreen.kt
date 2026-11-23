@@ -32,10 +32,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.kscho.way.R
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.PickupRecord
-import com.kscho.way.domain.repository.PickupHistoryRepository
-import com.kscho.way.domain.vehicle.Navigator
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.pickup.PickupRecord
+import com.kscho.way.domain.usecase.history.GetRecentPickupsUseCase
+import com.kscho.way.domain.usecase.vehicle.GetCarLocationUseCase
 import com.kscho.way.theme.WayColors
 import com.kscho.way.theme.WayType
 import com.kscho.way.ui.common.ActionButton
@@ -56,14 +56,17 @@ import kotlinx.coroutines.launch
 data class HomeUiState(val recent: List<PickupRecord> = emptyList(), val here: LatLng? = null)
 
 @HiltViewModel
-class HomeViewModel @Inject constructor(private val history: PickupHistoryRepository, private val navigator: Navigator) : ViewModel() {
+class HomeViewModel @Inject constructor(
+  private val getRecentPickups: GetRecentPickupsUseCase,
+  private val getCarLocation: GetCarLocationUseCase,
+) : ViewModel() {
   private val _state = MutableStateFlow(HomeUiState())
   val state = _state.asStateFlow()
 
   fun refresh() {
     viewModelScope.launch {
-      runCatching { history.recent(limit = 3) }.onSuccess { list -> _state.update { it.copy(recent = list) } }
-      val here = runCatching { navigator.currentLocation() }.getOrNull() ?: return@launch
+      runCatching { getRecentPickups(limit = RECENT_LIMIT) }.onSuccess { list -> _state.update { it.copy(recent = list) } }
+      val here = runCatching { getCarLocation() }.getOrNull() ?: return@launch
       _state.update { it.copy(here = here) }
     }
   }
@@ -130,3 +133,5 @@ private fun RecentPickupCard(record: PickupRecord, onClick: () -> Unit) {
     Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(32.dp))
   }
 }
+
+private const val RECENT_LIMIT = 3

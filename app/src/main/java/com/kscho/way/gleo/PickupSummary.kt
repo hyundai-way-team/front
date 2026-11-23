@@ -1,6 +1,6 @@
 package com.kscho.way.gleo
 
-import com.kscho.way.domain.model.LocationSharing
+import com.kscho.way.domain.model.passenger.LocationSharing
 import com.kscho.way.domain.pickup.PickupPhase
 import com.kscho.way.domain.pickup.PickupState
 

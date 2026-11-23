@@ -1,6 +1,6 @@
 package com.kscho.way.data.place
 
-import com.kscho.way.domain.model.LatLng
+import com.kscho.way.domain.model.geo.LatLng
 import java.io.File
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals

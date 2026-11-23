@@ -1,8 +1,8 @@
 package com.kscho.way.data.history
 
 import com.kscho.way.data.mock.MockWorld
-import com.kscho.way.domain.model.Contact
-import com.kscho.way.domain.model.PickupRecord
+import com.kscho.way.domain.model.contact.Contact
+import com.kscho.way.domain.model.pickup.PickupRecord
 import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.test.runTest

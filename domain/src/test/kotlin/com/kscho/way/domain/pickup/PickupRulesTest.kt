@@ -1,13 +1,13 @@
 package com.kscho.way.domain.pickup
 
-import com.kscho.way.domain.model.BoardingSource
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.LocationSharing
-import com.kscho.way.domain.model.NavEvent
-import com.kscho.way.domain.model.PassengerStatus
-import com.kscho.way.domain.model.Place
-import com.kscho.way.domain.model.TurnInstruction
-import com.kscho.way.domain.model.TurnKind
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.passenger.LocationSharing
+import com.kscho.way.domain.model.passenger.PassengerStatus
+import com.kscho.way.domain.model.pickup.BoardingSource
+import com.kscho.way.domain.model.place.Place
+import com.kscho.way.domain.model.route.NavEvent
+import com.kscho.way.domain.model.route.TurnInstruction
+import com.kscho.way.domain.model.route.TurnKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -15,7 +15,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PickupRulesTest {
-  private val start = Fixtures.state() // 0 출발, 12분 뒤 도착 예정
+  private val start = Fixtures.state()
 
   private fun progress(remainingSeconds: Int, arrivalAt: Long = 12 * 60_000L) =
     PickupEvent.Nav(NavEvent.Progress(location = null, remainingSeconds = remainingSeconds, remainingMeters = remainingSeconds * 5, arrivalAtMillis = arrivalAt))
@@ -30,8 +30,6 @@ class PickupRulesTest {
     }
     return s to all
   }
-
-  // ── 3-6 도착 5분 전
 
   @Test
   fun arrivingSoon_sentOnceWhenFiveMinutesLeft() {
@@ -50,8 +48,6 @@ class PickupRulesTest {
     assertTrue(effects.isEmpty())
   }
 
-  // ── 3-5 ETA 변경
-
   @Test
   fun etaChange_resentOnlyWhenMovedByThreshold() {
     val planned = 12 * 60_000L
@@ -69,12 +65,10 @@ class PickupRulesTest {
   fun etaChange_comparesWithLastNotifiedEta() {
     val planned = 12 * 60_000L
     val later = planned + 4 * 60_000L
-    val back = planned + 2 * 60_000L // 마지막으로 알린 later 와 2분 차이 → 안 보냄
+    val back = planned + 2 * 60_000L
     val (_, effects) = reduceAll(start, progress(700, later) to 1_000L, progress(600, back) to 2_000L)
     assertEquals(1, effects.count { it is PickupEffect.NotifyEtaChanged })
   }
-
-  // ── 3-8 링크 확인 안내
 
   @Test
   fun linkChecked_announcedOnFirstOpenOnly() {
@@ -85,8 +79,6 @@ class PickupRulesTest {
     assertEquals("서연 님이 픽업 위치를 확인했어요", said.text)
     assertEquals(said, state.lastAnnouncement?.announcement)
   }
-
-  // ── 동승자 '늦어요'(와이어프레임 v2 P-03)
 
   @Test
   fun passengerLate_announcedOnceToDriver() {
@@ -104,8 +96,6 @@ class PickupRulesTest {
     val (_, effects) = reduceAll(start, both to 1_000L)
     assertEquals(2, effects.count { it is PickupEffect.Announce })
   }
-
-  // ── 3-9 정차 · 대기 타이머 · 전화 연결 제안
 
   @Test
   fun arrival_startsWaitTimerAndReportsIt() {
@@ -148,8 +138,6 @@ class PickupRulesTest {
     assertEquals(1, effects.size)
   }
 
-  // ── 3-10 탑승 확인 · 종료
-
   @Test
   fun boardingWhileWaiting_completesWithWaitedSeconds() {
     val (state, effects) =
@@ -165,19 +153,17 @@ class PickupRulesTest {
     assertEquals(38, outcome.waitedSeconds)
     assertEquals(0, outcome.pickupLocationChanges)
     assertEquals(BoardingSource.DOOR, outcome.boardingSource)
-    // D-11: 목적지가 없으면 5초 뒤 기본 내비로 잇는다
     assertEquals("탑승을 확인했어요. 5초 뒤 기본 내비로 연결할게요.", effects.filterIsInstance<PickupEffect.Announce>().single().announcement.text)
   }
 
   @Test
   fun boarding_withDestination_saysDestinationGuidanceFollows() {
-    // D-11: 목적지를 정해 뒀으면 5초 뒤 그곳으로 안내를 시작한다고 말한다(이름에 맞는 조사)
     val dest = Place("p-dest", "연남동 00 식당", "서울 마포구 연남동", LatLng(37.5620, 126.9250))
     val withDestination = start.copy(plan = start.plan.copy(destination = dest))
     val (state, effects) = reduceAll(withDestination, PickupEvent.Boarded(60_000L, BoardingSource.DOOR) to 60_000L)
     val said = "탑승을 확인했어요. 5초 뒤 연남동 00 식당으로 안내를 시작할게요."
     assertEquals(said, effects.filterIsInstance<PickupEffect.Announce>().single().announcement.text)
-    assertEquals(said, state.lastAnnouncement?.announcement?.text) // 화면 음성 배너도 같은 말
+    assertEquals(said, state.lastAnnouncement?.announcement?.text)
   }
 
   @Test
@@ -207,7 +193,7 @@ class PickupRulesTest {
     val driving = PickupRules.reduce(Fixtures.state(), PickupEvent.Nav(NavEvent.Turn(turn)), 1_000L).state
     assertEquals(turn, driving.nextTurn)
     val stopped = PickupRules.reduce(driving, PickupEvent.Nav(NavEvent.Arrived(2_000L)), 2_000L).state
-    assertEquals(null, stopped.nextTurn) // 정차 뒤엔 회전 안내를 지운다
+    assertEquals(null, stopped.nextTurn)
     val late = PickupRules.reduce(stopped, PickupEvent.Nav(NavEvent.Turn(turn)), 3_000L).state
     assertEquals(null, late.nextTurn)
   }

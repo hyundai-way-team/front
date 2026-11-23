@@ -1,8 +1,8 @@
 package com.kscho.way.vehicle
 
 import com.kscho.way.di.ApplicationScope
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.vehicle.Navigator
+import com.kscho.way.domain.gateway.Navigator
+import com.kscho.way.domain.model.geo.LatLng
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope

@@ -1,20 +1,22 @@
 package com.kscho.way.domain.pickup
 
-import com.kscho.way.domain.messaging.PassengerMessenger
-import com.kscho.way.domain.messaging.PassengerText
-import com.kscho.way.domain.model.Contact
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.NavEvent
-import com.kscho.way.domain.model.PassengerStatus
-import com.kscho.way.domain.model.PickupOutcome
-import com.kscho.way.domain.model.PickupPlan
-import com.kscho.way.domain.model.PickupRecord
-import com.kscho.way.domain.model.RoutePreview
-import com.kscho.way.domain.repository.CreatedPickup
-import com.kscho.way.domain.repository.PickupHistoryRepository
-import com.kscho.way.domain.repository.PickupRepository
-import com.kscho.way.domain.vehicle.BoardingSensor
-import com.kscho.way.domain.vehicle.Navigator
+import com.kscho.way.domain.gateway.BoardingSensor
+import com.kscho.way.domain.gateway.Navigator
+import com.kscho.way.domain.gateway.PassengerMessenger
+import com.kscho.way.domain.model.base.ApiState
+import com.kscho.way.domain.model.base.FailState
+import com.kscho.way.domain.model.contact.Contact
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.message.PassengerText
+import com.kscho.way.domain.model.passenger.PassengerStatus
+import com.kscho.way.domain.model.pickup.CreatedPickup
+import com.kscho.way.domain.model.pickup.PickupOutcome
+import com.kscho.way.domain.model.pickup.PickupPlan
+import com.kscho.way.domain.model.pickup.PickupRecord
+import com.kscho.way.domain.model.route.NavEvent
+import com.kscho.way.domain.model.route.RoutePreview
+import com.kscho.way.domain.repository.history.PickupHistoryRepository
+import com.kscho.way.domain.repository.pickup.PickupRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,35 +73,43 @@ class FakePickupRepository : PickupRepository {
   val completed = mutableListOf<PickupOutcome>()
   val driverReports = mutableListOf<Int>()
   val driverLocations = mutableListOf<LatLng?>()
-  var failCreate: Exception? = null
+  var failCreate: FailState? = null
+  var failReports: FailState? = null
 
-  override suspend fun create(plan: PickupPlan, arrivalAtMillis: Long): CreatedPickup {
-    failCreate?.let { throw it }
+  override suspend fun create(plan: PickupPlan, arrivalAtMillis: Long): ApiState<CreatedPickup> {
+    failCreate?.let { return ApiState.Fail(it) }
     created += plan to arrivalAtMillis
-    return CreatedPickup("p${created.size}", "https://way.mock/p/${created.size}")
+    return ApiState.Success(CreatedPickup("p${created.size}", "https://way.mock/p/${created.size}"))
   }
+
+  private fun reported(): ApiState<Unit> = failReports?.let { ApiState.Fail(it) } ?: ApiState.Success(Unit)
 
   override fun passengerStatus(pickupId: String): Flow<PassengerStatus> = passenger
 
-  override suspend fun reportDriver(pickupId: String, location: LatLng?, remainingSeconds: Int, remainingMeters: Int, arrivalAtMillis: Long) {
+  override suspend fun reportDriver(pickupId: String, location: LatLng?, remainingSeconds: Int, remainingMeters: Int, arrivalAtMillis: Long): ApiState<Unit> {
     driverReports += remainingSeconds
     driverLocations += location
+    return reported()
   }
 
-  override suspend fun notifyEtaChanged(pickupId: String, previousArrivalAtMillis: Long, arrivalAtMillis: Long) {
+  override suspend fun notifyEtaChanged(pickupId: String, previousArrivalAtMillis: Long, arrivalAtMillis: Long): ApiState<Unit> {
     etaChanges += previousArrivalAtMillis to arrivalAtMillis
+    return reported()
   }
 
-  override suspend fun notifyArrivingSoon(pickupId: String, arrivalAtMillis: Long) {
+  override suspend fun notifyArrivingSoon(pickupId: String, arrivalAtMillis: Long): ApiState<Unit> {
     arrivingSoon += arrivalAtMillis
+    return reported()
   }
 
-  override suspend fun reportArrived(pickupId: String, arrivedAtMillis: Long, waitSeconds: Int) {
+  override suspend fun reportArrived(pickupId: String, arrivedAtMillis: Long, waitSeconds: Int): ApiState<Unit> {
     arrivals += arrivedAtMillis
+    return reported()
   }
 
-  override suspend fun complete(pickupId: String, outcome: PickupOutcome) {
+  override suspend fun complete(pickupId: String, outcome: PickupOutcome): ApiState<Unit> {
     completed += outcome
+    return reported()
   }
 }
 

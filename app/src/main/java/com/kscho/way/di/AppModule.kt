@@ -1,5 +1,6 @@
 package com.kscho.way.di
 
+import com.kscho.way.domain.gateway.Clock
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -16,4 +17,8 @@ object AppModule {
   @Singleton
   @ApplicationScope
   fun provideApplicationScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+  @Provides
+  @Singleton
+  fun provideClock(): Clock = Clock { System.currentTimeMillis() }
 }

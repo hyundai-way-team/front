@@ -1,9 +1,9 @@
 package com.kscho.way.data.place
 
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.LocationDescription
-import com.kscho.way.domain.model.Place
-import com.kscho.way.domain.repository.PlaceRepository
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.place.LocationDescription
+import com.kscho.way.domain.model.place.Place
+import com.kscho.way.domain.repository.place.PlaceRepository
 import java.io.InputStream
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers

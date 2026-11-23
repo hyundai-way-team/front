@@ -1,9 +1,8 @@
 package com.kscho.way.vehicle
 
 import android.content.Context
-import com.kscho.way.domain.model.MyVehicle
-import com.kscho.way.domain.repository.VehicleProfileRepository
-
+import com.kscho.way.domain.model.vehicle.MyVehicle
+import com.kscho.way.domain.repository.vehicle.VehicleProfileRepository
 /**
  * 운전자 이름 · 차량 설명 · 번호판 — 앱에 둔다(서버에 묻지 않는다).
  *

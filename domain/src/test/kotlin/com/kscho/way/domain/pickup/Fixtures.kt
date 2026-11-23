@@ -1,14 +1,13 @@
 package com.kscho.way.domain.pickup
 
-import com.kscho.way.domain.model.Contact
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.LocationDescription
-import com.kscho.way.domain.model.MyVehicle
-import com.kscho.way.domain.model.PickupPlan
-import com.kscho.way.domain.model.PickupPoint
-import com.kscho.way.domain.model.RoutePreview
-import com.kscho.way.domain.model.StopRestriction
-
+import com.kscho.way.domain.model.contact.Contact
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.pickup.PickupPlan
+import com.kscho.way.domain.model.pickup.PickupPoint
+import com.kscho.way.domain.model.place.LocationDescription
+import com.kscho.way.domain.model.restriction.StopRestriction
+import com.kscho.way.domain.model.route.RoutePreview
+import com.kscho.way.domain.model.vehicle.MyVehicle
 object Fixtures {
   val seoyeon = Contact("c1", "이서연", "01000001234")
   val pickupLocation = LatLng(37.55545, 126.93900)

@@ -1,11 +1,11 @@
 package com.kscho.way.debug
 
 import com.kscho.way.data.mock.SimulatedNavigator
-import com.kscho.way.domain.model.Geo
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.NavEvent
-import com.kscho.way.domain.model.RoutePreview
-import com.kscho.way.domain.vehicle.Navigator
+import com.kscho.way.domain.gateway.Navigator
+import com.kscho.way.domain.model.geo.Geo
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.route.NavEvent
+import com.kscho.way.domain.model.route.RoutePreview
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow

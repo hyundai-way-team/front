@@ -1,7 +1,7 @@
 package com.kscho.way.data.place
 
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.LocationDescription
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.place.LocationDescription
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sqrt

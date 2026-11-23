@@ -1,6 +1,7 @@
 package com.kscho.way.data.repository
 
 import com.kscho.way.data.contact.ContactDataSource
+import com.kscho.way.data.dataSource.base.apiCall
 import com.kscho.way.data.remote.ArrivalRequest
 import com.kscho.way.data.remote.CompletePickupRequest
 import com.kscho.way.data.remote.CreatePickupRequest
@@ -8,29 +9,26 @@ import com.kscho.way.data.remote.DriverStatusRequest
 import com.kscho.way.data.remote.NotificationRequest
 import com.kscho.way.data.remote.NotificationType
 import com.kscho.way.data.remote.WayApi
-import com.kscho.way.domain.model.CallNames
-import com.kscho.way.domain.model.Contact
-import com.kscho.way.domain.model.LatLng
-import com.kscho.way.domain.model.LocationDescription
-import com.kscho.way.domain.model.PassengerStatus
-import com.kscho.way.domain.model.PickupOutcome
-import com.kscho.way.domain.model.PickupPlan
-import com.kscho.way.domain.model.Place
-import com.kscho.way.domain.model.RestrictedZone
-import com.kscho.way.domain.repository.ContactRepository
-import com.kscho.way.domain.repository.CreatedPickup
-import com.kscho.way.domain.repository.PickupRepository
-import com.kscho.way.domain.repository.PlaceRepository
-import com.kscho.way.domain.repository.StopRestrictionRepository
+import com.kscho.way.domain.model.base.ApiState
+import com.kscho.way.domain.model.base.map
+import com.kscho.way.domain.model.contact.CallNames
+import com.kscho.way.domain.model.contact.Contact
+import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.passenger.PassengerStatus
+import com.kscho.way.domain.model.pickup.CreatedPickup
+import com.kscho.way.domain.model.pickup.PickupOutcome
+import com.kscho.way.domain.model.pickup.PickupPlan
+import com.kscho.way.domain.model.place.LocationDescription
+import com.kscho.way.domain.model.place.Place
+import com.kscho.way.domain.model.restriction.RestrictedZone
+import com.kscho.way.domain.repository.contact.ContactRepository
+import com.kscho.way.domain.repository.pickup.PickupRepository
+import com.kscho.way.domain.repository.place.PlaceRepository
+import com.kscho.way.domain.repository.restriction.StopRestrictionRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
-/**
- * 연락처 = 차에 연결된 휴대폰 연락처([source]) + 지난 픽업 동승자([recent]).
- * '최근 및 저장된 연락처' 순서: 최근에 태운 사람 먼저(연락처에 있으면 그 항목으로), 그다음 연락처 순서 그대로.
- * 같은 사람은 번호 숫자로 가린다(모양이 "010-0000-1234"·"01000001234"로 달라도 하나).
- */
 class ContactRepositoryImpl(
   private val source: ContactDataSource,
   private val recent: suspend () -> List<Contact> = { emptyList() },
@@ -54,16 +52,15 @@ class PlaceRepositoryImpl(private val api: WayApi) : PlaceRepository {
   override suspend fun describe(location: LatLng): LocationDescription = api.describeLocation(location.toDto()).toDomain()
 }
 
-/** 정차 금지 구간 데이터(서버). 지도에 그리기·판단(StopRestrictionRules)은 앱이 한다. */
 class StopRestrictionRepositoryImpl(private val api: WayApi) : StopRestrictionRepository {
-  override suspend fun zonesNear(location: LatLng, radiusMeters: Int): List<RestrictedZone> =
-    api.stopZones(location.toDto(), radiusMeters).map { it.toDomain() }
+  override suspend fun zonesNear(location: LatLng, radiusMeters: Int): ApiState<List<RestrictedZone>> =
+    apiCall { api.stopZones(location.toDto(), radiusMeters).map { it.toDomain() } }
 }
 
 class PickupRepositoryImpl(private val api: WayApi) : PickupRepository {
-  override suspend fun create(plan: PickupPlan, arrivalAtMillis: Long): CreatedPickup {
+  override suspend fun create(plan: PickupPlan, arrivalAtMillis: Long): ApiState<CreatedPickup> {
     val point = plan.pickupPoint
-    val response =
+    return apiCall {
       api.createPickup(
         CreatePickupRequest(
           passengerName = plan.passenger.name,
@@ -79,29 +76,29 @@ class PickupRepositoryImpl(private val api: WayApi) : PickupRepository {
           driverCallName = CallNames.of(plan.vehicle.driverName),
         )
       )
-    return CreatedPickup(response.pickupId, response.shareUrl)
+    }.map { CreatedPickup(it.pickupId, it.shareUrl) }
   }
 
   override fun passengerStatus(pickupId: String): Flow<PassengerStatus> =
     api.passengerUpdates(pickupId).map { it.toDomain() }.distinctUntilChanged()
 
-  override suspend fun reportDriver(pickupId: String, location: LatLng?, remainingSeconds: Int, remainingMeters: Int, arrivalAtMillis: Long) {
+  override suspend fun reportDriver(pickupId: String, location: LatLng?, remainingSeconds: Int, remainingMeters: Int, arrivalAtMillis: Long): ApiState<Unit> = apiCall {
     api.reportDriver(pickupId, DriverStatusRequest(location?.toDto(), remainingSeconds, remainingMeters, arrivalAtMillis))
   }
 
-  override suspend fun notifyEtaChanged(pickupId: String, previousArrivalAtMillis: Long, arrivalAtMillis: Long) {
+  override suspend fun notifyEtaChanged(pickupId: String, previousArrivalAtMillis: Long, arrivalAtMillis: Long): ApiState<Unit> = apiCall {
     api.sendNotification(pickupId, NotificationRequest(NotificationType.ETA_CHANGED, arrivalAtMillis, previousArrivalAtMillis))
   }
 
-  override suspend fun notifyArrivingSoon(pickupId: String, arrivalAtMillis: Long) {
+  override suspend fun notifyArrivingSoon(pickupId: String, arrivalAtMillis: Long): ApiState<Unit> = apiCall {
     api.sendNotification(pickupId, NotificationRequest(NotificationType.ARRIVING_SOON, arrivalAtMillis))
   }
 
-  override suspend fun reportArrived(pickupId: String, arrivedAtMillis: Long, waitSeconds: Int) {
+  override suspend fun reportArrived(pickupId: String, arrivedAtMillis: Long, waitSeconds: Int): ApiState<Unit> = apiCall {
     api.reportArrival(pickupId, ArrivalRequest(arrivedAtMillis, waitSeconds))
   }
 
-  override suspend fun complete(pickupId: String, outcome: PickupOutcome) {
+  override suspend fun complete(pickupId: String, outcome: PickupOutcome): ApiState<Unit> = apiCall {
     api.completePickup(
       pickupId,
       CompletePickupRequest(
