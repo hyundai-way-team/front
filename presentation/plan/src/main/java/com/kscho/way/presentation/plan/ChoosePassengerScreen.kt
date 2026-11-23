@@ -213,7 +213,6 @@ fun ChoosePassengerScreen(
   }
 }
 
-
 @Composable
 private fun ContactCard(contact: Contact, on: Boolean, onClick: () -> Unit) {
   val shape = RoundedCornerShape(16.dp)

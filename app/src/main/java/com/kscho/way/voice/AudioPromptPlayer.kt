@@ -14,15 +14,6 @@ import android.util.Log
 import java.io.IOException
 import java.util.Locale
 
-/**
- * 질문을 소리로 들려준다.
- * 1. 녹음 파일 assets/voice/<assetName>.{ogg,m4a,mp3,wav} 이 있으면 그것을 재생한다.
- *    Pleos 안내 음성 가이드대로 파일 앞에 150~200ms 묵음을 넣어 녹음한다(첫 음절 잘림 방지).
- * 2. 없으면 Pleos TTS(온디바이스)로 읽는다. 에뮬레이터에선 TTS 가 onStart 뒤 멈추므로(11/08 확인)
- *    시연은 녹음 파일로 한다. 끝 신호가 안 오면 글자 수로 잡은 시간 뒤 끝난 것으로 본다.
- *
- * 모든 콜백은 메인 스레드에서 부른다.
- */
 class AudioPromptPlayer(
   context: Context,
   private val attributes: AudioAttributes,
@@ -51,7 +42,6 @@ class AudioPromptPlayer(
     stopOutputs()
   }
 
-  /** 서비스가 끝날 때. */
   fun release() {
     stop()
     tts?.let { runCatching { it.removeEventListener(ttsEvents) }; runCatching { it.release() } }
@@ -75,8 +65,6 @@ class AudioPromptPlayer(
     if (ttsStarted) runCatching { tts?.stop() }
     ttsStarted = false
   }
-
-  // ── 녹음 파일
 
   private fun findAsset(name: String): String? {
     val files = runCatching { app.assets.list(ASSET_DIR) }.getOrNull().orEmpty().toSet()
@@ -104,8 +92,6 @@ class AudioPromptPlayer(
     }
   }
 
-  // ── Pleos TTS
-
   private fun speak(text: String) {
     when (ttsState) {
       TtsState.READY -> startSpeaking(text)
@@ -126,7 +112,6 @@ class AudioPromptPlayer(
       object : OnInitializeListener {
         override fun onSuccess() {
           main.post {
-            // addEventListener 는 initialize 성공 뒤에만 된다(전에 부르면 UninitializedPropertyAccessException)
             engine.addEventListener(ttsEvents)
             engine.setLocale(Locale.KOREA)
             engine.setAudioAttributes(attributes)

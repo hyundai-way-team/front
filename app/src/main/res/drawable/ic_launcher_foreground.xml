@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 앱 아이콘 앞 그림: [WAY] Logo.svg(129.75 정사각) 의 흰 핀 · 양쪽 날개. 로고 정사각을 아이콘의 보이는 72dp(108 가운데)에 맞춤 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"

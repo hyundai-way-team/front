@@ -10,7 +10,6 @@ class PickupPromptsTest {
 
   @Test
   fun callOffer_usesWireframeWordingAndRecordedFileName() {
-    // 기획 3-8 · 와이어프레임 D-09: "서연 님이 아직 도착하지 않았어요. 전화를 걸까요?"
     val prompt = PickupPrompts.callOffer(seoyeon)
     assertEquals("서연 님이 아직 도착하지 않았어요. 전화를 걸까요?", prompt.text)
     assertEquals("call_offer", prompt.assetName)
