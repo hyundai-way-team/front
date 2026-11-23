@@ -1,6 +1,7 @@
 package com.kscho.way.domain.usecase.pickup
 
 import com.kscho.way.domain.gateway.Clock
+import com.kscho.way.domain.model.base.ApiState
 import com.kscho.way.domain.model.geo.Geo
 import com.kscho.way.domain.model.geo.LatLng
 import com.kscho.way.domain.model.place.LocationDescription
@@ -32,9 +33,9 @@ class CheckPickupPointUseCaseTest {
 
   private fun restrictions(vararg zones: RestrictedZone) =
     object : StopRestrictionRepository {
-      override suspend fun zonesNear(location: LatLng, radiusMeters: Int): List<RestrictedZone> {
+      override suspend fun zonesNear(location: LatLng, radiusMeters: Int): ApiState<List<RestrictedZone>> {
         asked += location
-        return zones.toList()
+        return ApiState.Success(zones.toList())
       }
     }
 

@@ -3,6 +3,9 @@ package com.kscho.way.domain.pickup
 import com.kscho.way.domain.gateway.BoardingSensor
 import com.kscho.way.domain.gateway.Navigator
 import com.kscho.way.domain.gateway.PassengerMessenger
+import com.kscho.way.domain.model.base.ApiFailureException
+import com.kscho.way.domain.model.base.ApiState
+import com.kscho.way.domain.model.base.getOrThrow
 import com.kscho.way.domain.model.message.PassengerText
 import com.kscho.way.domain.model.pickup.BoardingSource
 import com.kscho.way.domain.model.pickup.PickupPlan
@@ -70,12 +73,13 @@ class PickupCoordinator(
     val now = clock()
     val arrival = now + plan.route.durationSeconds * 1000L
     val created =
-      try {
-        pickups.create(plan, arrival)
-      } catch (e: Exception) {
-        navigator.stopGuidance()
-        stopListening()
-        throw e
+      when (val result = pickups.create(plan, arrival)) {
+        is ApiState.Success -> result.data
+        is ApiState.Fail -> {
+          navigator.stopGuidance()
+          stopListening()
+          throw ApiFailureException(result.failState)
+        }
       }
     val initial = PickupState(id = created.id, shareUrl = created.shareUrl, plan = plan, startedAtMillis = now, arrivalAtMillis = arrival)
     lastDriverReportAt = null
@@ -216,7 +220,7 @@ class PickupCoordinator(
     lastDriverReportAt = now
     val remainingSeconds = state.remainingSeconds ?: return
     val remainingMeters = state.remainingMeters ?: return
-    send("차량 위치 보고") { pickups.reportDriver(state.id, state.carLocation, remainingSeconds, remainingMeters, state.arrivalAtMillis) }
+    report("차량 위치 보고") { pickups.reportDriver(state.id, state.carLocation, remainingSeconds, remainingMeters, state.arrivalAtMillis) }
   }
 
   private fun run(state: PickupState, effect: PickupEffect) {
@@ -225,20 +229,20 @@ class PickupCoordinator(
       is PickupEffect.OfferCall -> _effects.tryEmit(effect)
       is PickupEffect.NotifyEtaChanged -> {
         text("ETA 변경 문자", state, PassengerText.EtaChanged(state.shareUrl, effect.previousArrivalAtMillis, effect.arrivalAtMillis))
-        send("ETA 변경 알림") { pickups.notifyEtaChanged(state.id, effect.previousArrivalAtMillis, effect.arrivalAtMillis) }
+        report("ETA 변경 알림") { pickups.notifyEtaChanged(state.id, effect.previousArrivalAtMillis, effect.arrivalAtMillis) }
       }
       is PickupEffect.NotifyArrivingSoon -> {
         text("곧 도착 문자", state, PassengerText.ArrivingSoon(state.shareUrl))
-        send("곧 도착 알림") { pickups.notifyArrivingSoon(state.id, effect.arrivalAtMillis) }
+        report("곧 도착 알림") { pickups.notifyArrivingSoon(state.id, effect.arrivalAtMillis) }
       }
       is PickupEffect.ReportArrived -> {
         lastDriverReportAt = effect.atMillis
         val last = state.carLocation ?: state.plan.pickupPoint.location
-        send("정차 위치 보고") { pickups.reportDriver(state.id, last, 0, 0, effect.atMillis) }
-        send("정차 보고") { pickups.reportArrived(state.id, effect.atMillis, PickupPolicy.WAIT_SECONDS) }
+        report("정차 위치 보고") { pickups.reportDriver(state.id, last, 0, 0, effect.atMillis) }
+        report("정차 보고") { pickups.reportArrived(state.id, effect.atMillis, PickupPolicy.WAIT_SECONDS) }
       }
       is PickupEffect.Complete -> {
-        send("탑승 완료 보고") { pickups.complete(state.id, effect.outcome) }
+        report("탑승 완료 보고") { pickups.complete(state.id, effect.outcome) }
         val record = PickupRecords.of(state, effect.outcome, clock())
         send("픽업 기록 저장") { history.save(record) }
       }
@@ -246,6 +250,8 @@ class PickupCoordinator(
   }
 
   private fun text(what: String, state: PickupState, text: PassengerText) = send(what) { messenger.send(state.plan.passenger, text) }
+
+  private fun report(what: String, block: suspend () -> ApiState<Unit>) = send(what) { block().getOrThrow() }
 
   private fun send(what: String, block: suspend () -> Unit) {
     scope.launch {

@@ -36,6 +36,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.kscho.way.R
+import com.kscho.way.domain.model.base.ApiState
 import com.kscho.way.domain.model.geo.Geo
 import com.kscho.way.domain.model.geo.LatLng
 import com.kscho.way.domain.model.geo.MapArea
@@ -138,12 +139,13 @@ class AdjustPinViewModel @Inject constructor(
 
   private suspend fun load(area: MapArea) {
     zonesLoading.value = true
-    runCatching { getStopZones(area.center, area.radiusMeters) }
-      .onSuccess {
-        loadedZones.value = it
+    when (val result = getStopZones(area.center, area.radiusMeters)) {
+      is ApiState.Success -> {
+        loadedZones.value = result.data
         loadedArea = area
       }
-      .onFailure { Log.w("WayZones", "구간을 못 받았어요", it) }
+      is ApiState.Fail -> Log.w("WayZones", "구간을 못 받았어요: ${result.failState.message}")
+    }
     zonesLoading.value = false
   }
 

@@ -5,6 +5,7 @@ import com.kscho.way.data.mock.MockPleosContacts
 import com.kscho.way.data.mock.MockWayApi
 import com.kscho.way.data.mock.MockWorld
 import com.kscho.way.data.remote.ContactDto
+import com.kscho.way.domain.model.base.getOrThrow
 import com.kscho.way.domain.model.contact.Contact
 import com.kscho.way.domain.model.geo.Geo
 import com.kscho.way.domain.model.geo.LatLng
@@ -46,7 +47,7 @@ class RepositoriesTest {
   fun restriction_demoNeighborhood_judgedByAppRules() = runTest {
     val repo = StopRestrictionRepositoryImpl(MockWayApi(backgroundScope))
     fun judge(at: LatLng, time: String) =
-      StopRestrictionRules.check(at, LocalDateTime.parse(time).atZone(StopRestrictionRules.KOREA).toInstant().toEpochMilli(), runBlocking { repo.zonesNear(at, 100) })
+      StopRestrictionRules.check(at, LocalDateTime.parse(time).atZone(StopRestrictionRules.KOREA).toInstant().toEpochMilli(), runBlocking { repo.zonesNear(at, 100).getOrThrow() })
 
     val bus = judge(MockWorld.BUS_STOP, "2026-11-14T23:30:00")
     assertTrue(bus is StopRestriction.NoStopping)

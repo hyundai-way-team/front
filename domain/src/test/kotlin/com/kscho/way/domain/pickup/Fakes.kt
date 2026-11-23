@@ -3,6 +3,8 @@ package com.kscho.way.domain.pickup
 import com.kscho.way.domain.gateway.BoardingSensor
 import com.kscho.way.domain.gateway.Navigator
 import com.kscho.way.domain.gateway.PassengerMessenger
+import com.kscho.way.domain.model.base.ApiState
+import com.kscho.way.domain.model.base.FailState
 import com.kscho.way.domain.model.contact.Contact
 import com.kscho.way.domain.model.geo.LatLng
 import com.kscho.way.domain.model.message.PassengerText
@@ -71,35 +73,43 @@ class FakePickupRepository : PickupRepository {
   val completed = mutableListOf<PickupOutcome>()
   val driverReports = mutableListOf<Int>()
   val driverLocations = mutableListOf<LatLng?>()
-  var failCreate: Exception? = null
+  var failCreate: FailState? = null
+  var failReports: FailState? = null
 
-  override suspend fun create(plan: PickupPlan, arrivalAtMillis: Long): CreatedPickup {
-    failCreate?.let { throw it }
+  override suspend fun create(plan: PickupPlan, arrivalAtMillis: Long): ApiState<CreatedPickup> {
+    failCreate?.let { return ApiState.Fail(it) }
     created += plan to arrivalAtMillis
-    return CreatedPickup("p${created.size}", "https://way.mock/p/${created.size}")
+    return ApiState.Success(CreatedPickup("p${created.size}", "https://way.mock/p/${created.size}"))
   }
+
+  private fun reported(): ApiState<Unit> = failReports?.let { ApiState.Fail(it) } ?: ApiState.Success(Unit)
 
   override fun passengerStatus(pickupId: String): Flow<PassengerStatus> = passenger
 
-  override suspend fun reportDriver(pickupId: String, location: LatLng?, remainingSeconds: Int, remainingMeters: Int, arrivalAtMillis: Long) {
+  override suspend fun reportDriver(pickupId: String, location: LatLng?, remainingSeconds: Int, remainingMeters: Int, arrivalAtMillis: Long): ApiState<Unit> {
     driverReports += remainingSeconds
     driverLocations += location
+    return reported()
   }
 
-  override suspend fun notifyEtaChanged(pickupId: String, previousArrivalAtMillis: Long, arrivalAtMillis: Long) {
+  override suspend fun notifyEtaChanged(pickupId: String, previousArrivalAtMillis: Long, arrivalAtMillis: Long): ApiState<Unit> {
     etaChanges += previousArrivalAtMillis to arrivalAtMillis
+    return reported()
   }
 
-  override suspend fun notifyArrivingSoon(pickupId: String, arrivalAtMillis: Long) {
+  override suspend fun notifyArrivingSoon(pickupId: String, arrivalAtMillis: Long): ApiState<Unit> {
     arrivingSoon += arrivalAtMillis
+    return reported()
   }
 
-  override suspend fun reportArrived(pickupId: String, arrivedAtMillis: Long, waitSeconds: Int) {
+  override suspend fun reportArrived(pickupId: String, arrivedAtMillis: Long, waitSeconds: Int): ApiState<Unit> {
     arrivals += arrivedAtMillis
+    return reported()
   }
 
-  override suspend fun complete(pickupId: String, outcome: PickupOutcome) {
+  override suspend fun complete(pickupId: String, outcome: PickupOutcome): ApiState<Unit> {
     completed += outcome
+    return reported()
   }
 }
 

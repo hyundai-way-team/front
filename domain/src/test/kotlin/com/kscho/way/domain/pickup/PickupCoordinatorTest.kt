@@ -1,5 +1,7 @@
 package com.kscho.way.domain.pickup
 
+import com.kscho.way.domain.model.base.ApiFailureException
+import com.kscho.way.domain.model.base.FailState
 import com.kscho.way.domain.model.geo.LatLng
 import com.kscho.way.domain.model.message.PassengerText
 import com.kscho.way.domain.model.passenger.LocationSharing
@@ -30,8 +32,10 @@ class PickupCoordinatorTest {
   private val door = FakeBoardingSensor()
   private val messenger = FakePassengerMessenger()
 
+  private val errors = mutableListOf<String>()
+
   private fun TestScope.coordinator() =
-    PickupCoordinator(repo, history, nav, door, messenger, backgroundScope, clock = { testScheduler.currentTime })
+    PickupCoordinator(repo, history, nav, door, messenger, backgroundScope, clock = { testScheduler.currentTime }, onError = { what, _ -> errors += what })
 
   private fun TestScope.collectEffects(coordinator: PickupCoordinator): MutableList<PickupEffect> {
     val effects = mutableListOf<PickupEffect>()
@@ -417,12 +421,32 @@ class PickupCoordinatorTest {
   @Test
   fun serverFailure_stopsGuidanceAndLeavesNoPickup() = runTest {
     val coordinator = coordinator()
-    repo.failCreate = IllegalStateException("서버 오류")
+    repo.failCreate = FailState(500, "서버 오류")
     assertTrue(runCatching { coordinator.start(Fixtures.plan()) }.isFailure)
     runCurrent()
     assertEquals(1, nav.stopped)
     assertTrue(messenger.sent.isEmpty())
     assertNull(coordinator.state.value)
+  }
+
+  @Test
+  fun serverFailure_failsWithServerMessage() = runTest {
+    val coordinator = coordinator()
+    repo.failCreate = FailState(500, "서버 오류")
+    val error = runCatching { coordinator.start(Fixtures.plan()) }.exceptionOrNull()
+    assertTrue(error is ApiFailureException)
+    assertEquals("서버 오류", error?.message)
+  }
+
+  @Test
+  fun reportFailure_isPassedToOnError() = runTest {
+    val coordinator = coordinator()
+    coordinator.start(Fixtures.plan())
+    repo.failReports = FailState(-1, "네트워크")
+    coordinator.arriveNow()
+    runCurrent()
+    assertTrue(errors.contains("정차 보고"))
+    assertTrue(coordinator.hasActivePickup)
   }
 
   @Test(expected = IllegalStateException::class)

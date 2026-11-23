@@ -2,6 +2,7 @@ package com.kscho.way.domain.usecase.pickup
 
 import com.kscho.way.domain.gateway.Clock
 import com.kscho.way.domain.gateway.Navigator
+import com.kscho.way.domain.model.base.getOrThrow
 import com.kscho.way.domain.model.geo.Geo
 import com.kscho.way.domain.model.geo.LatLng
 import com.kscho.way.domain.model.pickup.PickupPoint
@@ -27,7 +28,7 @@ class CheckPickupPointUseCase @Inject constructor(
     val description = async { places.describe(location) }
     val route = navigator.preview(location, place?.name ?: "픽업 위치")
     val arrival = clock.now() + route.durationSeconds * 1000L
-    val restriction = StopRestrictionRules.check(location, arrival, restrictions.zonesNear(location, ZONE_SEARCH_METERS))
+    val restriction = StopRestrictionRules.check(location, arrival, restrictions.zonesNear(location, ZONE_SEARCH_METERS).getOrThrow())
     val distance = place?.let { Geo.distanceMeters(it.location, location).roundToInt() }
     PickupPointCheck(PickupPoint(location, description.await(), distance), route, arrival, restriction)
   }
