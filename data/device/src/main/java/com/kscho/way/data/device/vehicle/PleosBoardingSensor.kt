@@ -1,4 +1,4 @@
-package com.kscho.way.vehicle
+package com.kscho.way.data.device.vehicle
 
 import ai.pleos.playground.vehicle.Vehicle
 import ai.pleos.playground.vehicle.api.model.area.DoorArea
@@ -15,11 +15,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * Pleos Vehicle 도어 위치로 탑승 감지(기획 3-10). 운전석을 뺀 문이 열렸다 닫히면 탑승.
- * 에뮬레이터: Virtual Console(Emulation Controls > Convenience > Door Position)로 여닫는다.
- * 도어를 못 읽으면 [available]=false → 화면에 수동 '탑승 완료' 버튼.
- */
 class PleosBoardingSensor(context: Context, private val clock: () -> Long) : BoardingSensor {
   private val app = context.applicationContext
   private val _available = MutableStateFlow<Boolean?>(null)
@@ -28,7 +23,6 @@ class PleosBoardingSensor(context: Context, private val clock: () -> Long) : Boa
   override val boardings: SharedFlow<Long> = _boardings.asSharedFlow()
   private val detector = DoorBoardingDetector()
 
-  // 운전석(ROW_1_LEFT)은 운전자가 타고 내릴 때도 열리므로 뺀다
   private val passengerDoors = listOf(DoorValue.ROW_1_RIGHT, DoorValue.ROW_2_LEFT, DoorValue.ROW_2_RIGHT)
 
   fun start() {

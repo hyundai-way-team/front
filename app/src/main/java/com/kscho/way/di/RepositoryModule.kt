@@ -2,6 +2,7 @@ package com.kscho.way.di
 
 import android.content.Context
 import com.kscho.way.data.dataSource.local.place.PlaceIndexReader
+import com.kscho.way.data.device.repository.VehicleProfileRepositoryImpl
 import com.kscho.way.data.repository.contact.ContactRepositoryImpl
 import com.kscho.way.data.repository.history.PickupHistoryRepositoryImpl
 import com.kscho.way.data.repository.pickup.PickupRepositoryImpl
@@ -15,7 +16,6 @@ import com.kscho.way.domain.repository.restriction.StopRestrictionRepository
 import com.kscho.way.domain.repository.vehicle.VehicleProfileRepository
 import com.kscho.way.ui.plan.PickupDraft
 import com.kscho.way.vehicle.CarLocationTracker
-import com.kscho.way.vehicle.LocalVehicleProfile
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -62,6 +62,6 @@ abstract class RepositoryModule {
     @Provides
     @Singleton
     fun provideVehicleProfileRepository(@ApplicationContext context: Context): VehicleProfileRepository =
-      LocalVehicleProfile(context)
+      VehicleProfileRepositoryImpl(context)
   }
 }

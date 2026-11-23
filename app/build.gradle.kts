@@ -87,6 +87,7 @@ dependencies {
   implementation(libs.kotlinx.serialization.json)
 
   implementation(project(":data"))
+  implementation(project(":data:device"))
   implementation(libs.retrofit)
   implementation(libs.okhttp)
   implementation(libs.kotlinx.coroutines.android)
@@ -97,8 +98,6 @@ dependencies {
   ksp(libs.hilt.compiler)
   implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
 
-  implementation(libs.pleos.vehicle)
-  implementation(libs.pleos.navihelper)
   implementation(libs.pleos.texttospeech)
   implementation(libs.pleos.speechtotext)
   implementation(libs.pleos.fusedlocation)
