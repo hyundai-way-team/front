@@ -37,9 +37,9 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -51,15 +51,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kscho.way.R
 import com.kscho.way.domain.model.BoardingSource
 import com.kscho.way.domain.model.Geo
-import com.kscho.way.domain.model.PickupZones
 import com.kscho.way.domain.model.LatLng
+import com.kscho.way.domain.model.PickupZones
 import com.kscho.way.domain.model.RestrictedZone
 import com.kscho.way.domain.model.TurnInstruction
 import com.kscho.way.domain.model.TurnKind
@@ -77,11 +77,12 @@ import com.kscho.way.ui.common.ActionButton
 import com.kscho.way.ui.common.ActionKind
 import com.kscho.way.ui.common.Format
 import com.kscho.way.ui.common.RotatingText
-import com.kscho.way.ui.common.appContainer
 import com.kscho.way.ui.map.MapLine
 import com.kscho.way.ui.map.MapPin
 import com.kscho.way.ui.map.PinKind
 import com.kscho.way.ui.map.WayMap
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -89,14 +90,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class DriveViewModel(val coordinator: PickupCoordinator, boardingSensor: BoardingSensor, private val restrictions: StopRestrictionRepository) : ViewModel() {
+@HiltViewModel
+class DriveViewModel @Inject constructor(val coordinator: PickupCoordinator, boardingSensor: BoardingSensor, private val restrictions: StopRestrictionRepository) : ViewModel() {
   val state: StateFlow<PickupState?> = coordinator.state
   val doorAvailable: StateFlow<Boolean?> = boardingSensor.available
   val zones = MutableStateFlow<List<RestrictedZone>>(emptyList())
 
   init {
     coordinator.state.value?.let { s ->
-      // 정차 금지 구간은 픽업 위치 둘레만 — 오는 길 곳곳의 구간은 운전자에게 필요 없다
       val pickup = s.plan.pickupPoint.location
       viewModelScope.launch {
         zones.value = runCatching { PickupZones.around(pickup, restrictions.zonesNear(pickup, PickupZones.RADIUS_METERS)) }.getOrDefault(emptyList())
@@ -106,24 +107,16 @@ class DriveViewModel(val coordinator: PickupCoordinator, boardingSensor: Boardin
 
   fun confirmBoarded() = coordinator.confirmBoarded(BoardingSource.MANUAL)
 
-  /** D-10 '탑승 완료'(D-11 에서 '취소'한 뒤) · 뒤로 가기: 픽업 화면을 닫는다. */
   fun done() = coordinator.finish()
 
-  /** D-11 '안내 시작' · '지금 연결': 목적지 안내(또는 기본 내비)로 바로 잇고 닫는다. */
   fun connectNext() = coordinator.connectNext()
 
-  /** D-11 '취소': 잇지 않고 D-10 에 남는다. */
   fun cancelNext() = coordinator.cancelNext()
 }
 
-/**
- * D-06 주행 · D-07 도착 5분 전 · D-08 정차·대기 타이머(D-08a 동승자 경로) · D-09 15초 남음·전화 제안 · D-10 탑승 확인(와이어프레임 v2).
- * 출발 뒤라 버튼은 두지 않는다 — 예외: 15초 남았을 때 '전화하기', 도어를 못 쓸 때 '탑승 완료', 탑승 뒤 '탑승 완료'(목적지 안내로).
- */
 @Composable
 fun DriveScreen(onClosed: () -> Unit) {
-  val c = appContainer()
-  val vm = viewModel { DriveViewModel(c.coordinator, c.boardingSensor, c.restrictions) }
+  val vm: DriveViewModel = hiltViewModel()
   val state by vm.state.collectAsStateWithLifecycle()
   val doorAvailable by vm.doorAvailable.collectAsStateWithLifecycle()
   val zones by vm.zones.collectAsStateWithLifecycle()
@@ -132,7 +125,7 @@ fun DriveScreen(onClosed: () -> Unit) {
 
   var closed by remember { mutableStateOf(false) }
   fun done() {
-    if (closed) return // 버튼 · 뒤로 가기가 겹쳐도 한 번만
+    if (closed) return
     closed = true
     vm.done()
     onClosed()
@@ -152,10 +145,8 @@ fun DriveScreen(onClosed: () -> Unit) {
       delay(200)
     }
   }
-  // D-11: 탑승 뒤 5초 동안 다음 목적지 연결 창(남은 시간은 PickupCoordinator 가 세는 것과 같은 탑승 시각 기준)
   val connecting = s.connectRemainingMillis(now) != null
 
-  // 주행·대기 중엔 뒤로 가기로 빠지지 않는다(운전자 조작 없음). D-11 에선 '취소', D-10 에선 닫기.
   BackHandler {
     when {
       connecting -> vm.cancelNext()
@@ -166,14 +157,11 @@ fun DriveScreen(onClosed: () -> Unit) {
   val pickup = s.plan.pickupPoint.location
   val name = s.plan.passenger.callName
   Box(Modifier.fillMaxSize()) {
-    // D-11 창이 뜨면 뒤(지도·카드)는 흐리게
     Box(Modifier.fillMaxSize().then(if (connecting) Modifier.blur(2.dp) else Modifier)) {
       val driving = s.phase == PickupPhase.DRIVING
       val car = s.carLocation
-      // 주행 중엔 차를 왼쪽 상태 카드에 안 가린 곳의 가운데에 두고, 카드의 남은 거리가 가까워지면 한 번만 확대(DriveCamera)
       val covered = STATUS_CARD_EDGE + STATUS_CARD_WIDTH
       val remaining = s.remainingMeters ?: s.plan.route.distanceMeters
-      // 한 번 확대했는지 기억(이 값이 바뀐다고 다시 그릴 일은 없어 Compose 상태 대신 그냥 둔다)
       val zoomLatch = remember { booleanArrayOf(false) }
       zoomLatch[0] = DriveCamera.zoomedIn(zoomLatch[0], if (driving) remaining else null)
       val zoomedIn = zoomLatch[0]
@@ -182,16 +170,13 @@ fun DriveScreen(onClosed: () -> Unit) {
         metersPerDp = if (driving) DriveCamera.metersPerDp(zoomedIn) else DriveCamera.NEAR_METERS_PER_DP,
         modifier = Modifier.fillMaxSize(),
         cameraPadding = if (driving) PaddingValues(start = covered) else PaddingValues(),
-        // 손으로 옮기거나 확대해 볼 수 있고, 10초 손을 떼면 다시 차(정차 뒤엔 픽업 위치)를 따라간다
         interactive = true,
         resumeFollowAfterMillis = 10_000L,
-        // 탄 뒤엔 정차 금지 구간·픽업 핀 없이 지금 차 자리만(D-10)
         zones = if (s.isBoarded) emptyList() else zones,
         lines =
           buildList {
             if (driving && car != null) add(MapLine(remainingPath(s), WayColors.Blue, 7f))
             val passenger = s.passenger.location
-            // 동승자 걷는 길 — 서버가 지도 도로선으로 찾은 것(동승자 웹 P-05 와 같은 경로). 아직 없으면 곧은 점선
             val walk = s.passenger.walk
             if (!s.isBoarded && walk != null) add(MapLine(walk.path, WayColors.Passenger, 5f))
             else if (!s.isBoarded && passenger != null) add(MapLine(listOf(passenger, pickup), WayColors.Passenger, 3f, dashed = true))
@@ -199,7 +184,6 @@ fun DriveScreen(onClosed: () -> Unit) {
         pins =
           buildList {
             if (s.isBoarded) {
-              // 탄 자리 = 픽업 위치(정차 중 차 위치는 늦게 올 수 있어 픽업 위치에 둔다)
               add(MapPin(pickup, PinKind.CAR, "현재 위치"))
               return@buildList
             }
@@ -209,7 +193,6 @@ fun DriveScreen(onClosed: () -> Unit) {
           },
       )
 
-      // 왼쪽 위: 픽업 상태
       Column(Modifier.align(Alignment.TopStart).padding(STATUS_CARD_EDGE).width(STATUS_CARD_WIDTH), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (s.phase) {
           PickupPhase.DRIVING -> DrivingCard(s)
@@ -221,7 +204,6 @@ fun DriveScreen(onClosed: () -> Unit) {
         }
       }
 
-      // 오른쪽 위: 지도 설명 · 회전 안내 / 대기 타이머 / 탑승 완료
       MapAnnotation(
         if (driving) "지도 · 네비 경로 (목적지 = 픽업 위치)" else "지도 · 픽업 위치 주변 확대",
         Modifier.align(Alignment.TopEnd).padding(top = 32.dp, end = 32.dp),
@@ -249,7 +231,6 @@ fun DriveScreen(onClosed: () -> Unit) {
 
       if (!connecting) VoiceBanner(s, now, Modifier.align(Alignment.BottomStart).padding(32.dp).width(720.dp))
 
-      // 오른쪽 아래
       if (s.isBoarded) {
         if (!connecting) ActionButton("탑승 완료", ::done, Modifier.align(Alignment.BottomEnd).padding(32.dp).width(180.dp))
       } else if (doorAvailable == false) {
@@ -260,9 +241,7 @@ fun DriveScreen(onClosed: () -> Unit) {
       }
     }
 
-    // D-11 다음 목적지 연결
     if (connecting) {
-      // 뒤를 가리고 누름도 막는다
       Box(Modifier.fillMaxSize().background(WayColors.Dim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {})
       NextStepDialog(s, onCancel = vm::cancelNext, onConnect = ::connect, Modifier.align(Alignment.Center))
       VoiceBanner(s, now, Modifier.align(Alignment.BottomCenter).padding(32.dp).fillMaxWidth())
@@ -270,17 +249,14 @@ fun DriveScreen(onClosed: () -> Unit) {
   }
 }
 
-/** 지도에 그릴 남은 경로(차 → 미리보기 경로의 남은 부분 → 픽업 위치). */
 private fun remainingPath(s: PickupState): List<LatLng> {
   val car = s.carLocation ?: return emptyList()
   val path = s.plan.route.path
   if (path.size < 2) return listOf(car, s.plan.pickupPoint.location)
-  // 차가 올라탄 구간(가장 가까운 선분) 다음 꼭짓점부터
   val segment = (0 until path.size - 1).minBy { Geo.distanceToPathMeters(car, listOf(path[it], path[it + 1])) }
   return listOf(car) + path.drop(segment + 1)
 }
 
-/** 왼쪽 위 상태 카드 자리(화면 가장자리 여백 · 너비) — 주행 지도는 이 오른쪽을 본다. */
 private val STATUS_CARD_EDGE = 32.dp
 private val STATUS_CARD_WIDTH = 440.dp
 
@@ -290,14 +266,11 @@ private val R16 = RoundedCornerShape(16.dp)
 private val R20 = RoundedCornerShape(20.dp)
 private val R24 = RoundedCornerShape(24.dp)
 
-/** 지도 위 반투명 카드(흰 86% · Grey-200 테두리 · 그림자 Grey-Medium 20 · 라운드 20). */
 private fun Modifier.glass(border: Color = WayColors.Grey200, borderWidth: Dp = 1.dp): Modifier =
   this.shadow(10.dp, R20, ambientColor = WayColors.ShadowMedium, spotColor = WayColors.ShadowMedium)
     .clip(R20)
     .background(Color.White.copy(alpha = 0.86f))
     .border(borderWidth, border, R20)
-
-// ── D-06 · D-07 주행
 
 @Composable
 private fun DrivingCard(s: PickupState) {
@@ -308,7 +281,6 @@ private fun DrivingCard(s: PickupState) {
       Text("${s.plan.passenger.name} 님 픽업", style = WayType.TitleL, color = WayColors.Primary500)
       Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(s.plan.pickupPoint.description.title, style = WayType.HeadingM, color = Color.Black)
-        // '[픽업 위치까지 12분 ↔ 도착 예정 시간 09:50] | 1.1km' — 앞부분이 5초마다 굴러 바뀌고, 남은 거리는 그대로
         Row(verticalAlignment = Alignment.CenterVertically) {
           RotatingText(listOf("픽업 위치까지 ${Format.minutes(remaining)}", "도착 예정 시간 ${Format.clock(s.arrivalAtMillis)}"), WayType.TitleM, WayColors.Grey500)
           Text(" | ${Format.distance(meters)}", style = WayType.TitleM, color = WayColors.Grey500)
@@ -324,7 +296,6 @@ private fun DrivingCard(s: PickupState) {
   }
 }
 
-/** 진행 한 줄(Primary-50 바탕 알약) — 끝났으면 '완료', 아니면 '● 대기 중'. */
 @Composable
 private fun StepPill(text: String, done: Boolean) {
   Row(
@@ -351,7 +322,6 @@ private fun StepPill(text: String, done: Boolean) {
   }
 }
 
-/** 다음 회전 안내(Pleos 내비 TBT) — '300m 앞 우회전 · 성산로'. */
 @Composable
 private fun TurnCard(turn: TurnInstruction) {
   val (icon, mirrored) =
@@ -374,8 +344,6 @@ private fun TurnCard(turn: TurnInstruction) {
   }
 }
 
-// ── D-08 · D-09 정차 · 대기
-
 @Composable
 private fun StoppedCard(s: PickupState) {
   val name = s.plan.passenger.callName
@@ -389,7 +357,6 @@ private fun StoppedCard(s: PickupState) {
       verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
       DotLabel("픽업 위치까지")
-      // '[30m ↔ 09:50 도착]' — 5초마다 굴러 바뀐다(정차 뒤라 실제 정차 시각)
       RotatingText(listOf(Format.distance(toPickup), "${Format.clock(stoppedAt)} 도착"), WayType.DisplayXL, WayColors.Primary500)
     }
     HorizontalDivider(color = WayColors.Grey200)
@@ -405,12 +372,10 @@ private fun StoppedCard(s: PickupState) {
   }
 }
 
-/** D-08a · D-09: 동승자가 위치를 공유하면 '서연 님이 경로를 확인했어요 · 도보 2분 거리'. */
 @Composable
 private fun PassengerRouteCard(s: PickupState) {
   val name = s.plan.passenger.callName
   val meters = s.passengerDistanceMeters ?: return
-  // 걷는 길을 찾았으면 그 시간(동승자 화면의 '도보 N분'과 같다)
   val minutes = s.passenger.walk?.let { ceil(it.seconds / 60.0).toInt().coerceAtLeast(1) } ?: walkMinutes(meters)
   Row(Modifier.fillMaxWidth().glass().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
     Icon(painterResource(R.drawable.ic_check_small), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(24.dp))
@@ -421,10 +386,8 @@ private fun PassengerRouteCard(s: PickupState) {
   }
 }
 
-/** 걷는 시간(분) — 시속 4km(분당 약 67m), 최소 1분. */
 private fun walkMinutes(meters: Int): Int = ceil(meters / 67.0).toInt().coerceAtLeast(1)
 
-/** 1분 대기 타이머(D-08) · 15초 남음(D-09, 빨강). */
 @Composable
 private fun WaitTimerCard(leftMillis: Long, urgent: Boolean) {
   val accent = if (urgent) WayColors.Error500 else WayColors.Primary500
@@ -441,10 +404,6 @@ private fun WaitTimerCard(leftMillis: Long, urgent: Boolean) {
   }
 }
 
-/**
- * 둥근 진행 고리(바탕 고리 위에 남은 만큼 호). 피그마 Loading 그대로 — 지름 [size], 띠 두께 10%.
- * 호는 바탕 고리와 같은 원(띠 가운데) 위에 그린다: 캔버스 전체에 그리면 띠 반만큼 바깥으로 밀려 고리 밖에서 돈다.
- */
 @Composable
 private fun ProgressRing(fraction: Float, track: Color, color: Color, size: Dp, content: @Composable () -> Unit = {}) {
   Box(Modifier.size(size), contentAlignment = Alignment.Center) {
@@ -464,8 +423,6 @@ private fun ProgressRing(fraction: Float, track: Color, color: Color, size: Dp, 
     content()
   }
 }
-
-// ── D-10 탑승 확인
 
 @Composable
 private fun BoardedCard(s: PickupState) {
@@ -507,13 +464,8 @@ private fun BoardedBadge(s: PickupState) {
 
 private fun waitedText(seconds: Int): String = if (seconds < 60) "${seconds}초" else "${seconds / 60}분 ${seconds % 60}초"
 
-/**
- * D-11 다음 목적지 연결(와이어프레임 v2) — 탑승하면 5초를 세고, 정해 둔 목적지가 있으면 그곳 안내를 Pleos 내비에 넘기고
- * 없으면 기본 내비를 띄운다. 5초는 PickupCoordinator 가 탑승 시각부터 센다(Way 가 뒤에 있어도 넘어가게) — 여기선 보여 주기만.
- */
 @Composable
 private fun NextStepDialog(s: PickupState, onCancel: () -> Unit, onConnect: () -> Unit, modifier: Modifier) {
-  // 고리가 매끄럽게 줄도록 프레임마다
   var t by remember { mutableLongStateOf(System.currentTimeMillis()) }
   LaunchedEffect(Unit) {
     while (true) withFrameMillis { t = System.currentTimeMillis() }
@@ -561,7 +513,6 @@ private fun NextStepDialog(s: PickupState, onCancel: () -> Unit, onConnect: () -
             Text(destination.name, style = WayType.TitleXL, color = WayColors.Grey900, maxLines = 1, overflow = TextOverflow.Ellipsis)
           }
         }
-        // 내비가 답하기 전(보통 1초 안)이나 답하지 않으면 이 줄은 뺀다
         val arrivalAt = s.destinationArrivalAtMillis
         val trip = s.destinationTripSeconds
         if (arrivalAt != null && trip != null) {
@@ -594,7 +545,6 @@ private fun NextStepDialog(s: PickupState, onCancel: () -> Unit, onConnect: () -
   }
 }
 
-/** D-11 상자 왼쪽 아이콘(48 · 라운드 12 · 흰 아이콘 24). */
 @Composable
 private fun DialogIcon(@DrawableRes icon: Int, background: Color) {
   Box(Modifier.size(48.dp).clip(R12).background(background), contentAlignment = Alignment.Center) {
@@ -602,9 +552,6 @@ private fun DialogIcon(@DrawableRes icon: Int, background: Color) {
   }
 }
 
-// ── 공통
-
-/** 카드 머리: 아이콘 32 + 제목(Title/L) · 아래 픽업 위치(L/Medium · Grey-500). */
 @Composable
 private fun CardTitle(@DrawableRes icon: Int, title: String, subtitle: String) {
   Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -616,7 +563,6 @@ private fun CardTitle(@DrawableRes icon: Int, title: String, subtitle: String) {
   }
 }
 
-/** '● 픽업 위치까지' 같은 작은 머리(점 24 + Title/M · Grey-500). */
 @Composable
 private fun DotLabel(text: String) {
   Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -625,7 +571,6 @@ private fun DotLabel(text: String) {
   }
 }
 
-/** 지도 위 작은 설명(흰 알약 · Grey-200 테두리 · M/Regular · Grey-600). */
 @Composable
 private fun MapAnnotation(text: String, modifier: Modifier = Modifier) {
   Text(
@@ -642,7 +587,6 @@ private fun MapAnnotation(text: String, modifier: Modifier = Modifier) {
   )
 }
 
-/** 음성 안내를 화면에도 잠깐(10초, 전화 제안은 20초) — 소리가 안 나도 무엇을 말했는지 보이게. */
 @Composable
 private fun VoiceBanner(s: PickupState, now: Long, modifier: Modifier) {
   val said = s.lastAnnouncement ?: return

@@ -31,10 +31,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kscho.way.R
 import com.kscho.way.domain.model.Geo
 import com.kscho.way.domain.model.LatLng
@@ -53,11 +53,12 @@ import com.kscho.way.ui.common.Panel
 import com.kscho.way.ui.common.ScreenFrame
 import com.kscho.way.ui.common.StepDots
 import com.kscho.way.ui.common.Tone
-import com.kscho.way.ui.common.appContainer
 import com.kscho.way.ui.map.MapLine
 import com.kscho.way.ui.map.MapPin
 import com.kscho.way.ui.map.PinKind
 import com.kscho.way.ui.map.WayMap
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlin.math.max
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -65,7 +66,8 @@ import kotlinx.coroutines.launch
 
 data class ConfirmUiState(val vehicle: MyVehicle? = null, val starting: Boolean = false, val error: String? = null)
 
-class ConfirmDepartureViewModel(
+@HiltViewModel
+class ConfirmDepartureViewModel @Inject constructor(
   private val vehicles: VehicleProfileRepository,
   private val coordinator: PickupCoordinator,
   private val draft: PickupDraft,
@@ -73,7 +75,6 @@ class ConfirmDepartureViewModel(
   val passenger = draft.passenger.value
   val place = draft.place.value
   val check = draft.check.value
-  /** 픽업 후 목적지(없으면 줄을 감춘다) */
   val destination = draft.destination.asStateFlow()
   private val _state = MutableStateFlow(ConfirmUiState())
   val state = _state.asStateFlow()
@@ -86,12 +87,10 @@ class ConfirmDepartureViewModel(
     }
   }
 
-  /** 확인 카드에서 목적지 ×: 목적지 없이 출발 */
   fun clearDestination() {
     draft.destination.value = null
   }
 
-  /** 출발: 서버에 픽업을 만들어 참여 링크를 받고, 차에서 문자를 보내고, 내비 목적지를 픽업 위치로(기획 3-3). */
   fun start(onStarted: () -> Unit) {
     val passenger = passenger ?: return
     val check = check ?: return
@@ -110,11 +109,9 @@ class ConfirmDepartureViewModel(
   }
 }
 
-/** D-05 확인 · 출발(와이어프레임 v2). 출발 뒤에는 운전자 화면 조작이 없다. */
 @Composable
 fun ConfirmDepartureScreen(onBack: () -> Unit, onStarted: () -> Unit) {
-  val c = appContainer()
-  val vm = viewModel { ConfirmDepartureViewModel(c.vehicleProfile, c.coordinator, c.draft) }
+  val vm: ConfirmDepartureViewModel = hiltViewModel()
   val state by vm.state.collectAsStateWithLifecycle()
   val destination by vm.destination.collectAsStateWithLifecycle()
   val passenger = vm.passenger
@@ -183,7 +180,6 @@ fun ConfirmDepartureScreen(onBack: () -> Unit, onStarted: () -> Unit) {
   }
 }
 
-/** 확인 표 한 줄: 이름(L/Medium · Grey-500 · 폭 66) · 내용. */
 @Composable
 private fun InfoRow(label: String, content: @Composable () -> Unit) {
   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -192,7 +188,6 @@ private fun InfoRow(label: String, content: @Composable () -> Unit) {
   }
 }
 
-/** 경로 전체가 들어오게 맞춘 미리보기 지도. */
 @Composable
 private fun RoutePreviewMap(path: List<LatLng>, pickup: LatLng, modifier: Modifier) {
   BoxWithConstraints(modifier) {

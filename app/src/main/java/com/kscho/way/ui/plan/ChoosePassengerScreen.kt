@@ -49,11 +49,12 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kscho.way.R
+import com.kscho.way.contact.DeviceContacts
 import com.kscho.way.domain.model.Contact
 import com.kscho.way.domain.repository.ContactRepository
 import com.kscho.way.theme.WayColors
@@ -64,7 +65,8 @@ import com.kscho.way.ui.common.Panel
 import com.kscho.way.ui.common.ScreenFrame
 import com.kscho.way.ui.common.SearchField
 import com.kscho.way.ui.common.StepHeader
-import com.kscho.way.ui.common.appContainer
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -77,10 +79,17 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-class ChoosePassengerViewModel(private val contacts: ContactRepository, private val draft: PickupDraft) : ViewModel() {
+@HiltViewModel
+class ChoosePassengerViewModel @Inject constructor(
+  private val contacts: ContactRepository,
+  private val draft: PickupDraft,
+  private val deviceContacts: DeviceContacts,
+) : ViewModel() {
+  val contactsGranted: Boolean
+    get() = deviceContacts.granted
+
   val query = MutableStateFlow("")
 
-  /** '최근 및 저장된 연락처' — 최근에 태운 사람 먼저, 그다음 기기 연락처. 처음 한 번 불러오고, 연락처 권한을 받은 뒤 다시 부른다. */
   private val _all = MutableStateFlow<List<Contact>?>(null)
   val all: StateFlow<List<Contact>?> = _all.asStateFlow()
 
@@ -88,7 +97,6 @@ class ChoosePassengerViewModel(private val contacts: ContactRepository, private 
     viewModelScope.launch { _all.value = runCatching { contacts.search("") }.getOrDefault(emptyList()) }
   }
 
-  /** 입력한 이름·번호로 찾은 사람(검색 칸 아래 목록) */
   val suggestions: StateFlow<List<Contact>> =
     query
       .debounce(150)
@@ -99,26 +107,22 @@ class ChoosePassengerViewModel(private val contacts: ContactRepository, private 
 
   fun select(contact: Contact) {
     if (draft.passenger.value?.id != contact.id) {
-      // 다른 사람을 고르면 장소부터 다시
       draft.reset()
       draft.passenger.value = contact
     }
   }
 }
 
-/** D-02 동승자 선택(와이어프레임 v2): 연락처에서 1명(기획 3-1). 검색 목록에서 고르면 바로 다음(D-03)으로. */
 @Composable
 fun ChoosePassengerScreen(onBack: () -> Unit, onNext: () -> Unit) {
-  val c = appContainer()
   val keyboard = LocalSoftwareKeyboardController.current
   val focus = LocalFocusManager.current
   val density = LocalDensity.current
-  val vm = viewModel { ChoosePassengerViewModel(c.contacts, c.draft) }
+  val vm: ChoosePassengerViewModel = hiltViewModel()
   val query by vm.query.collectAsStateWithLifecycle()
   val loaded by vm.all.collectAsStateWithLifecycle()
   val all = loaded.orEmpty()
-  // 연락처 = 차에 연결된 휴대폰 연락처(기기 연락처). 권한을 받으면 다시 불러온다
-  var contactsAllowed by remember { mutableStateOf(c.deviceContacts.granted) }
+  var contactsAllowed by remember { mutableStateOf(vm.contactsGranted) }
   val askContacts = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
     contactsAllowed = ok
     vm.load()
@@ -129,7 +133,6 @@ fun ChoosePassengerScreen(onBack: () -> Unit, onNext: () -> Unit) {
   }
   val suggestions by vm.suggestions.collectAsStateWithLifecycle()
   val selected by vm.selected.collectAsStateWithLifecycle()
-  // 검색 칸 아래 목록 자리: 칸 아래 끝 − 틀 위 끝(둘 다 창 기준)
   var boxTopPx by remember { mutableIntStateOf(0) }
   var fieldBottomPx by remember { mutableIntStateOf(0) }
   val grid = rememberLazyGridState()
@@ -180,7 +183,6 @@ fun ChoosePassengerScreen(onBack: () -> Unit, onNext: () -> Unit) {
                       modifier = Modifier.padding(top = 8.dp),
                     )
                   }
-                  // 아래로 더 있음을 흐리게(Scroll Fade)
                   if (grid.canScrollForward) Box(
                     Modifier.align(Alignment.BottomCenter)
                       .fillMaxWidth()
@@ -193,7 +195,6 @@ fun ChoosePassengerScreen(onBack: () -> Unit, onNext: () -> Unit) {
             }
           }
         }
-        // 검색 칸 바로 아래 찾은 사람 목록 — 고르면 바로 다음 화면(D-03)
         if (suggestions.isNotEmpty() && query.isNotBlank()) {
           Column(
             Modifier.offset(y = with(density) { (fieldBottomPx - boxTopPx).toDp() } + 12.dp)
@@ -229,7 +230,6 @@ fun ChoosePassengerScreen(onBack: () -> Unit, onNext: () -> Unit) {
   }
 }
 
-/** 연락처 카드(라디오 · 이름 · 번호). 고르면 Primary-50 바탕 · Primary-500 테두리. */
 @Composable
 private fun ContactCard(contact: Contact, on: Boolean, onClick: () -> Unit) {
   val shape = RoundedCornerShape(16.dp)
@@ -256,7 +256,6 @@ private fun ContactCard(contact: Contact, on: Boolean, onClick: () -> Unit) {
   }
 }
 
-/** 목록 옆 스크롤 막대(폭 8 · Grey-200). 넘칠 때만 보인다. */
 @Composable
 private fun ScrollThumb(state: LazyGridState, modifier: Modifier = Modifier) {
   val info = state.layoutInfo

@@ -21,10 +21,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kscho.way.domain.model.Place
 import com.kscho.way.domain.repository.PlaceRepository
 import com.kscho.way.theme.WayColors
@@ -37,10 +37,11 @@ import com.kscho.way.ui.common.Panel
 import com.kscho.way.ui.common.ScreenFrame
 import com.kscho.way.ui.common.SearchField
 import com.kscho.way.ui.common.StepDots
-import com.kscho.way.ui.common.appContainer
 import com.kscho.way.ui.map.MapPin
 import com.kscho.way.ui.map.PinKind
 import com.kscho.way.ui.map.WayMap
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,32 +52,29 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-class SetDestinationViewModel(private val places: PlaceRepository, private val draft: PickupDraft) : ViewModel() {
+@HiltViewModel
+class SetDestinationViewModel @Inject constructor(private val places: PlaceRepository, private val draft: PickupDraft) : ViewModel() {
   val query = MutableStateFlow(draft.destination.value?.name ?: "")
   val results: StateFlow<List<Place>> =
     query.debounce(250).mapLatest { runCatching { places.search(it) }.getOrDefault(emptyList()) }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
   val selected: StateFlow<Place?> = draft.destination
-  /** 지도에 보일 곳 — 고른 목적지, 없으면 확정한 픽업 지점 */
   val pickup = draft.check.value?.point?.location
 
   fun select(place: Place) {
     draft.destination.value = place
   }
 
-  /** 검색어를 다 지우면 목적지도 비운다(목적지 없이 출발). */
   fun edit(text: String) {
     query.value = text
     if (text.isBlank()) draft.destination.value = null
   }
 }
 
-/** D-05 픽업 후 목적지 설정(와이어프레임 v2) — 정하지 않아도 '다음'으로 넘어간다. 정하면 탑승 뒤 그곳으로 안내한다. */
 @Composable
 fun SetDestinationScreen(onBack: () -> Unit, onNext: () -> Unit) {
-  val c = appContainer()
   val keyboard = LocalSoftwareKeyboardController.current
   val focus = LocalFocusManager.current
-  val vm = viewModel { SetDestinationViewModel(c.places, c.draft) }
+  val vm: SetDestinationViewModel = hiltViewModel()
   val query by vm.query.collectAsStateWithLifecycle()
   val results by vm.results.collectAsStateWithLifecycle()
   val selected by vm.selected.collectAsStateWithLifecycle()
