@@ -20,7 +20,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,18 +27,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
+import com.kscho.way.domain.model.contact.Contact
 import com.kscho.way.domain.model.geo.Geo
 import com.kscho.way.domain.model.geo.LatLng
-import com.kscho.way.domain.model.pickup.PickupPlan
+import com.kscho.way.domain.model.pickup.PickupPoint
+import com.kscho.way.domain.model.pickup.PickupPointCheck
+import com.kscho.way.domain.model.place.LocationDescription
+import com.kscho.way.domain.model.place.Place
+import com.kscho.way.domain.model.restriction.StopRestriction
+import com.kscho.way.domain.model.route.RoutePreview
 import com.kscho.way.domain.model.vehicle.MyVehicle
-import com.kscho.way.domain.pickup.PickupCoordinator
-import com.kscho.way.domain.pickup.PickupDraft
-import com.kscho.way.domain.usecase.vehicle.GetMyVehicleUseCase
+import com.kscho.way.presentation.component.base.CollectUiEvents
 import com.kscho.way.presentation.component.common.ActionButton
 import com.kscho.way.presentation.component.common.AlertBox
 import com.kscho.way.presentation.component.common.BackButton
@@ -50,77 +52,46 @@ import com.kscho.way.presentation.component.common.ScreenFrame
 import com.kscho.way.presentation.component.common.StepDots
 import com.kscho.way.presentation.component.common.Tone
 import com.kscho.way.presentation.component.theme.WayColors
+import com.kscho.way.presentation.component.theme.WayTheme
 import com.kscho.way.presentation.component.theme.WayType
 import com.kscho.way.presentation.map.MapLine
 import com.kscho.way.presentation.map.MapPin
 import com.kscho.way.presentation.map.PinKind
 import com.kscho.way.presentation.map.WayMap
 import com.kscho.way.presentation.plan.R
-import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
 import kotlin.math.max
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 
-data class ConfirmUiState(val vehicle: MyVehicle? = null, val starting: Boolean = false, val error: String? = null)
-
-@HiltViewModel
-class ConfirmDepartureViewModel @Inject constructor(
-  private val getMyVehicle: GetMyVehicleUseCase,
-  private val coordinator: PickupCoordinator,
-  private val draft: PickupDraft,
-) : ViewModel() {
-  val passenger = draft.passenger.value
-  val place = draft.place.value
-  val check = draft.check.value
-  val destination = draft.destination.asStateFlow()
-  private val _state = MutableStateFlow(ConfirmUiState())
-  val state = _state.asStateFlow()
-
-  init {
-    viewModelScope.launch {
-      runCatching { getMyVehicle() }
-        .onSuccess { v -> _state.value = _state.value.copy(vehicle = v) }
-        .onFailure { _state.value = _state.value.copy(error = "내 차 정보를 불러오지 못했어요") }
+@Composable
+fun ConfirmDepartureRoute(
+  onBack: () -> Unit,
+  onPickupStarted: () -> Unit,
+  viewModel: ConfirmDepartureViewModel = hiltViewModel(),
+) {
+  val state by viewModel.uiState.collectAsStateWithLifecycle()
+  CollectUiEvents(viewModel.uiEvent) { event ->
+    when (event) {
+      ConfirmDepartureEvent.NavigateBack -> onBack()
+      ConfirmDepartureEvent.PickupStarted -> onPickupStarted()
     }
   }
-
-  fun clearDestination() {
-    draft.destination.value = null
-  }
-
-  fun start(onStarted: () -> Unit) {
-    val passenger = passenger ?: return
-    val check = check ?: return
-    val vehicle = _state.value.vehicle ?: return
-    if (_state.value.starting) return
-    _state.value = _state.value.copy(starting = true, error = null)
-    viewModelScope.launch {
-      try {
-        coordinator.start(PickupPlan(passenger, place, check.point, check.restriction, check.route, vehicle, destination.value))
-        draft.reset()
-        onStarted()
-      } catch (e: Exception) {
-        _state.value = _state.value.copy(starting = false, error = e.message ?: "출발하지 못했어요")
-      }
-    }
-  }
+  ConfirmDepartureScreen(
+    state = state,
+    onBack = onBack,
+    onClearDestination = viewModel::clearDestination,
+    onStart = viewModel::start,
+  )
 }
 
 @Composable
-fun ConfirmDepartureScreen(onBack: () -> Unit, onStarted: () -> Unit) {
-  val vm: ConfirmDepartureViewModel = hiltViewModel()
-  val state by vm.state.collectAsStateWithLifecycle()
-  val destination by vm.destination.collectAsStateWithLifecycle()
-  val passenger = vm.passenger
-  val check = vm.check
-  if (passenger == null || check == null) {
-    LaunchedEffect(Unit) { onBack() }
-    return
-  }
-  val now = System.currentTimeMillis()
-  val arrival = now + check.route.durationSeconds * 1000L
+fun ConfirmDepartureScreen(
+  state: ConfirmDepartureUiState,
+  onBack: () -> Unit,
+  onClearDestination: () -> Unit,
+  onStart: () -> Unit,
+) {
+  val passenger = state.passenger ?: return
+  val check = state.check ?: return
+  val arrival = state.arrivalAtMillis
 
   ScreenFrame {
     Panel(width = 560.dp) {
@@ -147,7 +118,7 @@ fun ConfirmDepartureScreen(onBack: () -> Unit, onStarted: () -> Unit) {
                 HorizontalDivider(color = WayColors.Grey200)
                 InfoRow("내 차") { Text("${v.description} | ${v.plateNumber}", style = WayType.TitleM, color = WayColors.Grey900) }
               }
-              destination?.let { d ->
+              state.destination?.let { d ->
                 HorizontalDivider(color = WayColors.Grey200)
                 InfoRow("목적지") {
                   Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -156,7 +127,7 @@ fun ConfirmDepartureScreen(onBack: () -> Unit, onStarted: () -> Unit) {
                       painterResource(R.drawable.ic_close),
                       contentDescription = "목적지 지우기",
                       tint = Color.Unspecified,
-                      modifier = Modifier.size(24.dp).clickable(role = Role.Button, onClick = vm::clearDestination),
+                      modifier = Modifier.size(24.dp).clickable(role = Role.Button, onClick = onClearDestination),
                     )
                   }
                 }
@@ -168,7 +139,7 @@ fun ConfirmDepartureScreen(onBack: () -> Unit, onStarted: () -> Unit) {
       }
       ActionButton(
         if (state.starting) "출발 준비 중…" else "출발",
-        { vm.start(onStarted) },
+        onStart,
         Modifier.fillMaxWidth().padding(top = 16.dp),
         enabled = state.vehicle != null && !state.starting,
       )
@@ -178,6 +149,7 @@ fun ConfirmDepartureScreen(onBack: () -> Unit, onStarted: () -> Unit) {
     }
   }
 }
+
 
 @Composable
 private fun InfoRow(label: String, content: @Composable () -> Unit) {
@@ -206,3 +178,33 @@ private fun RoutePreviewMap(path: List<LatLng>, pickup: LatLng, modifier: Modifi
     )
   }
 }
+
+@Preview(widthDp = 1280, heightDp = 720)
+@Composable
+internal fun ConfirmDepartureScreenPreview() {
+  val pickup = LatLng(37.5571, 126.942)
+  val check =
+    PickupPointCheck(
+      point = PickupPoint(pickup, LocationDescription("홍대입구역 앞", "양화로 · 도로 북쪽 인도"), null),
+      route = RoutePreview(4_000, 12 * 60, listOf(LatLng(37.5500, 126.9300), pickup)),
+      arrivalAtMillis = PREVIEW_ARRIVAL_MILLIS,
+      restriction = StopRestriction.NotFound,
+    )
+  WayTheme {
+    ConfirmDepartureScreen(
+      state =
+        ConfirmDepartureUiState(
+          passenger = Contact("c1", "이서연", "01000001234"),
+          check = check,
+          arrivalAtMillis = PREVIEW_ARRIVAL_MILLIS,
+          destination = Place("d1", "공덕역", "서울 마포구 마포대로 지하 92", LatLng(37.5443, 126.9516)),
+          vehicle = MyVehicle("흰색 아반떼", "12가 3456", "김도윤"),
+        ),
+      onBack = {},
+      onClearDestination = {},
+      onStart = {},
+    )
+  }
+}
+
+private const val PREVIEW_ARRIVAL_MILLIS = 1_795_000_000_000L

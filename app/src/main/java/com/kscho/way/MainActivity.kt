@@ -17,20 +17,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.Density
 import androidx.core.content.ContextCompat
-import com.kscho.way.domain.pickup.PickupCoordinator
-import com.kscho.way.domain.pickup.PickupDraft
 import com.kscho.way.pickup.PickupService
 import com.kscho.way.presentation.MainNavigation
 import com.kscho.way.presentation.component.theme.WayTheme
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-  @Inject lateinit var coordinator: PickupCoordinator
-
-  @Inject lateinit var draft: PickupDraft
-
   private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,7 +36,7 @@ class MainActivity : ComponentActivity() {
         val base = LocalDensity.current
         val density = if (width > 0) Density(width / DESIGN_WIDTH_DP, base.fontScale) else base
         CompositionLocalProvider(LocalDensity provides density) {
-          Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { MainNavigation(coordinator, draft, onPickupStarted = { PickupService.start(this) }) }
+          Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { MainNavigation(onPickupStarted = { PickupService.start(this) }) }
         }
       }
     }

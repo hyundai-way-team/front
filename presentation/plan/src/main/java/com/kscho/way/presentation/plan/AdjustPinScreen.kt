@@ -1,6 +1,5 @@
 package com.kscho.way.presentation.plan
 
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -30,23 +29,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
-import com.kscho.way.domain.model.base.ApiState
 import com.kscho.way.domain.model.geo.Geo
 import com.kscho.way.domain.model.geo.LatLng
-import com.kscho.way.domain.model.geo.MapArea
-import com.kscho.way.domain.model.pickup.PickupPointCheck
-import com.kscho.way.domain.model.pickup.PickupZones
-import com.kscho.way.domain.model.place.Place
-import com.kscho.way.domain.model.restriction.RestrictedZone
 import com.kscho.way.domain.model.restriction.StopRestriction
-import com.kscho.way.domain.pickup.PickupDraft
-import com.kscho.way.domain.usecase.pickup.CheckPickupPointUseCase
-import com.kscho.way.domain.usecase.restriction.GetStopZonesUseCase
+import com.kscho.way.presentation.component.base.CollectUiEvents
 import com.kscho.way.presentation.component.common.ActionButton
 import com.kscho.way.presentation.component.common.ActionKind
 import com.kscho.way.presentation.component.common.AlertBox
@@ -60,6 +50,7 @@ import com.kscho.way.presentation.component.common.StepDots
 import com.kscho.way.presentation.component.common.Tone
 import com.kscho.way.presentation.component.common.whiteCard
 import com.kscho.way.presentation.component.theme.WayColors
+import com.kscho.way.presentation.component.theme.WayTheme
 import com.kscho.way.presentation.component.theme.WayType
 import com.kscho.way.presentation.map.MapLabel
 import com.kscho.way.presentation.map.MapLine
@@ -67,116 +58,45 @@ import com.kscho.way.presentation.map.MapPin
 import com.kscho.way.presentation.map.PinKind
 import com.kscho.way.presentation.map.WayMap
 import com.kscho.way.presentation.plan.R
-import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.conflate
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 
-data class AdjustPinUiState(
-  val pin: LatLng,
-  val checking: Boolean = true,
-  val result: PickupPointCheck? = null,
-  val lastBlocked: LatLng? = null,
-  val error: String? = null,
-)
-
-@OptIn(FlowPreview::class)
-@HiltViewModel
-class AdjustPinViewModel @Inject constructor(
-  private val checkPickupPoint: CheckPickupPointUseCase,
-  private val getStopZones: GetStopZonesUseCase,
-  private val draft: PickupDraft,
-) : ViewModel() {
-  val place: Place? = draft.place.value
-  val passengerName: String? = draft.passenger.value?.callName
-  val origin: LatLng = draft.pinStart.value ?: place?.location ?: draft.check.value?.point?.location ?: LatLng(37.5555, 126.939)
-  private val _state = MutableStateFlow(AdjustPinUiState(pin = draft.check.value?.point?.location ?: origin))
-  val state = _state.asStateFlow()
-  private val loadedZones = MutableStateFlow<List<RestrictedZone>>(emptyList())
-  val zones: StateFlow<List<RestrictedZone>> =
-    combine(loadedZones, _state.map { it.pin }.distinctUntilChanged()) { all, pin -> PickupZones.around(pin, all) }
-      .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-  val zonesLoading = MutableStateFlow(false)
-  private var loadedArea: MapArea? = null
-
-  init {
-    viewModelScope.launch {
-      _state.map { it.pin }.distinctUntilChanged().conflate().collect { pin ->
-        if (!PickupZones.needsReload(loadedArea, pin)) return@collect
-        load(PickupZones.areaFor(pin))
-      }
-    }
-    viewModelScope.launch {
-      _state.map { it.pin }.distinctUntilChanged().debounce(350).collectLatest { pin ->
-        if (_state.value.result?.point?.location == pin) return@collectLatest
-        _state.update { it.copy(checking = true) }
-        val result = runCatching { checkPickupPoint(pin, place) }
-        _state.update { now ->
-          if (now.pin != pin) return@update now
-          result.fold(
-            onSuccess = { r ->
-              val wasBlocked = now.result?.takeIf { !it.canConfirm }?.point?.location
-              now.copy(checking = false, result = r, error = null, lastBlocked = if (r.canConfirm) wasBlocked ?: now.lastBlocked else now.lastBlocked)
-            },
-            onFailure = { now.copy(checking = false, error = "위치를 확인하지 못했어요. 핀을 조금 옮겨 다시 시도해 주세요") },
-          )
-        }
-      }
+@Composable
+fun AdjustPinRoute(
+  onBack: () -> Unit,
+  onSearchAgain: () -> Unit,
+  onNavigateToSetDestination: () -> Unit,
+  viewModel: AdjustPinViewModel = hiltViewModel(),
+) {
+  val state by viewModel.uiState.collectAsStateWithLifecycle()
+  CollectUiEvents(viewModel.uiEvent) { event ->
+    when (event) {
+      AdjustPinEvent.NavigateToSetDestination -> onNavigateToSetDestination()
     }
   }
-
-  private suspend fun load(area: MapArea) {
-    zonesLoading.value = true
-    when (val result = getStopZones(area.center, area.radiusMeters)) {
-      is ApiState.Success -> {
-        loadedZones.value = result.data
-        loadedArea = area
-      }
-      is ApiState.Fail -> Log.w("WayZones", "구간을 못 받았어요: ${result.failState.message}")
-    }
-    zonesLoading.value = false
-  }
-
-  fun setPin(location: LatLng) {
-    if (Geo.distanceMeters(location, _state.value.pin) < 0.5) return
-    _state.update { it.copy(pin = location) }
-  }
-
-  fun confirm(): Boolean {
-    val s = _state.value
-    val result = s.result ?: return false
-    if (s.checking || result.point.location != s.pin) return false
-    draft.check.value = result
-    return true
-  }
+  AdjustPinScreen(
+    state = state,
+    onBack = onBack,
+    onSearchAgain = onSearchAgain,
+    onConfirm = viewModel::confirm,
+    onPinSettled = viewModel::setPin,
+  )
 }
 
 @Composable
-fun AdjustPinScreen(onBack: () -> Unit, onSearchAgain: () -> Unit, onConfirmed: () -> Unit) {
-  val vm: AdjustPinViewModel = hiltViewModel()
-  val state by vm.state.collectAsStateWithLifecycle()
-  val zones by vm.zones.collectAsStateWithLifecycle()
-  val zonesLoading by vm.zonesLoading.collectAsStateWithLifecycle()
+fun AdjustPinScreen(
+  state: AdjustPinUiState,
+  onBack: () -> Unit,
+  onSearchAgain: () -> Unit,
+  onConfirm: () -> Unit,
+  onPinSettled: (LatLng) -> Unit,
+) {
   val showChecking = rememberLingering(state.checking)
-  val showZonesLoading = rememberLingering(zonesLoading)
+  val showZonesLoading = rememberLingering(state.zonesLoading)
   val startCenter = remember { state.pin }
   val result = state.result?.takeIf { it.point.location == state.pin }
   val shown = result ?: state.result
   val blocked = shown?.restriction as? StopRestriction.NoStopping
-  val passengerName = vm.passengerName ?: "동승자"
+  val passengerName = state.passengerName ?: "동승자"
 
   ScreenFrame {
     Panel(width = 560.dp) {
@@ -204,22 +124,22 @@ fun AdjustPinScreen(onBack: () -> Unit, onSearchAgain: () -> Unit, onConfirmed: 
         }
       }
       Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        ActionButton("위치 확정", { if (vm.confirm()) onConfirmed() }, Modifier.weight(1f), enabled = result != null && !state.checking)
+        ActionButton("위치 확정", onConfirm, Modifier.weight(1f), enabled = result != null && !state.checking)
         ActionButton("장소 재검색", onSearchAgain, Modifier.weight(1f), kind = ActionKind.OUTLINE)
       }
     }
     MapFrame {
-      val moved = Geo.distanceMeters(vm.origin, state.pin) > 3.0
+      val moved = Geo.distanceMeters(state.origin, state.pin) > MOVED_METERS
       WayMap(
         center = startCenter,
         metersPerDp = 0.35f,
         modifier = Modifier.fillMaxSize(),
-        zones = zones,
-        lines = if (moved) listOf(MapLine(listOf(vm.origin, state.pin), WayColors.Blue, 2f, dashed = true)) else emptyList(),
+        zones = state.zones,
+        lines = if (moved) listOf(MapLine(listOf(state.origin, state.pin), WayColors.Blue, 2f, dashed = true)) else emptyList(),
         pins =
           buildList {
-            if (moved && vm.place != null) add(MapPin(vm.origin, PinKind.GHOST, "처음 핀 (약속 장소)"))
-            state.lastBlocked?.takeIf { blocked == null && Geo.distanceMeters(it, state.pin) > 3.0 }?.let { add(MapPin(it, PinKind.GHOST_BLOCKED, "이전 핀 · 정차 금지")) }
+            if (moved && state.hasPlace) add(MapPin(state.origin, PinKind.GHOST, "처음 핀 (약속 장소)"))
+            state.lastBlocked?.takeIf { blocked == null && Geo.distanceMeters(it, state.pin) > MOVED_METERS }?.let { add(MapPin(it, PinKind.GHOST_BLOCKED, "이전 핀 · 정차 금지")) }
           },
         caption = "지도 · 지도를 움직여 핀을 정차 지점에 맞춰요",
         showZoneLegend = true,
@@ -228,7 +148,7 @@ fun AdjustPinScreen(onBack: () -> Unit, onSearchAgain: () -> Unit, onConfirmed: 
         centerPin =
           if (blocked != null) MapPin(state.pin, PinKind.PICKUP_BLOCKED, "픽업 위치")
           else MapPin(state.pin, PinKind.PICKUP, "픽업 위치"),
-        onCenterSettled = vm::setPin,
+        onCenterSettled = onPinSettled,
         showZoomButtons = true,
       )
       val hint =
@@ -249,6 +169,7 @@ fun AdjustPinScreen(onBack: () -> Unit, onSearchAgain: () -> Unit, onConfirmed: 
     }
   }
 }
+
 
 @Composable
 private fun rememberLingering(busy: Boolean): Boolean {
@@ -293,3 +214,20 @@ private fun PickupPointCard(title: String, blocked: Boolean) {
     Text(title, style = WayType.TitleXL, color = WayColors.Grey900)
   }
 }
+
+@Preview(widthDp = 1280, heightDp = 720)
+@Composable
+internal fun AdjustPinScreenPreview() {
+  val pin = LatLng(37.5571, 126.942)
+  WayTheme {
+    AdjustPinScreen(
+      state = AdjustPinUiState(origin = pin, hasPlace = true, passengerName = "서연", pin = pin, checking = false),
+      onBack = {},
+      onSearchAgain = {},
+      onConfirm = {},
+      onPinSettled = {},
+    )
+  }
+}
+
+private const val MOVED_METERS = 3.0

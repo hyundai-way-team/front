@@ -26,58 +26,47 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
+import com.kscho.way.domain.model.contact.Contact
 import com.kscho.way.domain.model.geo.LatLng
+import com.kscho.way.domain.model.pickup.PickupPoint
 import com.kscho.way.domain.model.pickup.PickupRecord
-import com.kscho.way.domain.usecase.history.GetRecentPickupsUseCase
-import com.kscho.way.domain.usecase.vehicle.GetCarLocationUseCase
+import com.kscho.way.domain.model.place.LocationDescription
+import com.kscho.way.presentation.component.base.CollectUiEvents
 import com.kscho.way.presentation.component.common.ActionButton
 import com.kscho.way.presentation.component.common.MapFrame
 import com.kscho.way.presentation.component.common.Panel
 import com.kscho.way.presentation.component.common.ScreenFrame
 import com.kscho.way.presentation.component.common.whiteCard
 import com.kscho.way.presentation.component.theme.WayColors
+import com.kscho.way.presentation.component.theme.WayTheme
 import com.kscho.way.presentation.component.theme.WayType
-import com.kscho.way.presentation.home.R
 import com.kscho.way.presentation.map.MapPin
 import com.kscho.way.presentation.map.PinKind
 import com.kscho.way.presentation.map.WayMap
-import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 
-data class HomeUiState(val recent: List<PickupRecord> = emptyList(), val here: LatLng? = null)
-
-@HiltViewModel
-class HomeViewModel @Inject constructor(
-  private val getRecentPickups: GetRecentPickupsUseCase,
-  private val getCarLocation: GetCarLocationUseCase,
-) : ViewModel() {
-  private val _state = MutableStateFlow(HomeUiState())
-  val state = _state.asStateFlow()
-
-  fun refresh() {
-    viewModelScope.launch {
-      runCatching { getRecentPickups(limit = RECENT_LIMIT) }.onSuccess { list -> _state.update { it.copy(recent = list) } }
-      val here = runCatching { getCarLocation() }.getOrNull() ?: return@launch
-      _state.update { it.copy(here = here) }
+@Composable
+fun HomeRoute(
+  onNavigateToChoosePassenger: () -> Unit,
+  onNavigateToAdjustPin: () -> Unit,
+  viewModel: HomeViewModel = hiltViewModel(),
+) {
+  val state by viewModel.uiState.collectAsStateWithLifecycle()
+  LaunchedEffect(Unit) { viewModel.refresh() }
+  CollectUiEvents(viewModel.uiEvent) { event ->
+    when (event) {
+      HomeEvent.NavigateToChoosePassenger -> onNavigateToChoosePassenger()
+      HomeEvent.NavigateToAdjustPin -> onNavigateToAdjustPin()
     }
   }
+  HomeScreen(state = state, onCreatePickup = viewModel::createPickup, onReuse = viewModel::reuse)
 }
 
 @Composable
-fun HomeScreen(onCreatePickup: () -> Unit, onReuse: (PickupRecord) -> Unit) {
-  val vm: HomeViewModel = hiltViewModel()
-  val state by vm.state.collectAsStateWithLifecycle()
-  LaunchedEffect(Unit) { vm.refresh() }
-
+fun HomeScreen(state: HomeUiState, onCreatePickup: () -> Unit, onReuse: (PickupRecord) -> Unit) {
   ScreenFrame {
     Panel(width = 480.dp) {
       Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(48.dp)) {
@@ -134,4 +123,14 @@ private fun RecentPickupCard(record: PickupRecord, onClick: () -> Unit) {
   }
 }
 
-private const val RECENT_LIMIT = 3
+@Preview(widthDp = 1280, heightDp = 720)
+@Composable
+internal fun HomeScreenPreview() {
+  val point = PickupPoint(LatLng(37.5571, 126.942), LocationDescription("홍대입구역 앞", "양화로 · 도로 북쪽 인도"), null)
+  val records =
+    listOf(
+      PickupRecord("p1", Contact("c1", "이서연", "01000001234"), null, point, true, 0, 20, 0L),
+      PickupRecord("p2", Contact("c2", "박지호", "01000009012"), null, point.copy(description = LocationDescription("굿타임호텔 앞", "")), true, 1, 45, 0L),
+    )
+  WayTheme { HomeScreen(state = HomeUiState(recent = records), onCreatePickup = {}, onReuse = {}) }
+}

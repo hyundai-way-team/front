@@ -50,15 +50,13 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
 import com.kscho.way.domain.model.contact.Contact
-import com.kscho.way.domain.pickup.PickupDraft
-import com.kscho.way.domain.usecase.contact.SearchContactsUseCase
+import com.kscho.way.presentation.component.base.CollectUiEvents
 import com.kscho.way.presentation.component.common.ActionButton
 import com.kscho.way.presentation.component.common.FieldLabel
 import com.kscho.way.presentation.component.common.Panel
@@ -66,74 +64,59 @@ import com.kscho.way.presentation.component.common.ScreenFrame
 import com.kscho.way.presentation.component.common.SearchField
 import com.kscho.way.presentation.component.common.StepHeader
 import com.kscho.way.presentation.component.theme.WayColors
+import com.kscho.way.presentation.component.theme.WayTheme
 import com.kscho.way.presentation.component.theme.WayType
 import com.kscho.way.presentation.plan.R
-import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.mapLatest
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 
-@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-@HiltViewModel
-class ChoosePassengerViewModel @Inject constructor(
-  private val searchContacts: SearchContactsUseCase,
-  private val draft: PickupDraft,
-) : ViewModel() {
-
-  val query = MutableStateFlow("")
-
-  private val _all = MutableStateFlow<List<Contact>?>(null)
-  val all: StateFlow<List<Contact>?> = _all.asStateFlow()
-
-  fun load() {
-    viewModelScope.launch { _all.value = runCatching { searchContacts("") }.getOrDefault(emptyList()) }
+@Composable
+fun ChoosePassengerRoute(
+  onBack: () -> Unit,
+  onNavigateToSearchPlace: () -> Unit,
+  viewModel: ChoosePassengerViewModel = hiltViewModel(),
+) {
+  val context = LocalContext.current
+  val state by viewModel.uiState.collectAsStateWithLifecycle()
+  var contactsAllowed by remember {
+    mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED)
   }
-
-  val suggestions: StateFlow<List<Contact>> =
-    query
-      .debounce(150)
-      .mapLatest { q -> if (q.isBlank()) emptyList() else runCatching { searchContacts(q) }.getOrDefault(emptyList()) }
-      .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-
-  val selected: StateFlow<Contact?> = draft.passenger
-
-  fun select(contact: Contact) {
-    if (draft.passenger.value?.id != contact.id) {
-      draft.reset()
-      draft.passenger.value = contact
+  val askContacts = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+    contactsAllowed = granted
+    viewModel.load()
+  }
+  LaunchedEffect(Unit) {
+    viewModel.load()
+    if (!contactsAllowed) askContacts.launch(Manifest.permission.READ_CONTACTS)
+  }
+  CollectUiEvents(viewModel.uiEvent) { event ->
+    when (event) {
+      ChoosePassengerEvent.NavigateToSearchPlace -> onNavigateToSearchPlace()
     }
   }
+  ChoosePassengerScreen(
+    state = state,
+    contactsAllowed = contactsAllowed,
+    onBack = onBack,
+    onQueryChange = viewModel::changeQuery,
+    onSelect = viewModel::select,
+    onSuggestionClick = viewModel::selectAndContinue,
+    onNext = viewModel::next,
+  )
 }
 
 @Composable
-fun ChoosePassengerScreen(onBack: () -> Unit, onNext: () -> Unit) {
-  val context = LocalContext.current
+fun ChoosePassengerScreen(
+  state: ChoosePassengerUiState,
+  contactsAllowed: Boolean,
+  onBack: () -> Unit,
+  onQueryChange: (String) -> Unit,
+  onSelect: (Contact) -> Unit,
+  onSuggestionClick: (Contact) -> Unit,
+  onNext: () -> Unit,
+) {
   val keyboard = LocalSoftwareKeyboardController.current
   val focus = LocalFocusManager.current
   val density = LocalDensity.current
-  val vm: ChoosePassengerViewModel = hiltViewModel()
-  val query by vm.query.collectAsStateWithLifecycle()
-  val loaded by vm.all.collectAsStateWithLifecycle()
-  val all = loaded.orEmpty()
-  var contactsAllowed by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) }
-  val askContacts = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-    contactsAllowed = ok
-    vm.load()
-  }
-  LaunchedEffect(Unit) {
-    vm.load()
-    if (!contactsAllowed) askContacts.launch(Manifest.permission.READ_CONTACTS)
-  }
-  val suggestions by vm.suggestions.collectAsStateWithLifecycle()
-  val selected by vm.selected.collectAsStateWithLifecycle()
+  val contacts = state.contacts.orEmpty()
   var boxTopPx by remember { mutableIntStateOf(0) }
   var fieldBottomPx by remember { mutableIntStateOf(0) }
   val grid = rememberLazyGridState()
@@ -152,8 +135,8 @@ fun ChoosePassengerScreen(onBack: () -> Unit, onNext: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
               FieldLabel("Pleos 연락처에서 검색")
               SearchField(
-                value = query,
-                onValueChange = { vm.query.value = it },
+                value = state.query,
+                onValueChange = onQueryChange,
                 placeholder = "이름 또는 전화번호 입력",
                 modifier = Modifier.onGloballyPositioned { fieldBottomPx = (it.positionInRoot().y + it.size.height).toInt() },
               )
@@ -169,14 +152,14 @@ fun ChoosePassengerScreen(onBack: () -> Unit, onNext: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                   ) {
-                    items(all, key = { it.id }) { contact ->
-                      ContactCard(contact, on = contact.id == selected?.id) {
+                    items(contacts, key = { it.id }) { contact ->
+                      ContactCard(contact, on = contact.id == state.selected?.id) {
                         done()
-                        vm.select(contact)
+                        onSelect(contact)
                       }
                     }
                   }
-                  if (loaded != null && all.isEmpty()) {
+                  if (state.contacts != null && contacts.isEmpty()) {
                     Text(
                       if (contactsAllowed) "연락처가 없어요. 차에 휴대폰을 연결하면 연락처를 불러와요." else "연락처를 보려면 연락처 접근을 허용해 주세요.",
                       style = WayType.LMedium,
@@ -196,7 +179,7 @@ fun ChoosePassengerScreen(onBack: () -> Unit, onNext: () -> Unit) {
             }
           }
         }
-        if (suggestions.isNotEmpty() && query.isNotBlank()) {
+        if (state.suggestions.isNotEmpty() && state.query.isNotBlank()) {
           Column(
             Modifier.offset(y = with(density) { (fieldBottomPx - boxTopPx).toDp() } + 12.dp)
               .fillMaxWidth()
@@ -205,13 +188,12 @@ fun ChoosePassengerScreen(onBack: () -> Unit, onNext: () -> Unit) {
               .background(Color.White)
               .border(1.dp, WayColors.Grey100, RoundedCornerShape(16.dp))
           ) {
-            suggestions.take(5).forEach { contact ->
+            state.suggestions.take(MAX_SUGGESTIONS).forEach { contact ->
               Row(
                 Modifier.fillMaxWidth()
                   .clickable(role = Role.Button) {
                     done()
-                    vm.select(contact)
-                    onNext()
+                    onSuggestionClick(contact)
                   }
                   .padding(horizontal = 24.dp, vertical = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -225,11 +207,12 @@ fun ChoosePassengerScreen(onBack: () -> Unit, onNext: () -> Unit) {
         }
       }
       Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-        ActionButton("다음", { done(); onNext() }, Modifier.width(277.dp), enabled = selected != null)
+        ActionButton("다음", { done(); onNext() }, Modifier.width(277.dp), enabled = state.selected != null)
       }
     }
   }
 }
+
 
 @Composable
 private fun ContactCard(contact: Contact, on: Boolean, onClick: () -> Unit) {
@@ -270,3 +253,22 @@ private fun ScrollThumb(state: LazyGridState, modifier: Modifier = Modifier) {
     Box(Modifier.offset(y = top.dp).width(8.dp).height(thumb.dp).clip(CircleShape).background(WayColors.Grey200))
   }
 }
+
+@Preview(widthDp = 1280, heightDp = 720)
+@Composable
+internal fun ChoosePassengerScreenPreview() {
+  val contacts = listOf(Contact("c1", "이서연", "01000001234"), Contact("c2", "박지호", "01000009012"), Contact("c3", "김민준", "01000005678"))
+  WayTheme {
+    ChoosePassengerScreen(
+      state = ChoosePassengerUiState(contacts = contacts, selected = contacts.first()),
+      contactsAllowed = true,
+      onBack = {},
+      onQueryChange = {},
+      onSelect = {},
+      onSuggestionClick = {},
+      onNext = {},
+    )
+  }
+}
+
+private const val MAX_SUGGESTIONS = 5

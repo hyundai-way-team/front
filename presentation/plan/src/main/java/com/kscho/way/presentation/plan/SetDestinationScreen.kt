@@ -20,14 +20,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
+import com.kscho.way.domain.model.geo.LatLng
 import com.kscho.way.domain.model.place.Place
-import com.kscho.way.domain.pickup.PickupDraft
-import com.kscho.way.domain.usecase.place.SearchPlacesUseCase
+import com.kscho.way.presentation.component.base.CollectUiEvents
 import com.kscho.way.presentation.component.common.ActionButton
 import com.kscho.way.presentation.component.common.BackButton
 import com.kscho.way.presentation.component.common.FieldLabel
@@ -37,51 +36,43 @@ import com.kscho.way.presentation.component.common.ScreenFrame
 import com.kscho.way.presentation.component.common.SearchField
 import com.kscho.way.presentation.component.common.StepDots
 import com.kscho.way.presentation.component.theme.WayColors
+import com.kscho.way.presentation.component.theme.WayTheme
 import com.kscho.way.presentation.component.theme.WayType
 import com.kscho.way.presentation.map.MapPin
 import com.kscho.way.presentation.map.PinKind
 import com.kscho.way.presentation.map.WayMap
-import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.mapLatest
-import kotlinx.coroutines.flow.stateIn
 
-@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-@HiltViewModel
-class SetDestinationViewModel @Inject constructor(
-  private val searchPlaces: SearchPlacesUseCase,
-  private val draft: PickupDraft,
-) : ViewModel() {
-  val query = MutableStateFlow(draft.destination.value?.name ?: "")
-  val results: StateFlow<List<Place>> =
-    query.debounce(250).mapLatest { runCatching { searchPlaces(it) }.getOrDefault(emptyList()) }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-  val selected: StateFlow<Place?> = draft.destination
-  val pickup = draft.check.value?.point?.location
-
-  fun select(place: Place) {
-    draft.destination.value = place
+@Composable
+fun SetDestinationRoute(
+  onBack: () -> Unit,
+  onNavigateToConfirmDeparture: () -> Unit,
+  viewModel: SetDestinationViewModel = hiltViewModel(),
+) {
+  val state by viewModel.uiState.collectAsStateWithLifecycle()
+  CollectUiEvents(viewModel.uiEvent) { event ->
+    when (event) {
+      SetDestinationEvent.NavigateToConfirmDeparture -> onNavigateToConfirmDeparture()
+    }
   }
-
-  fun edit(text: String) {
-    query.value = text
-    if (text.isBlank()) draft.destination.value = null
-  }
+  SetDestinationScreen(
+    state = state,
+    onBack = onBack,
+    onQueryChange = viewModel::changeQuery,
+    onSelect = viewModel::select,
+    onNext = viewModel::next,
+  )
 }
 
 @Composable
-fun SetDestinationScreen(onBack: () -> Unit, onNext: () -> Unit) {
+fun SetDestinationScreen(
+  state: SetDestinationUiState,
+  onBack: () -> Unit,
+  onQueryChange: (String) -> Unit,
+  onSelect: (Place) -> Unit,
+  onNext: () -> Unit,
+) {
   val keyboard = LocalSoftwareKeyboardController.current
   val focus = LocalFocusManager.current
-  val vm: SetDestinationViewModel = hiltViewModel()
-  val query by vm.query.collectAsStateWithLifecycle()
-  val results by vm.results.collectAsStateWithLifecycle()
-  val selected by vm.selected.collectAsStateWithLifecycle()
   val list = rememberLazyListState()
 
   ScreenFrame {
@@ -98,18 +89,18 @@ fun SetDestinationScreen(onBack: () -> Unit, onNext: () -> Unit) {
           }
           Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             FieldLabel("목적지")
-            SearchField(value = query, onValueChange = vm::edit, placeholder = "장소명 또는 주소 입력")
+            SearchField(value = state.query, onValueChange = onQueryChange, placeholder = "장소명 또는 주소 입력")
           }
           Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(state = list, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-              items(results, key = { it.id }) { place ->
-                PlaceItem(place, on = place.id == selected?.id) {
+              items(state.results, key = { it.id }) { place ->
+                PlaceItem(place, on = place.id == state.selected?.id) {
                   keyboard?.hide()
                   focus.clearFocus()
-                  vm.select(place)
+                  onSelect(place)
                 }
               }
-              if (query.isNotBlank() && selected == null && results.isEmpty()) {
+              if (state.query.isNotBlank() && state.selected == null && state.results.isEmpty()) {
                 item { Text("검색 결과가 없어요", style = WayType.MRegular, color = WayColors.Grey500, modifier = Modifier.padding(16.dp)) }
               }
             }
@@ -125,8 +116,8 @@ fun SetDestinationScreen(onBack: () -> Unit, onNext: () -> Unit) {
       ActionButton("다음", { keyboard?.hide(); onNext() }, Modifier.fillMaxWidth().padding(top = 16.dp))
     }
     MapFrame {
-      val dest = selected
-      val center = dest?.location ?: vm.pickup
+      val dest = state.selected
+      val center = dest?.location ?: state.pickup
       if (center != null) {
         WayMap(
           center = center,
@@ -140,5 +131,20 @@ fun SetDestinationScreen(onBack: () -> Unit, onNext: () -> Unit) {
         Box(Modifier.fillMaxSize().background(WayColors.MapBg))
       }
     }
+  }
+}
+
+@Preview(widthDp = 1280, heightDp = 720)
+@Composable
+internal fun SetDestinationScreenPreview() {
+  val places = listOf(Place("d1", "공덕역", "서울 마포구 마포대로 지하 92", LatLng(37.5443, 126.9516)))
+  WayTheme {
+    SetDestinationScreen(
+      state = SetDestinationUiState(query = "공덕", results = places, selected = places.first()),
+      onBack = {},
+      onQueryChange = {},
+      onSelect = {},
+      onNext = {},
+    )
   }
 }
