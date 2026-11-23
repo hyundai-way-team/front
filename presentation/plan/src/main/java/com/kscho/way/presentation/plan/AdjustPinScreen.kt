@@ -170,7 +170,6 @@ fun AdjustPinScreen(
   }
 }
 
-
 @Composable
 private fun rememberLingering(busy: Boolean): Boolean {
   var show by remember { mutableStateOf(false) }

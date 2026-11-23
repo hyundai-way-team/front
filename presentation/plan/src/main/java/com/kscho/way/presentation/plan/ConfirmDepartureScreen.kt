@@ -150,7 +150,6 @@ fun ConfirmDepartureScreen(
   }
 }
 
-
 @Composable
 private fun InfoRow(label: String, content: @Composable () -> Unit) {
   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {

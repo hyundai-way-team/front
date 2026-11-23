@@ -166,7 +166,6 @@ class PleosNavigator(
     screenLauncher.openNavi(Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MAPS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
   }
 
-
   override fun stopGuidance() {
     tracking?.cancel()
     tracking = null

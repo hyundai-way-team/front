@@ -4,10 +4,6 @@ import com.kscho.way.domain.model.contact.Contact
 import com.kscho.way.domain.pickup.Announcement
 import com.kscho.way.voice.SpokenPrompt
 
-/**
- * 운전자 음성 안내(기획 3-8 문구, 와이어프레임처럼 "서연 님").
- * assetName 은 녹음 파일을 넣게 되면 쓸 이름(assets/voice/<이름>.ogg 등). 지금은 파일이 없어 Pleos TTS 로 읽는다.
- */
 object PickupPrompts {
   fun callOffer(passenger: Contact) = SpokenPrompt("call_offer", Announcement.CallOffer(passenger).text)
 

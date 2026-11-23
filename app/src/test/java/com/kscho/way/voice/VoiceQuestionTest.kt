@@ -10,7 +10,6 @@ class VoiceQuestionTest {
   private val first = SpokenPrompt("call_offer", "이서연님이 아직 도착하지 않았어요. 전화를 걸까요?")
   private val retry = SpokenPrompt("call_offer_retry", "잘 못 들었어요. 이서연님에게 전화를 걸까요?")
 
-  /** 시험용 재생기: 부른 질문을 적어 두고, 끝 신호는 테스트가 낸다. */
   private class FakePlayer : PromptPlayer {
     val played = mutableListOf<SpokenPrompt>()
     var stopped = 0
@@ -28,7 +27,6 @@ class VoiceQuestionTest {
     fun finish(played: Boolean = true) = pending!!.also { pending = null }.invoke(played)
   }
 
-  /** 시험용 듣기: 들은 말은 테스트가 넣는다. */
   private class FakeListener : AnswerListener {
     var listens = 0
     var stopped = 0
@@ -129,7 +127,7 @@ class VoiceQuestionTest {
     assertEquals(1, player.stopped)
     assertEquals(1, listener.stopped)
     assertFalse(question.isAsking)
-    listener.hear("응") // 취소 뒤 늦게 온 결과
+    listener.hear("응")
     assertNull(outcome)
   }
 

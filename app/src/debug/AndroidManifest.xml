@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 디버그 빌드에만 합쳐지는 매니페스트 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 로컬 서버(http://10.0.2.2:8080)에 평문으로 붙는 건 디버그 빌드에서만 -->
     <application android:networkSecurityConfig="@xml/network_security_config">
-        <!-- adb 로 mock 픽업 시작·정차·탑승·종료 (DebugPickupReceiver 주석 참고) -->
         <receiver
             android:name=".debug.DebugPickupReceiver"
             android:exported="true">

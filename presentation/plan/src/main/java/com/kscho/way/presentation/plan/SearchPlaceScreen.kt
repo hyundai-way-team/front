@@ -134,7 +134,6 @@ fun SearchPlaceScreen(
   }
 }
 
-
 @Preview(widthDp = 1280, heightDp = 720)
 @Composable
 internal fun SearchPlaceScreenPreview() {

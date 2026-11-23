@@ -1,6 +1,5 @@
 package com.kscho.way.gleo
 
-
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -21,8 +20,6 @@ class PickupGleoRepliesTest {
       passengerCheckedLink = true,
       passengerSharingLocation = false,
     )
-
-  // ── 픽업 상황 알려줘
 
   @Test
   fun status_noSession_isSuccessWithoutData() {
@@ -76,8 +73,6 @@ class PickupGleoRepliesTest {
     assertEquals("이서연 has already boarded.", reply.message)
   }
 
-  // ── 탑승 완료
-
   @Test
   fun boarding_noSession_fails() {
     val reply = PickupGleoReplies.boarding(null)
@@ -99,8 +94,6 @@ class PickupGleoRepliesTest {
     assertEquals(GleoStatus.SUCCESS, reply.status)
     assertEquals("Boarding was already confirmed.", reply.message)
   }
-
-  // ── 동승자에게 전화
 
   @Test
   fun call_noSession_fails() {
@@ -130,8 +123,6 @@ class PickupGleoRepliesTest {
     assertEquals(GleoStatus.SUCCESS, reply.status)
     assertEquals("Opening the dialer to call 이서연.", reply.message)
   }
-
-  // ── Gleo 로 보내는 JSON 모양 (data 는 'JSON 객체 배열'을 담은 문자열)
 
   @Test
   fun toJson_matchesCallbackSchema() {

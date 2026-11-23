@@ -152,12 +152,25 @@ sequenceDiagram
 
 ## 구조
 
+클린 아키텍처로 나눴습니다. 화면은 domain 의 UseCase 만 보고, 구현(서버·기기 연동)은 Hilt 가 주입합니다.
+
+```
+presentation ─▶ domain ◀─ data ◀─ data:device
+      ▲                              ▲
+      └────────────── app ───────────┘
+```
+
 | 모듈 | 하는 일 |
 |---|---|
-| `:domain` | 순수 Kotlin. 픽업 규칙(`PickupRules`: 도착 5분 전 알림, 도착 예정 재안내, 1분 대기, 15초 남으면 전화 제안), 픽업 진행(`PickupCoordinator`), 정차 금지 판단 |
-| `:data` | 서버 통신(OkHttp), 오프라인 장소 검색, 지난 픽업 기록(앱 파일) |
-| `:app` | Compose 화면, Pleos 연동(NaviHelper, 도어 센서, STT/TTS, Gleo), 포그라운드 서비스, 기기 연락처, MapLibre 지도 |
-| `:server` | Ktor. 픽업 세션과 참여 링크, 차와 동승자 웹을 잇는 WebSocket, 동승자 웹(`/p/{token}`), 정차 금지 구간 API |
+| `:domain` | 순수 Kotlin. 기능별 `model`·`repository`·`usecase`, 바깥 장치 인터페이스(`gateway`: 내비, 도어, 문자, 시계), 픽업 규칙(`PickupRules`)과 픽업 진행(`PickupCoordinator`), 결과 타입 `ApiState` |
+| `:data` | 순수 Kotlin. Retrofit `WayApi`, `request`·`response`·`mapper`, 원격·로컬 데이터 소스(동승자 상태 WebSocket, 지난 픽업 파일, 오프라인 장소 색인), 저장소 구현, 서버 없이 쓰는 `fake` |
+| `:data:device` | Android. Pleos SDK 연동(내비 `PleosNavigator`, 도어 `PleosBoardingSensor`, 문자 `PleosMessenger`), 기기 연락처, 내 차 정보 |
+| `:presentation:component` | 테마, 공용 컴포넌트, `BaseViewModel<UiState, UiEvent>` |
+| `:presentation:map` | MapLibre 오프라인 지도(`WayMap`)와 마커 |
+| `:presentation:home` · `:plan` · `:drive` | 화면별 `ViewModel`·`Route`·`Screen`. 홈(D-01), 출발 전(D-02~D-05), 주행·대기·탑승(D-06~D-11) |
+| `:presentation` | 화면 이동(Navigation3) |
+| `:app` | `Application`, `MainActivity`, Hilt 모듈(`di`), 포그라운드 서비스와 음성 안내, Gleo |
+| `:server` | Ktor 임시 서버. 픽업 세션과 참여 링크, 차와 동승자 웹을 잇는 WebSocket, 동승자 웹(`/p/{token}`), 정차 금지 구간 API |
 
 ## 소스에서 빌드하기
 
@@ -179,7 +192,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 | 값 | 뜻 |
 |---|---|
-| `SERVER_URL` | Way 서버 주소. 지금은 임시 서버 `https://way.posktop.duckdns.org`, 로컬 서버는 `http://10.0.2.2:8080`, `null`이면 앱 안 mock 서버 |
+| `SERVER_URL` | Way 서버 주소. 지금은 임시 서버 `https://way.posktop.duckdns.org`, 로컬 서버는 `http://10.0.2.2:8080`, `null`이면 앱 안 가짜 서버(`FakeWayApi`) |
 | `SIMULATED_DRIVE` | `true`면 Pleos 내비 대신 20배속 모의 주행이라 D-06~D-10이 Way 화면에 그대로 보입니다 |
 | `TEXTS_VIA_PLEOS` | `false`면 문자 화면을 띄우지 않고 로그(`WayText`)만 남깁니다. 휴대폰을 연결할 수 없는 에뮬레이터에서 화면을 녹화할 때 씁니다 |
 | `DEMO_HISTORY` | `true`면 처음 설치할 때 지난 픽업 두 건을 넣어 둡니다 |
@@ -219,7 +232,7 @@ WAY_MAP_DIR=app/src/main/assets/map server/build/install/server/bin/server
 ### 테스트
 
 ```bash
-./gradlew :domain:test :data:test :server:test :app:testDebugUnitTest
+./gradlew :domain:test :data:test :data:device:testDebugUnitTest :presentation:map:testDebugUnitTest :presentation:drive:testDebugUnitTest :app:testDebugUnitTest :server:test
 ```
 
 ## 데이터와 라이선스
