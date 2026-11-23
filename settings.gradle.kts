@@ -22,7 +22,6 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
-        // Pleos Connect SDK (Vehicle·NaviHelper·TextToSpeech·SpeechToText·FusedLocation)
         maven {
             url = uri("https://nexus-playground.pleos.ai/repository/maven-releases/")
         }
@@ -35,8 +34,7 @@ plugins {
 
 rootProject.name = "Way"
 include(":app")
-// 클린 아키텍처: domain(모델·규칙·저장소 인터페이스) ← data(서버 API·mock) ← app(화면·Pleos 차량 연동)
 include(":domain")
 include(":data")
-// 임시 로컬 서버: 운전자 앱 API + 동승자 웹 링크 + Pleos 문자 발송함(실제 발송 전 확인용)
+include(":data:device")
 include(":server")

@@ -54,7 +54,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.kscho.way.R
-import com.kscho.way.contact.DeviceContacts
+import com.kscho.way.data.device.contact.DeviceContactLocalDataSource
 import com.kscho.way.domain.model.contact.Contact
 import com.kscho.way.domain.usecase.contact.SearchContactsUseCase
 import com.kscho.way.theme.WayColors
@@ -83,7 +83,7 @@ import kotlinx.coroutines.launch
 class ChoosePassengerViewModel @Inject constructor(
   private val searchContacts: SearchContactsUseCase,
   private val draft: PickupDraft,
-  private val deviceContacts: DeviceContacts,
+  private val deviceContacts: DeviceContactLocalDataSource,
 ) : ViewModel() {
   val contactsGranted: Boolean
     get() = deviceContacts.granted

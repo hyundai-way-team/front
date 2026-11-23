@@ -1,7 +1,6 @@
 package com.kscho.way.di
 
 import android.content.Context
-import com.kscho.way.contact.DeviceContacts
 import com.kscho.way.data.dataSource.local.contact.ContactLocalDataSource
 import com.kscho.way.data.dataSource.local.history.PickupHistoryFileDataSource
 import com.kscho.way.data.dataSource.local.history.PickupHistoryLocalDataSource
@@ -9,6 +8,7 @@ import com.kscho.way.data.dataSource.remote.PickupRemoteDataSource
 import com.kscho.way.data.dataSource.remote.PickupRemoteDataSourceImpl
 import com.kscho.way.data.dataSource.remote.StopZoneRemoteDataSource
 import com.kscho.way.data.dataSource.remote.StopZoneRemoteDataSourceImpl
+import com.kscho.way.data.device.contact.DeviceContactLocalDataSource
 import com.kscho.way.data.fake.FakeWorld
 import com.kscho.way.domain.gateway.Clock
 import dagger.Binds
@@ -33,7 +33,7 @@ abstract class DataSourceModule {
 
   @Binds
   @Singleton
-  abstract fun bindContactLocalDataSource(impl: DeviceContacts): ContactLocalDataSource
+  abstract fun bindContactLocalDataSource(impl: DeviceContactLocalDataSource): ContactLocalDataSource
 
   companion object {
     private const val HISTORY_FILE = "pickup_history.json"

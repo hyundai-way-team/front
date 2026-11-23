@@ -1,4 +1,4 @@
-package com.kscho.way.contact
+package com.kscho.way.data.device.contact
 
 import android.Manifest
 import android.content.Context
@@ -15,7 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Singleton
-class DeviceContacts @Inject constructor(
+class DeviceContactLocalDataSource @Inject constructor(
   @param:ApplicationContext private val context: Context,
 ) : ContactLocalDataSource {
   val granted: Boolean
