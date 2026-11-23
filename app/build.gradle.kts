@@ -88,6 +88,8 @@ dependencies {
 
   implementation(project(":data"))
   implementation(project(":data:device"))
+  implementation(project(":presentation"))
+  implementation(project(":presentation:component"))
   implementation(libs.retrofit)
   implementation(libs.okhttp)
   implementation(libs.kotlinx.coroutines.android)

@@ -5,7 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import com.kscho.way.domain.pickup.PickupCoordinator
-import com.kscho.way.pickup.PassengerCall
+import com.kscho.way.presentation.component.intent.PassengerCall
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 

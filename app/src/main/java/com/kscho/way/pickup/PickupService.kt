@@ -19,6 +19,7 @@ import com.kscho.way.domain.model.contact.Contact
 import com.kscho.way.domain.pickup.PickupCoordinator
 import com.kscho.way.domain.pickup.PickupEffect
 import com.kscho.way.domain.pickup.PickupState
+import com.kscho.way.presentation.component.intent.PassengerCall
 import com.kscho.way.voice.AskOutcome
 import com.kscho.way.voice.AudioPromptPlayer
 import com.kscho.way.voice.PleosAnswerListener
