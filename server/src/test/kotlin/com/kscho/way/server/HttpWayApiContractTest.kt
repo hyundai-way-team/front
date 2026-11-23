@@ -1,16 +1,19 @@
 package com.kscho.way.server
 
-import com.kscho.way.data.mock.MockWorld
-import com.kscho.way.data.remote.ArrivalRequest
-import com.kscho.way.data.remote.CompletePickupRequest
-import com.kscho.way.data.remote.CreatePickupRequest
-import com.kscho.way.data.remote.DriverStatusRequest
-import com.kscho.way.data.remote.HttpWayApi
-import com.kscho.way.data.remote.LatLngDto
-import com.kscho.way.data.remote.NotificationRequest
-import com.kscho.way.data.remote.NotificationType
-import com.kscho.way.data.remote.SharingWire
-import com.kscho.way.data.remote.WayApiException
+import com.kscho.way.data.api.WayApi
+import com.kscho.way.data.api.WayNetwork
+import com.kscho.way.data.dataSource.remote.PassengerSocketDataSourceImpl
+import com.kscho.way.data.dataSource.remote.PickupRemoteDataSourceImpl
+import com.kscho.way.data.dto.LatLngDto
+import com.kscho.way.data.fake.FakeWorld
+import com.kscho.way.data.request.ArrivalRequest
+import com.kscho.way.data.request.CompletePickupRequest
+import com.kscho.way.data.request.CreatePickupRequest
+import com.kscho.way.data.request.DriverStatusRequest
+import com.kscho.way.data.request.NotificationRequest
+import com.kscho.way.data.request.NotificationType
+import com.kscho.way.data.response.SharingWire
+import com.kscho.way.domain.model.base.ApiState
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
@@ -27,19 +30,21 @@ import org.junit.Test
 class HttpWayApiContractTest {
   private lateinit var deps: ServerDeps
   private lateinit var server: EmbeddedServer<*, *>
-  private lateinit var api: HttpWayApi
+  private lateinit var api: WayApi
+  private lateinit var socket: PassengerSocketDataSourceImpl
 
   @Before
   fun start() {
     deps = createDeps("http://localhost:8080", mapDir = null)
     server = embeddedServer(CIO, port = 0, host = "127.0.0.1") { wayModule(deps) }.start(wait = false)
     val port = runBlocking { server.engine.resolvedConnectors().first().port }
-    api = HttpWayApi("http://127.0.0.1:$port")
+    val url = "http://127.0.0.1:$port"
+    api = WayNetwork.api(url)
+    socket = PassengerSocketDataSourceImpl(url, WayNetwork.client(), WayNetwork.json)
   }
 
   @After
   fun stop() {
-    api.close()
     server.stop(0, 0)
   }
 
@@ -48,7 +53,7 @@ class HttpWayApiContractTest {
       passengerName = "이서연",
       passengerCallName = "서연",
       placeName = "신촌 XX 빌라",
-      pickupPoint = LatLngDto(MockWorld.VILLA_ALLEY_ENTRANCE.latitude, MockWorld.VILLA_ALLEY_ENTRANCE.longitude),
+      pickupPoint = LatLngDto(FakeWorld.VILLA_ALLEY_ENTRANCE.latitude, FakeWorld.VILLA_ALLEY_ENTRANCE.longitude),
       pickupTitle = "신촌 XX 빌라 골목 입구 앞",
       pickupDetail = "신촌로 · 도로 북쪽(빌라 쪽) 인도",
       arrivalAtEpochMillis = System.currentTimeMillis() + 600_000,
@@ -61,10 +66,10 @@ class HttpWayApiContractTest {
   @Test
   fun placesAndZoneData() = runBlocking {
     assertEquals("신촌 XX 빌라", api.searchPlaces("xx").first().name)
-    val here = LatLngDto(MockWorld.VILLA_ALLEY_ENTRANCE.latitude, MockWorld.VILLA_ALLEY_ENTRANCE.longitude)
-    assertEquals("신촌 XX 빌라 골목 입구 앞", api.describeLocation(here).title)
+    val here = LatLngDto(FakeWorld.VILLA_ALLEY_ENTRANCE.latitude, FakeWorld.VILLA_ALLEY_ENTRANCE.longitude)
+    assertEquals("신촌 XX 빌라 골목 입구 앞", api.describeLocation(here.lat, here.lng).title)
     // 정차 금지 구간은 데이터로만 — 실제 버스정류장 좌표(국토교통부 공공데이터) 둘레 10 m. 그리기·판단은 앱
-    val zones = api.stopZones(here, 300)
+    val zones = api.getStopZones(here.lat, here.lng, 300)
     assertTrue(zones.isNotEmpty() && zones.all { it.id.startsWith("bus-") && it.path.size == 1 && it.radiusMeters == 10.0 })
   }
 
@@ -78,7 +83,7 @@ class HttpWayApiContractTest {
     deps.hub.openLink(token)
     deps.hub.setSharing(token, allow = true)
     deps.hub.updateLocation(token, LatLngDto(37.5571, 126.942))
-    val status = withTimeout(5_000) { api.passengerUpdates(created.pickupId).first { it.location != null } }
+    val status = withTimeout(5_000) { socket.passengerUpdates(created.pickupId).first { it.location != null } }
     assertEquals(SharingWire.SHARING, status.sharing)
 
     api.reportDriver(created.pickupId, DriverStatusRequest(LatLngDto(37.559, 126.96), 600, 1800, request.arrivalAtEpochMillis))
@@ -94,7 +99,7 @@ class HttpWayApiContractTest {
 
   @Test
   fun unknownPickup_isAnApiError() = runBlocking {
-    val error = runCatching { api.reportArrival("nope", ArrivalRequest(0, 60)) }.exceptionOrNull()
-    assertTrue(error is WayApiException && error.code == 404)
+    val result = PickupRemoteDataSourceImpl(api).reportArrival("nope", ArrivalRequest(0, 60))
+    assertTrue(result is ApiState.Fail && result.failState.code == 404)
   }
 }

@@ -1,15 +1,15 @@
 package com.kscho.way.server.pickup
 
-import com.kscho.way.data.mock.MockWorld
-import com.kscho.way.data.remote.ArrivalRequest
-import com.kscho.way.data.remote.CompletePickupRequest
-import com.kscho.way.data.remote.CreatePickupRequest
-import com.kscho.way.data.remote.DriverStatusRequest
-import com.kscho.way.data.remote.LatLngDto
-import com.kscho.way.data.remote.NotificationRequest
-import com.kscho.way.data.remote.NotificationType
-import com.kscho.way.data.remote.SharingWire
-import com.kscho.way.data.remote.WalkRouteDto
+import com.kscho.way.data.dto.LatLngDto
+import com.kscho.way.data.fake.FakeWorld
+import com.kscho.way.data.request.ArrivalRequest
+import com.kscho.way.data.request.CompletePickupRequest
+import com.kscho.way.data.request.CreatePickupRequest
+import com.kscho.way.data.request.DriverStatusRequest
+import com.kscho.way.data.request.NotificationRequest
+import com.kscho.way.data.request.NotificationType
+import com.kscho.way.data.response.SharingWire
+import com.kscho.way.data.response.WalkRouteResponse
 import com.kscho.way.data.sms.PickupTexts
 import com.kscho.way.server.sms.OutboxTextLog
 import com.kscho.way.server.walk.WalkAnswer
@@ -24,7 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PickupHubTest {
-  private fun epoch(text: String) = LocalDateTime.parse(text).atZone(MockWorld.ZONE).toInstant().toEpochMilli()
+  private fun epoch(text: String) = LocalDateTime.parse(text).atZone(FakeWorld.ZONE).toInstant().toEpochMilli()
 
   private var now = epoch("2026-11-09T09:10:00")
   private val outbox = OutboxTextLog(clock = { now })
@@ -103,7 +103,7 @@ class PickupHubTest {
     val asked = mutableListOf<Pair<LatLngDto, LatLngDto>>()
     val hub = routed { from, to ->
       asked += from to to
-      WalkAnswer.Found(WalkRouteDto(listOf(from, to), meters = 120, seconds = 107))
+      WalkAnswer.Found(WalkRouteResponse(listOf(from, to), meters = 120, seconds = 107))
     }
     val response = hub.create(request)
     val token = tokenOf(response.shareUrl)
@@ -164,7 +164,7 @@ class PickupHubTest {
   @Test
   fun serviceBusy_keepsTheLastRoute_andAsksAgainLater() {
     // 공개 경로 서버가 잠깐 바쁘거나 늦으면(429·5xx·시간 초과) '길 없음'으로 굳히지 않는다 — 찾아 둔 길은 그대로, 20초 뒤 다시
-    var answer: WalkAnswer = WalkAnswer.Found(WalkRouteDto(listOf(pickupPoint, pickupPoint), 120, 107))
+    var answer: WalkAnswer = WalkAnswer.Found(WalkRouteResponse(listOf(pickupPoint, pickupPoint), 120, 107))
     var asked = 0
     val hub = routed { _, _ ->
       asked++
@@ -183,7 +183,7 @@ class PickupHubTest {
     hub.updateLocation(token, LatLngDto(37.55751, 126.942))
     assertEquals(2, asked) // 아직 20초 안
     now += PickupHub.WALK_RETRY_MILLIS
-    answer = WalkAnswer.Found(WalkRouteDto(listOf(pickupPoint, pickupPoint), 100, 90))
+    answer = WalkAnswer.Found(WalkRouteResponse(listOf(pickupPoint, pickupPoint), 100, 90))
     hub.updateLocation(token, LatLngDto(37.55751, 126.942))
     assertEquals(3, asked)
     assertEquals(100, hub.view(token).walk!!.meters)
@@ -213,7 +213,7 @@ class PickupHubTest {
     val asked = mutableListOf<Pair<LatLngDto, LatLngDto>>()
     val hub = carRouted { from, to ->
       asked += from to to
-      WalkAnswer.Found(WalkRouteDto(listOf(from, carMid, to), meters = 750, seconds = 120))
+      WalkAnswer.Found(WalkRouteResponse(listOf(from, carMid, to), meters = 750, seconds = 120))
     }
     val response = hub.create(request)
     val token = tokenOf(response.shareUrl)
@@ -234,7 +234,7 @@ class PickupHubTest {
     var asked = 0
     val hub = carRouted { from, to ->
       asked++
-      WalkAnswer.Found(WalkRouteDto(listOf(from, to), 750, 120))
+      WalkAnswer.Found(WalkRouteResponse(listOf(from, to), 750, 120))
     }
     val response = hub.create(request)
     val token = tokenOf(response.shareUrl)
@@ -279,7 +279,7 @@ class PickupHubTest {
 
   @Test
   fun carArrived_dropsTheCarRoute() {
-    val hub = carRouted { from, to -> WalkAnswer.Found(WalkRouteDto(listOf(from, to), 750, 120)) }
+    val hub = carRouted { from, to -> WalkAnswer.Found(WalkRouteResponse(listOf(from, to), 750, 120)) }
     val response = hub.create(request)
     val token = tokenOf(response.shareUrl)
     report(hub, response.pickupId, carStart)
@@ -289,7 +289,7 @@ class PickupHubTest {
 
   @Test
   fun stoppingSharing_dropsTheRoute() {
-    val hub = routed { from, to -> WalkAnswer.Found(WalkRouteDto(listOf(from, to), 50, 45)) }
+    val hub = routed { from, to -> WalkAnswer.Found(WalkRouteResponse(listOf(from, to), 50, 45)) }
     val response = hub.create(request)
     val token = tokenOf(response.shareUrl)
     hub.setSharing(token, allow = true)

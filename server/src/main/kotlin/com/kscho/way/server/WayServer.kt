@@ -1,20 +1,20 @@
 package com.kscho.way.server
 
-import com.kscho.way.data.remote.ArrivalRequest
-import com.kscho.way.data.remote.CompletePickupRequest
-import com.kscho.way.data.remote.CreatePickupRequest
-import com.kscho.way.data.remote.DriverStatusRequest
-import com.kscho.way.data.remote.LatLngDto
-import com.kscho.way.data.remote.NotificationRequest
-import com.kscho.way.data.remote.WayApi
+import com.kscho.way.data.api.WayApi
+import com.kscho.way.data.dto.LatLngDto
+import com.kscho.way.data.request.ArrivalRequest
+import com.kscho.way.data.request.CompletePickupRequest
+import com.kscho.way.data.request.CreatePickupRequest
+import com.kscho.way.data.request.DriverStatusRequest
+import com.kscho.way.data.request.NotificationRequest
 import com.kscho.way.server.pickup.PassengerLocationRequest
 import com.kscho.way.server.pickup.PickupError
 import com.kscho.way.server.pickup.PickupHub
-import com.kscho.way.server.zones.BusStopZones
-import com.kscho.way.server.zones.DesignatedZones
 import com.kscho.way.server.pickup.SharingRequest
 import com.kscho.way.server.sms.OutboxTextLog
 import com.kscho.way.server.tls.RootCaProfile
+import com.kscho.way.server.zones.BusStopZones
+import com.kscho.way.server.zones.DesignatedZones
 import io.ktor.http.CacheControl
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -26,8 +26,8 @@ import io.ktor.server.http.content.staticFiles
 import io.ktor.server.http.content.staticResources
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.calllogging.CallLogging
-import io.ktor.server.plugins.origin
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.origin
 import io.ktor.server.plugins.partialcontent.PartialContent
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.httpMethod
@@ -155,7 +155,7 @@ private fun Route.driverRoutes(deps: ServerDeps) {
   val places = deps.places
 
   get("/places") { call.respond(places.searchPlaces(call.query("query"))) }
-  get("/places/reverse") { call.respond(places.describeLocation(call.latLng())) }
+  get("/places/reverse") { call.respond(call.latLng().let { places.describeLocation(it.lat, it.lng) }) }
   // 주변 정차 금지 구간 데이터만 — 지도에 그리기·정차 금지 판단은 앱이 한다(도로·장소는 앱 속 오프라인 지도)
   get("/stop-zones") {
     val at = call.latLng()

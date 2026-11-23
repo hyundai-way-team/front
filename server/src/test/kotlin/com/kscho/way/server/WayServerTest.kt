@@ -1,11 +1,11 @@
 package com.kscho.way.server
 
-import com.kscho.way.data.remote.CompletePickupRequest
-import com.kscho.way.data.remote.CreatePickupRequest
-import com.kscho.way.data.remote.CreatePickupResponse
-import com.kscho.way.data.remote.LatLngDto
-import com.kscho.way.data.remote.PassengerStatusDto
-import com.kscho.way.data.remote.SharingWire
+import com.kscho.way.data.dto.LatLngDto
+import com.kscho.way.data.request.CompletePickupRequest
+import com.kscho.way.data.request.CreatePickupRequest
+import com.kscho.way.data.response.CreatePickupResponse
+import com.kscho.way.data.response.PassengerStatusResponse
+import com.kscho.way.data.response.SharingWire
 import com.kscho.way.server.pickup.PassengerViewDto
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.WebSockets
@@ -92,8 +92,8 @@ class WayServerTest {
     val ws = createClient { install(WebSockets) }
 
     ws.webSocket("/api/pickups/${created.pickupId}/passenger") {
-      val first: PassengerStatusDto = WayJson.decodeFromString((incoming.receive() as Frame.Text).readText())
-      assertEquals(PassengerStatusDto(), first)
+      val first: PassengerStatusResponse = WayJson.decodeFromString((incoming.receive() as Frame.Text).readText())
+      assertEquals(PassengerStatusResponse(), first)
 
       assertEquals(HttpStatusCode.NoContent, client.postJson("/api/p/$token/open", "{}").status)
       assertEquals(HttpStatusCode.NoContent, client.postJson("/api/p/$token/sharing", """{"allow":true}""").status)

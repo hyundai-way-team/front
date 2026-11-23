@@ -1,7 +1,7 @@
 package com.kscho.way.server.zones
 
-import com.kscho.way.data.remote.LatLngDto
-import com.kscho.way.data.remote.ZoneDto
+import com.kscho.way.data.dto.LatLngDto
+import com.kscho.way.data.response.StopZoneResponse
 import com.kscho.way.domain.model.geo.Geo
 import com.kscho.way.domain.model.geo.LatLng
 import com.kscho.way.server.kakao.PlaceFinder
@@ -34,7 +34,7 @@ class DesignatedZones(
 
   val size: Int = rows.size
 
-  suspend fun near(lat: Double, lng: Double, radiusMeters: Int): List<ZoneDto> {
+  suspend fun near(lat: Double, lng: Double, radiusMeters: Int): List<StopZoneResponse> {
     val visible = roads.near(lat, lng, radiusMeters.toDouble())
     if (visible.isEmpty()) return emptyList()
     val roadDistance = HashMap<String, Double>()
@@ -69,7 +69,7 @@ class DesignatedZones(
     }
   }
 
-  private suspend fun zonesOf(row: NoParkingRow, chains: List<RoadIndex.Road>, lat: Double, lng: Double, searchRadius: Int): List<ZoneDto> {
+  private suspend fun zonesOf(row: NoParkingRow, chains: List<RoadIndex.Road>, lat: Double, lng: Double, searchRadius: Int): List<StopZoneResponse> {
     if (chains.isEmpty()) return emptyList()
     val windows = NoParkingSchedule.windows(row)
     if (windows.isEmpty()) return emptyList()
@@ -77,9 +77,9 @@ class DesignatedZones(
     val name = "${row.desc} (${row.roadRaw})"
     val rule = NoParkingSchedule.describe(row)
     val radius = path.second
-    if (NoParkingSchedule.isAlways(windows)) return listOf(ZoneDto(row.id, name, rule, path.first, radius))
+    if (NoParkingSchedule.isAlways(windows)) return listOf(StopZoneResponse(row.id, name, rule, path.first, radius))
     return windows.mapIndexed { i, w ->
-      ZoneDto(
+      StopZoneResponse(
         id = "${row.id}-$i",
         name = name,
         rule = rule,

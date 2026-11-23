@@ -1,5 +1,6 @@
 package com.kscho.way.server.zones
 
+import com.kscho.way.data.response.StopZoneResponse
 import java.io.InputStream
 import java.time.DayOfWeek
 import java.util.zip.GZIPInputStream
@@ -69,7 +70,7 @@ data class NoParkingRow(
 }
 
 /**
- * 표준데이터의 요일별 시각 → 앱 판정용 시간 창(ZoneDto.days·startMinute·endMinute).
+ * 표준데이터의 요일별 시각 → 앱 판정용 시간 창(StopZoneResponse.days·startMinute·endMinute).
  * - '00:00 ~ 00:00' 은 그날 금지 없음, '~ 23:59' 는 자정까지, 시작이 끝보다 늦으면 밤을 넘기는 규제(같은 날 두 창으로).
  * - 잠깐 허용 시간은 금지 창에서 뺀다(여러 개, 밤을 넘기는 것도).
  * - 공휴일 칸은 일요일로 쓴다(공휴일 달력은 아직 없다).

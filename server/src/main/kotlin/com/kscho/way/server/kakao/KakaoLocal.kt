@@ -1,6 +1,6 @@
 package com.kscho.way.server.kakao
 
-import com.kscho.way.data.remote.LatLngDto
+import com.kscho.way.data.dto.LatLngDto
 import java.net.URI
 import java.net.URLEncoder
 import java.net.http.HttpClient

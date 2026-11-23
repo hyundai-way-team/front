@@ -1,6 +1,6 @@
 package com.kscho.way.server.walk
 
-import com.kscho.way.data.remote.LatLngDto
+import com.kscho.way.data.dto.LatLngDto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

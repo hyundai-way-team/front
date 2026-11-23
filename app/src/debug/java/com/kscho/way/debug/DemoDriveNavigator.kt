@@ -1,6 +1,6 @@
 package com.kscho.way.debug
 
-import com.kscho.way.data.mock.SimulatedNavigator
+import com.kscho.way.data.fake.SimulatedNavigator
 import com.kscho.way.domain.gateway.Navigator
 import com.kscho.way.domain.model.geo.Geo
 import com.kscho.way.domain.model.geo.LatLng

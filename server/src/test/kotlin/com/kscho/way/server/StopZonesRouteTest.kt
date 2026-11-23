@@ -1,7 +1,7 @@
 package com.kscho.way.server
 
-import com.kscho.way.data.remote.LatLngDto
-import com.kscho.way.data.remote.ZoneDto
+import com.kscho.way.data.dto.LatLngDto
+import com.kscho.way.data.response.StopZoneResponse
 import com.kscho.way.server.kakao.PlaceFinder
 import com.kscho.way.server.kakao.Region
 import com.kscho.way.server.zones.DayRule
@@ -45,7 +45,7 @@ class StopZonesRouteTest {
     val deps = createDeps("http://localhost:8080", null, designated = DesignatedZones(listOf(row), RoadIndex(listOf(road)), finder))
     application { wayModule(deps) }
 
-    val zones = WayJson.decodeFromString(ListSerializer(ZoneDto.serializer()), client.get("/api/stop-zones?lat=37.556783&lng=126.942649&radius=200").bodyAsText())
+    val zones = WayJson.decodeFromString(ListSerializer(StopZoneResponse.serializer()), client.get("/api/stop-zones?lat=37.556783&lng=126.942649&radius=200").bodyAsText())
 
     assertTrue(zones.any { it.id.startsWith("bus-") })
     val np = zones.single { it.id.startsWith("np-") }

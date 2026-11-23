@@ -1,6 +1,6 @@
 package com.kscho.way.server.walk
 
-import com.kscho.way.data.remote.LatLngDto
+import com.kscho.way.data.dto.LatLngDto
 import kotlin.math.cos
 import kotlin.math.sqrt
 

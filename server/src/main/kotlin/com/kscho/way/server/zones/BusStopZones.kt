@@ -1,7 +1,7 @@
 package com.kscho.way.server.zones
 
-import com.kscho.way.data.remote.LatLngDto
-import com.kscho.way.data.remote.ZoneDto
+import com.kscho.way.data.dto.LatLngDto
+import com.kscho.way.data.response.StopZoneResponse
 import com.kscho.way.domain.model.geo.Geo
 import com.kscho.way.domain.model.geo.LatLng
 import java.io.InputStream
@@ -25,11 +25,11 @@ class BusStopZones(private val stops: List<Stop>) {
     get() = stops.size
 
   /** [radiusMeters] 안의 정류장마다 10m 정차 금지 구간 하나. */
-  fun near(lat: Double, lng: Double, radiusMeters: Int): List<ZoneDto> {
+  fun near(lat: Double, lng: Double, radiusMeters: Int): List<StopZoneResponse> {
     val center = LatLng(lat, lng)
     val dLat = radiusMeters / 111_320.0
     val dLng = radiusMeters / (111_320.0 * cos(Math.toRadians(lat)).coerceAtLeast(0.1))
-    val out = ArrayList<ZoneDto>()
+    val out = ArrayList<StopZoneResponse>()
     for (y in cell(lat - dLat)..cell(lat + dLat)) {
       for (x in cell(lng - dLng)..cell(lng + dLng)) {
         for (s in grid[key(y, x)].orEmpty()) {
@@ -41,7 +41,7 @@ class BusStopZones(private val stops: List<Stop>) {
   }
 
   private fun Stop.zone() =
-    ZoneDto(
+    StopZoneResponse(
       id = "bus-$id",
       name = "$name 버스정류장",
       rule = "버스정류장 10m 이내 · 상시 정차·주차 금지",

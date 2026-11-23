@@ -4,7 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.kscho.way.data.mock.MockWorld
+import com.kscho.way.data.fake.FakeWorld
 import com.kscho.way.di.ApplicationScope
 import com.kscho.way.domain.gateway.Navigator
 import com.kscho.way.domain.model.contact.Contact
@@ -44,7 +44,7 @@ class DebugPickupReceiver : BroadcastReceiver() {
           try {
             val passenger = searchContacts("").firstOrNull() ?: Contact("debug-1", "이서연", "01000001234")
             val place: Place? = null
-            val check = checkPickupPoint(MockWorld.VILLA_ALLEY_ENTRANCE, place)
+            val check = checkPickupPoint(FakeWorld.VILLA_ALLEY_ENTRANCE, place)
             val vehicle = getMyVehicle()
             if (coordinator.hasActivePickup) coordinator.finish()
             coordinator.start(PickupPlan(passenger, place, check.point, check.restriction, check.route, vehicle))

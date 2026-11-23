@@ -1,6 +1,6 @@
 package com.kscho.way.server.zones
 
-import com.kscho.way.data.remote.LatLngDto
+import com.kscho.way.data.dto.LatLngDto
 import com.kscho.way.domain.model.geo.Geo
 import com.kscho.way.domain.model.geo.LatLng
 import com.kscho.way.server.kakao.PlaceFinder
